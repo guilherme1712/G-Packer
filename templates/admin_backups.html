@@ -6,64 +6,47 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        /* =========================================
-           ESTILIZAÇÃO DARK MODE (Compatível com style.css)
-           ========================================= */
-
-        /* Ajuste do layout para página sem sidebar */
         .page-single-col {
-            display: block; /* Remove o grid de 2 colunas padrão do .page */
+            display: block;
             max-width: 1000px;
             margin: 0 auto;
         }
-
-        /* Tabela Transparente e Moderna */
         .table-responsive {
             overflow-x: auto;
             border-radius: 12px;
         }
-
         .backup-table {
             width: 100%;
-            border-collapse: separate; /* Permite espaçamento entre linhas se quiser */
+            border-collapse: separate;
             border-spacing: 0;
             margin-top: 10px;
-            width: 100%;
         }
-
         .backup-table th {
             text-align: left;
             padding: 16px;
             font-size: 0.75rem;
             text-transform: uppercase;
             letter-spacing: 0.1em;
-            color: #94a3b8; /* Cinza azulado claro */
-            background-color: rgba(15, 23, 42, 0.6); /* Fundo sutilmente mais escuro */
+            color: #94a3b8;
+            background-color: rgba(15, 23, 42, 0.6);
             border-bottom: 1px solid rgba(148, 163, 184, 0.2);
         }
-
         .backup-table td {
             padding: 16px;
             vertical-align: middle;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.1); /* Borda muito sutil */
-            color: #e2e8f0; /* Texto quase branco */
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            color: #e2e8f0;
             font-size: 0.9rem;
         }
-
-        /* Efeito Hover na linha */
         .backup-table tbody tr {
             transition: background-color 0.2s ease;
         }
         .backup-table tbody tr:hover {
-            background-color: rgba(99, 102, 241, 0.08); /* Indigo muito suave ao passar o mouse */
+            background-color: rgba(99, 102, 241, 0.08);
         }
-
-        /* Última linha sem borda */
         .backup-table tbody tr:last-child td {
             border-bottom: none;
         }
-
-        /* Estilo do Nome do Arquivo */
         .file-name {
             display: flex;
             align-items: center;
@@ -71,23 +54,20 @@
             font-weight: 500;
             color: #f1f5f9;
         }
-
         .file-icon {
             display: flex;
             align-items: center;
             justify-content: center;
             width: 36px;
             height: 36px;
-            background: rgba(99, 102, 241, 0.2); /* Fundo roxo translúcido */
-            color: #818cf8; /* Ícone roxo claro */
+            background: rgba(99, 102, 241, 0.2);
+            color: #818cf8;
             border-radius: 8px;
             font-size: 1.2rem;
         }
-
-        /* Badge de Tamanho (Dark Mode) */
         .badge-size {
-            background: rgba(16, 185, 129, 0.15); /* Verde translúcido */
-            color: #34d399; /* Verde claro */
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
             padding: 4px 10px;
             border-radius: 99px;
             font-size: 0.8em;
@@ -95,21 +75,25 @@
             border: 1px solid rgba(16, 185, 129, 0.2);
             white-space: nowrap;
         }
-
-        /* Data */
+        .badge-count {
+            background: rgba(59, 130, 246, 0.18);
+            color: #93c5fd;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            border: 1px solid rgba(59, 130, 246, 0.35);
+            white-space: nowrap;
+        }
         .text-muted {
             color: #94a3b8;
             font-size: 0.85em;
         }
-
-        /* Ações */
         .actions-cell {
             display: flex;
             gap: 8px;
-            justify-content: flex-end; /* Alinha botões à direita */
+            justify-content: flex-end;
         }
-
-        /* Estado Vazio */
         .empty-state {
             text-align: center;
             padding: 80px 20px;
@@ -121,8 +105,6 @@
             opacity: 0.5;
             display: block;
         }
-
-        /* Botão Voltar customizado para parecer com o tema */
         .btn-back-custom {
             color: #94a3b8;
             text-decoration: none;
@@ -139,12 +121,10 @@
             background: rgba(255, 255, 255, 0.05);
             border-color: rgba(255, 255, 255, 0.1);
         }
-
     </style>
 </head>
 <body class="bg-gradient">
     <div class="page page-single-col">
-
         <header class="page-header">
             <div class="page-header-top">
                 <div>
@@ -153,7 +133,9 @@
                 </div>
                 <div>
                     <a href="{{ url_for('drive.folders') }}" class="btn-back-custom">
-                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
                         Voltar ao Drive
                     </a>
                 </div>
@@ -161,17 +143,16 @@
         </header>
 
         <div class="card main-card" style="min-height: auto;">
-
             {% with messages = get_flashed_messages() %}
-                {% if messages %}
-                <div class="page-flash" style="margin-bottom: 24px;">
-                    <div class="alert" style="background: rgba(234, 179, 8, 0.15); border-color: rgba(234, 179, 8, 0.3); color: #fde047;">
-                        {% for msg in messages %}
-                        <div>{{ msg }}</div>
-                        {% endfor %}
-                    </div>
+            {% if messages %}
+            <div class="page-flash" style="margin-bottom: 24px;">
+                <div class="alert" style="background: rgba(234, 179, 8, 0.15); border-color: rgba(234, 179, 8, 0.3); color: #fde047;">
+                    {% for msg in messages %}
+                    <div>{{ msg }}</div>
+                    {% endfor %}
                 </div>
-                {% endif %}
+            </div>
+            {% endif %}
             {% endwith %}
 
             <div class="table-responsive">
@@ -179,9 +160,10 @@
                     <thead>
                         <tr>
                             <th>Nome do Arquivo</th>
+                            <th>Arquivos</th>
                             <th>Tamanho</th>
                             <th>Criado em</th>
-                            <th style="text-align: right;">Ações</th>
+                            <th style="text-align:right;">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -194,6 +176,15 @@
                                 </div>
                             </td>
                             <td>
+                                {% if file.items_count %}
+                                    <span class="badge-count">
+                                        {{ file.items_count }} itens
+                                    </span>
+                                {% else %}
+                                    <span class="badge-count" style="opacity:.6;">—</span>
+                                {% endif %}
+                            </td>
+                            <td>
                                 <span class="badge-size">
                                     {{ file.size_mb }} MB
                                 </span>
@@ -204,25 +195,29 @@
                             <td class="actions-cell">
                                 <a href="{{ url_for('drive.get_file', filename=file.name) }}"
                                    class="btn-primary btn-xs"
-                                   style="text-decoration: none; display:inline-flex; gap:4px;"
+                                   style="text-decoration:none;display:inline-flex;gap:4px;"
                                    title="Fazer Download">
-                                   <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                                   Baixar
+                                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                                    </svg>
+                                    Baixar
                                 </a>
 
                                 <a href="{{ url_for('admin.delete_backup', filename=file.name) }}"
                                    class="btn-danger btn-xs"
-                                   style="text-decoration: none; display:inline-flex; gap:4px;"
+                                   style="text-decoration:none;display:inline-flex;gap:4px;"
                                    onclick="return confirm('Tem certeza que deseja excluir permanentemente o arquivo {{ file.name }}?');"
                                    title="Excluir arquivo do servidor">
-                                   <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                                   Excluir
+                                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                                    </svg>
+                                    Excluir
                                 </a>
                             </td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="4">
+                            <td colspan="5">
                                 <div class="empty-state">
                                     <span class="empty-icon">📭</span>
                                     <h3 style="margin:0 0 8px 0; color:#e2e8f0;">Nenhum backup encontrado</h3>

@@ -1,0 +1,39 @@
+[
+  {
+    "id": "1764696291308",
+    "name": "TESTE",
+    "zip_pattern": "TESTE-{YYYYMMDD}",
+    "items": [
+      {
+        "id": "1qJIC1AnAMu6FrRqCFEPUc-Jcccbdjuiy",
+        "name": "Colab Notebooks",
+        "type": "folder"
+      },
+      {
+        "id": "1tKNJJSJvnbfWzFSE1IFDVrDzYraFi0sX",
+        "name": "PESSOAL",
+        "type": "folder"
+      },
+      {
+        "id": "1w2lKM7ujYNK94_uUcazOKdM_iqeicdto",
+        "name": "ORÇAMENTO.xlsx",
+        "type": "file"
+      }
+    ],
+    "groups": [
+      "pdf",
+      "docs",
+      "sheets",
+      "images",
+      "videos",
+      "others"
+    ],
+    "created_after": null,
+    "modified_after": null,
+    "max_size_mb": null,
+    "archive_format": "zip",
+    "compression_level": "normal",
+    "output_mode": "archive",
+    "local_mirror_path": ""
+  }
+]
