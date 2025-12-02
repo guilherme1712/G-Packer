@@ -1,1 +1,43 @@
-venv/*
+# Byte-compiled / Otimização / DLLs
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ctypes
+_ctypes_test.c
+
+# Ambientes Virtuais (Virtual Envs)
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Variáveis de Ambiente e Segredos (NUNCA suba isso)
+.env
+.env.local
+.flaskenv
+
+# Banco de Dados Local
+*.sqlite3
+*.db
+instance/
+migrations/
+
+# Logs
+*.log
+
+# Pastas de Uploads / Backups do seu sistema (G-Packer)
+storage_backups/
+storage/
+
+# Arquivos de IDE / Editores de Texto
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sistema Operacional
+.DS_Store
+Thumbs.db
