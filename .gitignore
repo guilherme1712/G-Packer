@@ -31,7 +31,7 @@ migrations/
 # Pastas de Uploads / Backups do seu sistema (G-Packer)
 storage_backups/
 storage/
-temp_work
+temp_work/
 
 # Arquivos de IDE / Editores de Texto
 .vscode/

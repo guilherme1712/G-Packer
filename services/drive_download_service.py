@@ -293,7 +293,7 @@ def download_items_bundle(
 
     # CORREÇÃO 2: Cria pasta temporária LOCAL (no diretório do projeto)
     # Isso evita o caminho gigante do C:\Users\xxx\AppData...
-    local_temp_base = os.path.join(os.getcwd(), "temp_work")
+    local_temp_base = os.path.join(os.getcwd(), "storage/temp_work")
     os.makedirs(local_temp_base, exist_ok=True)
 
     # Cria o subdiretório randomico dentro de temp_work
