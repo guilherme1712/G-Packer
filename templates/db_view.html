@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Visualizador do Banco de Dados</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .db-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #e5e7eb;
+        }
+        .db-section {
+            background: rgba(15, 23, 42, 0.95);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 24px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        th, td {
+            text-align: left;
+            padding: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        th {
+            background: rgba(0, 0, 0, 0.3);
+            font-weight: 600;
+            color: #9ca3af;
+        }
+        tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .status-badge {
+            padding: 2px 8px;
+            border-radius: 99px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .status-concluido { background: #059669; color: white; }
+        .status-erro { background: #dc2626; color: white; }
+        .status-cancelado { background: #d97706; color: white; }
+        .status-iniciando, .status-baixando { background: #2563eb; color: white; }
+
+        pre {
+            background: rgba(0,0,0,0.5);
+            padding: 5px;
+            border-radius: 4px;
+            max-height: 100px;
+            overflow-y: auto;
+            margin: 0;
+            font-size: 0.75rem;
+        }
+    </style>
+</head>
+<body class="bg-gradient">
+    <div class="db-container">
+        <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h1>🗄️ Dados do SQLite (gpacker.db)</h1>
+            <a href="{{ url_for('drive.folders') }}" class="btn-secondary">← Voltar para Pastas</a>
+        </header>
+
+        <!-- SEÇÃO 1: TASKS / LOGS -->
+        <div class="db-section">
+            <h2 style="margin-top:0;">📜 Histórico de Tarefas (Tasks)</h2>
+            <p style="color:#9ca3af; font-size:0.9rem;">Exibindo as últimas 50 tarefas.</p>
+
+            {% if tasks %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Fase</th>
+                        <th>Msg</th>
+                        <th>Arquivos (Total)</th>
+                        <th>Baixados</th>
+                        <th>Erros</th>
+                        <th>Data Atualização</th>
+                        <th>Logs Detalhados</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in tasks %}
+                    <tr>
+                        <td style="font-family:monospace;">{{ t.id }}</td>
+                        <td>
+                            <span class="status-badge status-{{ t.phase }}">
+                                {{ t.phase }}
+                            </span>
+                        </td>
+                        <td>{{ t.message }}</td>
+                        <td>{{ t.files_total }}</td>
+                        <td>{{ t.files_downloaded }}</td>
+                        <td>{{ t.errors_count }}</td>
+                        <td>{{ t.updated_at.strftime('%d/%m/%Y %H:%M:%S') if t.updated_at else '-' }}</td>
+                        <td style="width:300px;">
+                            {% if t.history %}
+                                <pre>{{ t.history | join('\n') }}</pre>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+                <p>Nenhuma tarefa encontrada.</p>
+            {% endif %}
+        </div>
+
+        <!-- SEÇÃO 2: PERFIS -->
+        <div class="db-section">
+            <h2 style="margin-top:0;">⚙️ Perfis de Backup Salvos</h2>
+            {% if profiles %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nome</th>
+                        <th>Padrão ZIP</th>
+                        <th>Filtros (Extensões)</th>
+                        <th>Tamanho Máx (MB)</th>
+                        <th>Modo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in profiles %}
+                    <tr>
+                        <td>{{ p.id }}</td>
+                        <td><strong>{{ p.name }}</strong></td>
+                        <td>{{ p.zip_pattern }}</td>
+                        <td>{{ p.groups }}</td>
+                        <td>{{ p.max_size_mb if p.max_size_mb else '∞' }}</td>
+                        <td>{{ p.output_mode }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+                <p>Nenhum perfil salvo.</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

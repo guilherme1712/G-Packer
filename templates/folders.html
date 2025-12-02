@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Pastas do Google Drive</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* Estilos inline adicionais para os novos elementos da UI */
+        .radio-group-vertical {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 5px;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            cursor: pointer;
+            border: 1px solid #eee;
+            padding: 8px;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+
+        .radio-option:hover {
+            background-color: #f9f9f9;
+        }
+
+        .radio-option input {
+            margin-top: 4px;
+        }
+
+        .radio-option strong {
+            display: block;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .radio-option span {
+            display: block;
+            font-size: 12px;
+            color: #666;
+            line-height: 1.3;
+        }
+
+        .box-highlight {
+            background-color: #f0f7ff;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #cce5ff;
+        }
+    </style>
+</head>
+
+<body class="bg-gradient">
+    <div class="page">
+        <header class="page-header">
+            <div class="page-header-top">
+                <div>
+                    <h1>📁 Escolha pastas e arquivos para baixar</h1>
+                    <p class="subtitle">
+                        Selecione itens na árvore. Baixe agora ou gere em segundo plano para download posterior.
+                    </p>
+                </div>
+
+                <div class="tree-toolbar">
+                    <label class="checkbox-inline">
+                        <input type="checkbox" id="toggle-files">
+                        Mostrar arquivos também
+                    </label>
+
+                    <a href="{{ url_for('admin.list_backups') }}" class="btn-ghost btn-xs"
+                        style="text-decoration: none; margin-right: 4px;" target="_blank">
+                        📦 Meus Backups
+                    </a>
+
+                    <a href="{{ url_for('admin.view_db') }}" class="btn-ghost btn-xs"
+                        style="text-decoration: none; margin-right: 8px;" target="_blank">
+                        📊 Admin DB
+                    </a>
+
+                    <button type="button" class="btn-primary btn-xs" onclick="openModalForSelected()">
+                        Baixar itens selecionados
+                    </button>
+
+                    <div class="notification-wrapper">
+                        <button class="notification-btn" id="notification-btn" onclick="toggleLogPanel()">
+                            <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                            </svg>
+                            <div id="notification-badge" class="notification-badge hidden">0</div>
+                        </button>
+
+                        <div id="log-panel" class="log-panel hidden">
+                            <div class="log-header">
+                                <span>Atividade Recente</span>
+                                <button onclick="toggleLogPanel()" class="btn-ghost btn-xs"
+                                    style="padding: 2px 6px;">✕</button>
+                            </div>
+                            <div class="log-content" id="log-content">
+                                <ul class="log-list" id="log-list">
+                                    <li class="log-empty">Nenhuma atividade recente.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="selection-strip">
+                <span class="selected-label">Itens selecionados:</span>
+                <span id="selected-folder-label" class="selected-name">nenhum</span>
+                <span id="selection-counter" class="selection-counter">Nenhum item selecionado.</span>
+            </div>
+        </header>
+
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <div class="page-flash">
+            <div class="alert">
+                {% for msg in messages %}
+                <p>{{ msg }}</p>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <aside class="side-menu">
+            <div class="favorites-box">
+                <div class="favorites-header">
+                    <span>⭐ Favoritos</span>
+                    <small>(clique na estrela ao lado de uma pasta)</small>
+                </div>
+                <div id="favorites-list" class="favorites-list">
+                    Nenhum favorito ainda.
+                </div>
+            </div>
+
+            <div class="profiles-box">
+                <div class="favorites-header">
+                    <span>⚙️ Modelos de backup</span>
+                    <small>Salve configurações frequentes.</small>
+                </div>
+                <div id="profiles-list" class="favorites-list">
+                    Nenhum perfil salvo.
+                </div>
+            </div>
+
+            <section class="preview-panel" id="preview-panel">
+                <h2 class="preview-title">Detalhes</h2>
+                <p id="preview-empty" class="preview-empty">
+                    Clique em um arquivo para ver detalhes.
+                </p>
+
+                <div id="preview-content" class="preview-content hidden">
+                    <div class="preview-name" id="preview-name"></div>
+
+                    <div class="preview-meta">
+                        <div><span class="label">Tipo:</span> <span id="preview-type"></span></div>
+                        <div><span class="label">Tamanho:</span> <span id="preview-size"></span></div>
+                        <div><span class="label">Modificado em:</span> <span id="preview-modified"></span></div>
+                    </div>
+
+                    <div id="preview-thumbnail-wrapper" class="preview-thumbnail-wrapper hidden">
+                        <img id="preview-thumbnail" alt="Miniatura do arquivo">
+                    </div>
+
+                    <a id="preview-open-link" href="#" target="_blank" class="btn-link disabled"
+                        rel="noopener noreferrer">
+                        Abrir no Google Drive
+                    </a>
+                </div>
+            </section>
+        </aside>
+
+        <main class="main-column">
+            <div class="card main-card">
+                <div class="breadcrumb-box">
+                    <span class="breadcrumb-label">Caminho:</span>
+                    <span id="breadcrumb-path" class="breadcrumb-path">Meu Drive</span>
+                </div>
+
+                <div class="tree-wrapper">
+                    <ul id="tree-root" class="tree-root">
+                        </ul>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="progress-container" class="progress-container progress-floating hidden">
+        <div class="progress-header">
+            <span id="progress-phase">Processando...</span>
+            <span id="progress-percent">0%</span>
+        </div>
+        <div class="progress-bar-bg">
+            <div id="progress-bar" class="progress-bar-fill"></div>
+        </div>
+        <p id="progress-text" class="progress-text"></p>
+
+        <div class="progress-controls">
+            <button type="button" class="btn-danger btn-xs" onclick="cancelTask()">
+                Cancelar
+            </button>
+        </div>
+    </div>
+
+    <div id="modal-backdrop" class="modal-backdrop hidden">
+        <div class="modal">
+            <h2 id="modal-title">Baixar</h2>
+            <p class="subtitle" id="modal-subtitle"></p>
+
+            <form id="download-form" onsubmit="return false;">
+                <input type="hidden" name="items_json" id="items_json">
+                <input type="hidden" name="task_id" id="task_id">
+
+                <div class="modal-grid">
+                    <div class="form-section modal-section-wide">
+                        <div class="form-section-title">Configurações Gerais</div>
+
+                        <div class="form-group">
+                            <label for="zip_name">Nome do Arquivo</label>
+                            <div style="display:flex; gap:8px;">
+                                <input type="text" id="zip_name" name="zip_name" placeholder="Ex: backup_drive"
+                                    style="flex:1;">
+                                <button type="button" class="btn-ghost btn-xs" onclick="suggestZipName()">
+                                    Sugestão
+                                </button>
+                            </div>
+                            <small>A extensão será adicionada automaticamente.</small>
+                        </div>
+
+                        <div class="form-group box-highlight">
+                            <label style="margin-bottom:8px; display:block; font-weight:600;">Como deseja
+                                processar?</label>
+                            <div class="radio-group-vertical">
+                                <label class="radio-option">
+                                    <input type="radio" name="execution_mode" value="immediate" checked>
+                                    <div>
+                                        <strong>Baixar Agora</strong>
+                                        <span>Aguarda o processamento e inicia o download automaticamente ao
+                                            final.</span>
+                                    </div>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="execution_mode" value="background">
+                                    <div>
+                                        <strong>Segundo Plano</strong>
+                                        <span>O servidor processa e salva na aba "Meus Backups". Você pode fechar esta
+                                            janela.</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="output_mode">Formato de Saída</label>
+                            <select id="output_mode" name="output_mode">
+                                <option value="archive" selected>Arquivo Compactado (ZIP/Tar)</option>
+                                <option value="mirror">Espelho Local (Sync)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group archive-only">
+                            <label for="archive_format">Formato</label>
+                            <select id="archive_format" name="archive_format">
+                                <option value="zip">ZIP (.zip)</option>
+                                <option value="tar.gz">Tar GZip (.tar.gz)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group archive-only">
+                            <label for="compression_level">Compressão</label>
+                            <select id="compression_level" name="compression_level">
+                                <option value="fast">Rápida (Menor)</option>
+                                <option value="normal" selected>Normal</option>
+                                <option value="max">Máxima (Mais lento)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group mirror-only" style="display:none;">
+                            <label for="local_mirror_path">Pasta Local (Servidor)</label>
+                            <input type="text" id="local_mirror_path" name="local_mirror_path"
+                                placeholder="/home/user/Backups/ClienteA">
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <div class="form-section-title">Filtros de Arquivo</div>
+
+                        <div class="form-group">
+                            <label>Tipos a incluir</label>
+                            <div class="filter-types">
+                                <label><input type="checkbox" name="type_pdf" value="1" checked> PDF</label>
+                                <label><input type="checkbox" name="type_docs" value="1" checked> Docs</label>
+                                <label><input type="checkbox" name="type_sheets" value="1" checked> Planilhas</label>
+                                <label><input type="checkbox" name="type_images" value="1" checked> Imagens</label>
+                                <label><input type="checkbox" name="type_videos" value="1" checked> Vídeos</label>
+                                <label><input type="checkbox" name="type_others" value="1" checked> Outros</label>
+                            </div>
+                        </div>
+
+                        <div class="form-section-title" style="margin-top: 15px;">Filtros Avançados</div>
+
+                        <div class="form-group">
+                            <label>Data</label>
+                            <div class="filter-dates">
+                                <label>Criado pós: <input type="date" name="created_after"></label>
+                                <label>Editado pós: <input type="date" name="modified_after"></label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="max_size_mb">Tam. Máx (MB)</label>
+                            <input type="number" id="max_size_mb" name="max_size_mb" placeholder="Ignorar maiores que...">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <div>
+                        <button type="button" class="btn-ghost" onclick="closeModal()">Cancelar</button>
+                        <button type="button" class="btn-ghost" onclick="saveCurrentAsProfile()">Salvar Modelo</button>
+                    </div>
+                    <button type="button" class="btn-primary" onclick="startDownloadProcess()">
+                        Confirmar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // =========================================================
+        // VARIÁVEIS GLOBAIS
+        // =========================================================
+        let currentTaskId = null;
+        let progressTimer = null;
+        let includeFiles = false;
+        let selectedItems = [];   // Array de objetos {id, name, type}
+        let selectedNodeIds = new Set(); // Set de strings "type:id" para lookup rápido
+        let favorites = [];
+        let backupProfiles = [];
+        let lastLogCount = 0;
+
+        // =========================================================
+        // UTILITÁRIOS
+        // =========================================================
+
+        function humanSize(bytes) {
+            if (!bytes || isNaN(bytes)) return '—';
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            let i = 0;
+            let v = bytes;
+            while (v >= 1024 && i < units.length - 1) {
+                v /= 1024;
+                i++;
+            }
+            return (i === 0 ? v.toFixed(0) : v.toFixed(1)) + ' ' + units[i];
+        }
+
+        function computeBreadcrumb(li) {
+            const parts = [];
+            let node = li;
+            while (node) {
+                const name = node.dataset.name ||
+                    (node.querySelector(':scope > .tree-row .tree-name')?.textContent || '').trim();
+                if (name) parts.unshift(name);
+                node = node.parentElement.closest('.tree-node');
+            }
+            return parts.join(' / ');
+        }
+
+        function updateBreadcrumbFromNode(li) {
+            const pathSpan = document.getElementById('breadcrumb-path');
+            if (!pathSpan || !li) return;
+            const crumb = computeBreadcrumb(li);
+            pathSpan.textContent = crumb || 'Meu Drive';
+        }
+
+        // =========================================================
+        // PAINEL DE LOGS
+        // =========================================================
+
+        function toggleLogPanel() {
+            const panel = document.getElementById('log-panel');
+            if (panel.classList.contains('hidden')) {
+                panel.classList.remove('hidden');
+                // Reseta badge
+                const badge = document.getElementById('notification-badge');
+                badge.classList.add('hidden');
+                badge.innerText = '0';
+            } else {
+                panel.classList.add('hidden');
+            }
+        }
+
+        function updateLogPanel(history) {
+            if (!history || !Array.isArray(history)) return;
+
+            const listEl = document.getElementById('log-list');
+            const badge = document.getElementById('notification-badge');
+
+            if (history.length > lastLogCount) {
+                const diff = history.length - lastLogCount;
+                if (document.getElementById('log-panel').classList.contains('hidden')) {
+                    badge.innerText = diff > 99 ? '99+' : diff;
+                    badge.classList.remove('hidden');
+                }
+            }
+            lastLogCount = history.length;
+
+            if (history.length === 0) {
+                listEl.innerHTML = '<li class="log-empty">Nenhuma atividade recente.</li>';
+                return;
+            }
+
+            let html = '';
+            const recent = history.slice().reverse();
+
+            recent.forEach(msg => {
+                let icon = '•';
+                if (msg.includes('Mapeado')) icon = '🔍';
+                else if (msg.includes('Baixado')) icon = '⬇️';
+                else if (msg.includes('Compactando')) icon = '📦';
+                else if (msg.includes('ERRO')) icon = '❌';
+                else if (msg.includes('CANCELADO')) icon = '⛔';
+                else if (msg.includes('concluído')) icon = '✅';
+
+                html += `
+                    <li class="log-item">
+                        <div class="log-icon">${icon}</div>
+                        <div>${msg}</div>
+                    </li>
+                `;
+            });
+            listEl.innerHTML = html;
+        }
+
+        // =========================================================
+        // FAVORITOS
+        // =========================================================
+
+        function loadFavorites() {
+            try {
+                const raw = localStorage.getItem('gpacker_favorites');
+                favorites = raw ? JSON.parse(raw) : [];
+            } catch (e) {
+                favorites = [];
+            }
+        }
+
+        function saveFavorites() {
+            try {
+                localStorage.setItem('gpacker_favorites', JSON.stringify(favorites));
+            } catch (e) { }
+        }
+
+        function isFavorite(id) {
+            return favorites.some(f => f.id === id);
+        }
+
+        function renderFavorites() {
+            const box = document.getElementById('favorites-list');
+            if (!box) return;
+            box.innerHTML = '';
+
+            if (!favorites.length) {
+                box.textContent = 'Nenhum favorito ainda.';
+                return;
+            }
+
+            favorites.forEach(fav => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'favorite-item';
+                btn.textContent = '⭐ ' + (fav.path || fav.name);
+                btn.addEventListener('click', () => {
+                    focusNodeById(fav.id);
+                });
+                box.appendChild(btn);
+            });
+        }
+
+        function toggleFavorite(item, li, favBtn) {
+            const path = computeBreadcrumb(li);
+            if (isFavorite(item.id)) {
+                favorites = favorites.filter(f => f.id !== item.id);
+                favBtn.classList.remove('fav-on');
+            } else {
+                favorites.push({ id: item.id, name: item.name, path });
+                favBtn.classList.add('fav-on');
+            }
+            saveFavorites();
+            renderFavorites();
+        }
+
+        function focusNodeById(id) {
+            // Tenta encontrar na árvore carregada
+            const node = document.querySelector(`.tree-node[data-id="${id}"]`);
+            if (!node) {
+                alert("Pasta não encontrada na visualização atual (pode não estar carregada).");
+                return;
+            }
+            // Expande pais
+            let current = node.parentElement.closest('.tree-node');
+            while (current) {
+                const toggle = current.querySelector(':scope > .tree-row .tree-toggle');
+                if (toggle && current.classList.contains('collapsed')) {
+                    toggle.click();
+                }
+                current = current.parentElement.closest('.tree-node');
+            }
+            node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            node.classList.add('tree-node-highlight');
+            setTimeout(() => node.classList.remove('tree-node-highlight'), 1500);
+        }
+
+        // =========================================================
+        // PERFIS DE BACKUP (Profiles)
+        // =========================================================
+
+        function applyZipPattern(pattern) {
+            if (!pattern) pattern = "backup-{YYYYMMDD}";
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const yy = String(yyyy).slice(-2);
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+
+            let name = pattern;
+            name = name.replace(/\{YYYYMMDD\}/g, `${yyyy}${mm}${dd}`);
+            name = name.replace(/\{YYYYMM\}/g, `${yyyy}${mm}`);
+            name = name.replace(/\{YYYY\}/g, String(yyyy));
+            name = name.replace(/\{YY\}/g, yy);
+            name = name.replace(/\{MM\}/g, mm);
+            name = name.replace(/\{DD\}/g, dd);
+            name = name.replace(/[\\/:*?"<>|]/g, "_");
+            return name;
+        }
+
+        function loadProfiles() {
+            fetch('/api/profiles')
+                .then(resp => resp.json())
+                .then(data => {
+                    backupProfiles = data.profiles || [];
+                    renderProfiles();
+                })
+                .catch(err => {
+                    console.error('Erro ao carregar perfis:', err);
+                    const box = document.getElementById('profiles-list');
+                    if (box) box.textContent = 'Erro ao carregar.';
+                });
+        }
+
+        function renderProfiles() {
+            const box = document.getElementById('profiles-list');
+            if (!box) return;
+            box.innerHTML = '';
+
+            if (!backupProfiles.length) {
+                box.textContent = 'Nenhum perfil salvo.';
+                return;
+            }
+
+            backupProfiles.forEach(profile => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'profile-item';
+
+                const title = document.createElement('div');
+                title.className = 'profile-title';
+                title.textContent = profile.name || '(sem nome)';
+
+                const subtitle = document.createElement('div');
+                subtitle.className = 'profile-subtitle';
+                const pattern = profile.zip_pattern || 'backup-{YYYYMMDD}';
+                subtitle.textContent = `Pattern: ${pattern}`;
+
+                const actions = document.createElement('div');
+                actions.className = 'profile-actions';
+
+                const runButton = document.createElement('button');
+                runButton.className = 'btn-primary btn-xs';
+                runButton.textContent = 'Rodar';
+                runButton.addEventListener('click', () => {
+                    runBackupProfile(profile.id, true);
+                });
+
+                const detailsButton = document.createElement('button');
+                detailsButton.className = 'btn-ghost btn-xs';
+                detailsButton.textContent = 'Detalhes';
+                detailsButton.addEventListener('click', () => {
+                    runBackupProfile(profile.id, false);
+                });
+
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'btn-ghost btn-xs';
+                deleteButton.textContent = 'Excluir';
+                deleteButton.addEventListener('click', () => {
+                    if (confirm(`Remover "${profile.name}"?`)) deleteProfile(profile.id);
+                });
+
+                actions.appendChild(runButton);
+                actions.appendChild(detailsButton);
+                actions.appendChild(deleteButton);
+
+                wrapper.appendChild(title);
+                wrapper.appendChild(subtitle);
+                wrapper.appendChild(actions);
+
+                box.appendChild(wrapper);
+            });
+        }
+
+        function deleteProfile(id) {
+            fetch('/api/profiles/' + encodeURIComponent(id), { method: 'DELETE' })
+                .then(resp => resp.json())
+                .then(data => {
+                    if (data.ok) {
+                        backupProfiles = backupProfiles.filter(p => p.id !== id);
+                        renderProfiles();
+                    } else {
+                        alert("Erro ao excluir.");
+                    }
+                });
+        }
+
+        function collectCurrentFiltersFromForm() {
+            const groups = [];
+            if (document.querySelector('input[name="type_pdf"]')?.checked) groups.push('pdf');
+            if (document.querySelector('input[name="type_docs"]')?.checked) groups.push('docs');
+            if (document.querySelector('input[name="type_sheets"]')?.checked) groups.push('sheets');
+            if (document.querySelector('input[name="type_images"]')?.checked) groups.push('images');
+            if (document.querySelector('input[name="type_videos"]')?.checked) groups.push('videos');
+            if (document.querySelector('input[name="type_others"]')?.checked) groups.push('others');
+
+            const createdAfter = document.querySelector('input[name="created_after"]')?.value || null;
+            const modifiedAfter = document.querySelector('input[name="modified_after"]')?.value || null;
+            const maxSizeStr = document.getElementById('max_size_mb')?.value || '';
+            const outputMode = document.getElementById('output_mode')?.value || 'archive';
+            const localPath = document.getElementById('local_mirror_path')?.value || '';
+            const archiveFormat = document.getElementById('archive_format')?.value || 'zip';
+            const compressionLevel = document.getElementById('compression_level')?.value || 'normal';
+
+            let maxSizeMb = null;
+            if (maxSizeStr) {
+                const parsed = parseInt(maxSizeStr, 10);
+                if (!Number.isNaN(parsed)) maxSizeMb = parsed;
+            }
+
+            return {
+                groups,
+                created_after: createdAfter,
+                modified_after: modifiedAfter,
+                max_size_mb: maxSizeMb,
+                output_mode: outputMode,
+                local_mirror_path: localPath,
+                archive_format: archiveFormat,
+                compression_level: compressionLevel,
+            };
+        }
+
+        function saveCurrentAsProfile() {
+            if (!selectedItems.length) {
+                alert("Selecione pelo menos um item.");
+                return;
+            }
+            const name = prompt("Nome do modelo:");
+            if (!name) return;
+
+            const currentZip = document.getElementById('zip_name').value || 'backup';
+            const pattern = prompt("Padrão de nome (ex: backup-{YYYYMMDD}):", currentZip.includes('{') ? currentZip : currentZip + '-{YYYYMMDD}') || currentZip;
+
+            const filters = collectCurrentFiltersFromForm();
+            const payload = {
+                name: name,
+                zip_pattern: pattern,
+                items: selectedItems,
+                ...filters
+            };
+
+            fetch('/api/profiles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.ok) {
+                        loadProfiles();
+                        alert('Modelo salvo!');
+                    } else {
+                        alert('Erro ao salvar: ' + (data.error || 'Desconhecido'));
+                    }
+                });
+        }
+
+        function applyFiltersToFormFromProfile(profile) {
+            const allTypes = ['pdf', 'docs', 'sheets', 'images', 'videos', 'others'];
+            const groups = profile.groups || [];
+            allTypes.forEach(g => {
+                const el = document.querySelector(`input[name="type_${g}"]`);
+                if (el) el.checked = !groups.length || groups.includes(g);
+            });
+
+            if (profile.created_after) document.querySelector('input[name="created_after"]').value = profile.created_after;
+            if (profile.modified_after) document.querySelector('input[name="modified_after"]').value = profile.modified_after;
+            if (profile.max_size_mb) document.getElementById('max_size_mb').value = profile.max_size_mb;
+
+            if (profile.output_mode) document.getElementById('output_mode').value = profile.output_mode;
+            if (profile.local_mirror_path) document.getElementById('local_mirror_path').value = profile.local_mirror_path;
+            if (profile.archive_format) document.getElementById('archive_format').value = profile.archive_format;
+            if (profile.compression_level) document.getElementById('compression_level').value = profile.compression_level;
+
+            updateOutputModeUI();
+        }
+
+        function runBackupProfile(profileId, autoRun) {
+            const profile = backupProfiles.find(p => p.id === profileId);
+            if (!profile) return;
+
+            selectedItems = profile.items || [];
+            selectedNodeIds = new Set();
+            selectedItems.forEach(it => selectedNodeIds.add(`${it.type}:${it.id}`));
+            updateSelectionInfo();
+
+            document.getElementById('items_json').value = JSON.stringify(selectedItems);
+            const pat = profile.zip_pattern || 'backup-{YYYYMMDD}';
+            document.getElementById('zip_name').value = applyZipPattern(pat);
+
+            applyFiltersToFormFromProfile(profile);
+
+            if (autoRun) {
+                // Se for autorun, forçamos o modo background ou immediate? Vamos assumir Immediate para feedback.
+                // Mas abrimos o modal para confirmação ou vai direto?
+                // Vamos simular o clique do botão "Baixar Agora".
+                startDownloadProcess();
+            } else {
+                openModalForSelected();
+            }
+        }
+
+        // =========================================================
+        // UI & DOWNLOAD (MODAL + AJAX)
+        // =========================================================
+
+        function updateOutputModeUI() {
+            const mode = document.getElementById('output_mode').value;
+            const archiveFields = document.querySelectorAll('.archive-only');
+            const mirrorFields = document.querySelectorAll('.mirror-only');
+            archiveFields.forEach(el => el.style.display = mode === 'archive' ? 'block' : 'none');
+            mirrorFields.forEach(el => el.style.display = mode === 'mirror' ? 'block' : 'none');
+        }
+
+        function openModalForSelected() {
+            if (!selectedItems.length) {
+                alert("Selecione pelo menos um item.");
+                return;
+            }
+            document.getElementById('items_json').value = JSON.stringify(selectedItems);
+
+            const titleEl = document.getElementById('modal-title');
+            const subEl = document.getElementById('modal-subtitle');
+
+            titleEl.innerText = "Configurar Download";
+            subEl.innerText = `${selectedItems.length} item(ns) selecionado(s).`;
+
+            document.getElementById('zip_name').value = ""; // Limpa para sugestão
+
+            updateOutputModeUI();
+            document.getElementById('modal-backdrop').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('modal-backdrop').classList.add('hidden');
+        }
+
+        function suggestZipName() {
+            const now = new Date();
+            const dateStr = now.toISOString().slice(0,10).replace(/-/g,"");
+
+            let base = "backup";
+            if(selectedItems.length === 1) {
+                base = selectedItems[0].name.replace(/\.[^/.]+$/, ""); // remove extensão se houver
+            }
+
+            // Remove caracteres ruins
+            base = base.replace(/[\\/:*?"<>| ]/g, "_");
+            document.getElementById('zip_name').value = `${base}_${dateStr}`;
+        }
+
+        // LÓGICA PRINCIPAL DE EXECUÇÃO
+        function startDownloadProcess() {
+            const form = document.getElementById('download-form');
+            const formData = new FormData(form);
+            const payload = Object.fromEntries(formData.entries());
+
+            // Checkboxes não marcados não vem no FormData, precisamos adicionar manualmente se quisermos false
+            // Mas o backend Python (request.get_json()) vai receber o que mandarmos aqui.
+            // Para filtros booleanos:
+            ['type_pdf', 'type_docs', 'type_sheets', 'type_images', 'type_videos', 'type_others'].forEach(k => {
+                const el = form.querySelector(`input[name="${k}"]`);
+                if(el && el.checked) payload[k] = "1";
+                else delete payload[k]; // ou mandar payload[k] = null
+            });
+
+            // IDs e Modo
+            const taskId = 'task-' + Date.now();
+            currentTaskId = taskId;
+            payload.task_id = taskId;
+
+            const executionMode = payload.execution_mode; // 'immediate' ou 'background'
+
+            closeModal();
+
+            if(executionMode === 'immediate') {
+                showProgressUI();
+            } else {
+                alert("Processo iniciado em Segundo Plano!\n\nAcompanhe ou baixe depois em 'Meus Backups'.");
+            }
+
+            fetch('/download', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(r => r.json())
+            .then(data => {
+                if(data.ok) {
+                    // Inicia Polling independente do modo (para logs)
+                    startPolling(executionMode);
+                } else {
+                    alert("Erro ao iniciar: " + data.error);
+                    hideProgressUI();
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert("Erro de conexão.");
+                hideProgressUI();
+            });
+        }
+
+        function showProgressUI() {
+            const c = document.getElementById('progress-container');
+            c.classList.remove('hidden');
+            document.getElementById('progress-bar').style.width = '0%';
+            document.getElementById('progress-bar').classList.remove('error');
+            document.getElementById('progress-percent').innerText = '0%';
+            document.getElementById('progress-phase').innerText = 'INICIANDO';
+            document.getElementById('progress-text').innerText = 'Conectando...';
+
+            // Limpa logs
+            lastLogCount = 0;
+            document.getElementById('log-list').innerHTML = '<li class="log-empty">Iniciando...</li>';
+        }
+
+        function hideProgressUI() {
+            document.getElementById('progress-container').classList.add('hidden');
+        }
+
+        function startPolling(mode) {
+            if(progressTimer) clearInterval(progressTimer);
+            progressTimer = setInterval(() => {
+                fetchProgress(mode);
+            }, 1000);
+        }
+
+        function fetchProgress(mode) {
+            if(!currentTaskId) return;
+
+            fetch('/progress/' + currentTaskId)
+            .then(r => r.json())
+            .then(data => {
+                updateProgressBar(data);
+                if(data.history) updateLogPanel(data.history);
+
+                if(data.phase === 'concluido') {
+                    clearInterval(progressTimer);
+                    document.getElementById('progress-phase').innerText = "CONCLUÍDO";
+
+                    if(mode === 'immediate' && data.download_url) {
+                         document.getElementById('progress-text').innerText = "Baixando arquivo...";
+                         window.location.href = data.download_url;
+                         // Fecha barra após 3s
+                         setTimeout(hideProgressUI, 3000);
+                    } else {
+                        document.getElementById('progress-text').innerText = "Salvo em 'Meus Backups'.";
+                        // Em background, deixa a barra lá até o usuário fechar ou cancelar,
+                        // ou você pode esconder automaticamente. Vamos deixar visível se estiver aberta.
+                    }
+
+                } else if (data.phase === 'erro' || data.phase === 'cancelado') {
+                    clearInterval(progressTimer);
+                    document.getElementById('progress-bar').classList.add('error');
+                }
+            })
+            .catch(console.error);
+        }
+
+        function updateProgressBar(data) {
+            let percent = 0;
+            const phase = data.phase || 'processando';
+
+            if (phase === 'mapeando') {
+                const f = data.files_found || 0;
+                percent = Math.min(20, f * 0.1);
+            } else if (phase === 'baixando') {
+                 if (data.files_total > 0) {
+                    percent = 20 + ((data.files_downloaded / data.files_total) * 60);
+                 } else {
+                     percent = 30;
+                 }
+            } else if (phase === 'compactando') {
+                percent = 90;
+            } else if (phase === 'concluido') {
+                percent = 100;
+            }
+
+            document.getElementById('progress-bar').style.width = percent + '%';
+            document.getElementById('progress-percent').innerText = Math.round(percent) + '%';
+            document.getElementById('progress-phase').innerText = phase.toUpperCase();
+            if(phase !== 'concluido') {
+                 document.getElementById('progress-text').innerText = data.message || '';
+            }
+        }
+
+        function cancelTask() {
+            if(!currentTaskId) return;
+            if(!confirm("Cancelar tarefa?")) return;
+
+            fetch('/cancel/' + currentTaskId, { method: 'POST' })
+            .then(r => r.json())
+            .then(() => {
+                document.getElementById('progress-text').innerText = "Cancelando...";
+            });
+        }
+
+
+        // =========================================================
+        // TREE VIEW (ÁRVORE DE PASTAS)
+        // =========================================================
+
+        function createFolderNode(folder) {
+            const li = document.createElement('li');
+            li.className = 'tree-node collapsed';
+            li.dataset.id = folder.id;
+            li.dataset.name = folder.name;
+            li.dataset.type = 'folder';
+
+            const row = document.createElement('div');
+            row.className = 'tree-row';
+
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = 'tree-toggle';
+            toggleBtn.textContent = '▸';
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'select-checkbox';
+
+            const favBtn = document.createElement('button');
+            favBtn.className = 'fav-btn';
+            favBtn.textContent = '☆';
+
+            const icon = document.createElement('span');
+            icon.className = 'tree-folder-icon';
+            icon.textContent = '📁';
+
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'tree-name';
+            nameSpan.textContent = folder.name;
+
+            row.append(toggleBtn, checkbox, favBtn, icon, nameSpan);
+
+            const childrenUl = document.createElement('ul');
+            childrenUl.className = 'tree-children';
+            childrenUl.style.display = 'none';
+
+            li.append(row, childrenUl);
+
+            // Eventos
+            const item = { id: folder.id, name: folder.name, type: 'folder' };
+
+            if(isFavorite(item.id)) favBtn.classList.add('fav-on');
+
+            favBtn.onclick = (e) => {
+                e.stopPropagation();
+                toggleFavorite(item, li, favBtn);
+            };
+
+            checkbox.onchange = (e) => {
+                e.stopPropagation();
+                handleCheckboxChange(checkbox, li, item);
+                propagateSelectionDown(li, checkbox.checked);
+            };
+
+            row.onclick = (e) => {
+                if([toggleBtn, checkbox, favBtn].includes(e.target)) return;
+                // Clique na linha seleciona/deseleciona
+                checkbox.checked = !checkbox.checked;
+                handleCheckboxChange(checkbox, li, item);
+                propagateSelectionDown(li, checkbox.checked);
+            };
+
+            toggleBtn.onclick = (e) => {
+                e.stopPropagation();
+                const isCollapsed = li.classList.contains('collapsed');
+                if(isCollapsed && !li.dataset.loaded) {
+                    loadChildren(folder.id, childrenUl, li, toggleBtn);
+                }
+                setCollapsedState(li, !isCollapsed);
+                toggleBtn.textContent = li.classList.contains('collapsed') ? '▸' : '▾';
+            };
+
+            return li;
+        }
+
+        function createFileNode(file) {
+            const li = document.createElement('li');
+            li.className = 'tree-node file-node';
+            li.dataset.id = file.id;
+            li.dataset.name = file.name;
+            li.dataset.type = 'file';
+
+            const row = document.createElement('div');
+            row.className = 'tree-row';
+
+            const spacer = document.createElement('span');
+            spacer.className = 'tree-spacer'; // Espaço onde ficaria o toggle
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'select-checkbox';
+
+            const icon = document.createElement('span');
+            icon.className = 'tree-folder-icon';
+            icon.textContent = '📄';
+
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'tree-name';
+            nameSpan.textContent = file.name;
+
+            row.append(spacer, checkbox, icon, nameSpan);
+            li.appendChild(row);
+
+            const item = { id: file.id, name: file.name, type: 'file' };
+
+            checkbox.onchange = (e) => {
+                e.stopPropagation();
+                handleCheckboxChange(checkbox, li, item);
+                propagateSelectionUp(li);
+            };
+
+            row.onclick = (e) => {
+                if(e.target === checkbox) return;
+                showFilePreview(item, li);
+            };
+
+            return li;
+        }
+
+        function loadChildren(parentId, containerUl, li, toggleBtn) {
+            const filesParam = includeFiles ? '1' : '0';
+            const url = parentId === 'root'
+                ? `/api/folders/root?files=${filesParam}`
+                : `/api/folders/children/${encodeURIComponent(parentId)}?files=${filesParam}`;
+
+            containerUl.innerHTML = '<li class="tree-node"><div class="tree-row"><span>Carregando...</span></div></li>';
+
+            fetch(url)
+            .then(r => r.json())
+            .then(data => {
+                containerUl.innerHTML = '';
+                const items = data.items || [];
+
+                if(!items.length) {
+                    toggleBtn.textContent = '';
+                    toggleBtn.classList.add('placeholder');
+                    toggleBtn.disabled = true;
+                    return;
+                }
+
+                const parentCheckbox = li.querySelector(':scope > .tree-row .select-checkbox');
+                const parentChecked = parentCheckbox && parentCheckbox.checked && !parentCheckbox.indeterminate;
+
+                items.forEach(it => {
+                    const node = (it.type === 'folder') ? createFolderNode(it) : createFileNode(it);
+                    containerUl.appendChild(node);
+                    if(parentChecked) setNodeCheckedDeep(node, true);
+                });
+
+                li.dataset.loaded = 'true';
+            })
+            .catch(err => {
+                console.error(err);
+                containerUl.innerHTML = '<li class="tree-node">Erro.</li>';
+            });
+        }
+
+        function setCollapsedState(li, collapsed) {
+            const ul = li.querySelector(':scope > .tree-children');
+            if(!ul) return;
+            if(collapsed) {
+                li.classList.add('collapsed');
+                ul.style.display = 'none';
+            } else {
+                li.classList.remove('collapsed');
+                ul.style.display = 'block';
+            }
+        }
+
+        // =========================================================
+        // LÓGICA DE SELEÇÃO E PREVIEW
+        // =========================================================
+
+        function handleCheckboxChange(checkbox, li, item, updateParents = true) {
+            const key = `${item.type}:${item.id}`;
+
+            if(checkbox && checkbox.checked) {
+                if(!selectedNodeIds.has(key)) {
+                    selectedNodeIds.add(key);
+                    selectedItems.push(item);
+                }
+                li.classList.add('tree-node-selected');
+                updateBreadcrumbFromNode(li);
+            } else {
+                if(selectedNodeIds.has(key)) {
+                    selectedNodeIds.delete(key);
+                    selectedItems = selectedItems.filter(x => !(x.id === item.id && x.type === item.type));
+                }
+                li.classList.remove('tree-node-selected');
+            }
+
+            updateSelectionInfo();
+            if(updateParents) propagateSelectionUp(li);
+        }
+
+        function updateSelectionInfo() {
+            const lbl = document.getElementById('selected-folder-label');
+            const cnt = document.getElementById('selection-counter');
+
+            if(!selectedItems.length) {
+                if(lbl) lbl.textContent = 'nenhum';
+                if(cnt) cnt.textContent = 'Nenhum item selecionado.';
+                return;
+            }
+
+            const fld = selectedItems.filter(i => i.type === 'folder').length;
+            const fls = selectedItems.filter(i => i.type === 'file').length;
+
+            const txt = `${fld} pastas e ${fls} arquivos`;
+            if(lbl) lbl.textContent = txt;
+            if(cnt) cnt.textContent = txt + ' selecionados.';
+        }
+
+        function setNodeCheckedDeep(li, checked) {
+            const cb = li.querySelector(':scope > .tree-row .select-checkbox');
+            if(cb) {
+                cb.checked = checked;
+                cb.indeterminate = false;
+            }
+
+            const item = {
+                id: li.dataset.id,
+                name: li.dataset.name,
+                type: li.dataset.type
+            };
+            handleCheckboxChange(cb, li, item, false); // não propaga pra cima aqui, pois já estamos descendo
+
+            const children = li.querySelectorAll(':scope > .tree-children > .tree-node');
+            children.forEach(c => setNodeCheckedDeep(c, checked));
+        }
+
+        function propagateSelectionDown(li, checked) {
+            setNodeCheckedDeep(li, checked);
+        }
+
+        function propagateSelectionUp(li) {
+            const parent = li.parentElement.closest('.tree-node');
+            if(!parent) return;
+
+            const childrenCB = parent.querySelectorAll(':scope > .tree-children > .tree-node > .tree-row .select-checkbox');
+            const all = Array.from(childrenCB);
+            if(!all.length) return;
+
+            const allChecked = all.every(c => c.checked);
+            const someChecked = all.some(c => c.checked || c.indeterminate);
+
+            const pCB = parent.querySelector(':scope > .tree-row .select-checkbox');
+            if(pCB) {
+                pCB.checked = allChecked;
+                pCB.indeterminate = !allChecked && someChecked;
+
+                const pItem = { id: parent.dataset.id, name: parent.dataset.name, type: parent.dataset.type };
+                handleCheckboxChange(pCB, parent, pItem, false);
+            }
+            propagateSelectionUp(parent);
+        }
+
+        function showFilePreview(item, li) {
+            const panel = document.getElementById('preview-content');
+            const empty = document.getElementById('preview-empty');
+
+            empty.classList.add('hidden');
+            panel.classList.remove('hidden');
+
+            document.getElementById('preview-name').textContent = item.name;
+            document.getElementById('preview-type').textContent = '...';
+            document.getElementById('preview-size').textContent = '...';
+            document.getElementById('preview-modified').textContent = '...';
+            document.getElementById('preview-thumbnail-wrapper').classList.add('hidden');
+
+            updateBreadcrumbFromNode(li);
+
+            fetch('/api/file/' + encodeURIComponent(item.id))
+            .then(r => r.json())
+            .then(meta => {
+                document.getElementById('preview-type').textContent = meta.mimeType || '-';
+                document.getElementById('preview-size').textContent = humanSize(parseInt(meta.size||0));
+
+                if(meta.modifiedTime) {
+                    document.getElementById('preview-modified').textContent = new Date(meta.modifiedTime).toLocaleString('pt-BR');
+                }
+
+                const link = document.getElementById('preview-open-link');
+                if(meta.webViewLink) {
+                    link.href = meta.webViewLink;
+                    link.classList.remove('disabled');
+                } else {
+                    link.classList.add('disabled');
+                }
+
+                if(meta.thumbnailLink) {
+                    const img = document.getElementById('preview-thumbnail');
+                    img.src = meta.thumbnailLink;
+                    document.getElementById('preview-thumbnail-wrapper').classList.remove('hidden');
+                }
+            })
+            .catch(console.error);
+        }
+
+        // =========================================================
+        // INICIALIZAÇÃO DA ÁRVORE (ROOT)
+        // =========================================================
+
+        function initTree() {
+            const ul = document.getElementById('tree-root');
+            ul.innerHTML = '';
+
+            const rootLi = document.createElement('li');
+            rootLi.className = 'tree-node';
+            rootLi.dataset.id = 'root';
+            rootLi.dataset.name = 'Meu Drive';
+            rootLi.dataset.type = 'folder';
+
+            const row = document.createElement('div');
+            row.className = 'tree-row';
+
+            // Toggle
+            const toggle = document.createElement('button');
+            toggle.className = 'tree-toggle';
+            toggle.textContent = '▾';
+
+            // Checkbox
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'select-checkbox';
+
+            // Fav
+            const fav = document.createElement('button');
+            fav.className = 'fav-btn';
+            fav.textContent = '☆';
+
+            const icon = document.createElement('span');
+            icon.className = 'tree-folder-icon';
+            icon.textContent = '📁';
+
+            const span = document.createElement('span');
+            span.className = 'tree-name';
+            span.textContent = 'Meu Drive';
+
+            row.append(toggle, cb, fav, icon, span);
+
+            const childrenUl = document.createElement('ul');
+            childrenUl.className = 'tree-children';
+
+            rootLi.append(row, childrenUl);
+            ul.appendChild(rootLi);
+
+            // Events Root
+            const item = { id:'root', name:'Meu Drive', type:'folder'};
+
+            if(isFavorite('root')) fav.classList.add('fav-on');
+
+            fav.onclick = (e) => { e.stopPropagation(); toggleFavorite(item, rootLi, fav); };
+            cb.onchange = (e) => {
+                e.stopPropagation();
+                handleCheckboxChange(cb, rootLi, item);
+                propagateSelectionDown(rootLi, cb.checked);
+            };
+            row.onclick = (e) => {
+                if(![toggle, cb, fav].includes(e.target)) {
+                    cb.checked = !cb.checked;
+                    handleCheckboxChange(cb, rootLi, item);
+                    propagateSelectionDown(rootLi, cb.checked);
+                }
+            };
+            toggle.onclick = (e) => {
+                e.stopPropagation();
+                const isC = rootLi.classList.contains('collapsed');
+                if(isC && !rootLi.dataset.loaded) loadChildren('root', childrenUl, rootLi, toggle);
+                setCollapsedState(rootLi, !isC);
+                toggle.textContent = rootLi.classList.contains('collapsed') ? '▸' : '▾';
+            };
+
+            // Carga inicial
+            loadChildren('root', childrenUl, rootLi, toggle);
+            setCollapsedState(rootLi, false);
+        }
+
+        function reloadTree() {
+            selectedItems = [];
+            selectedNodeIds = new Set();
+            updateSelectionInfo();
+            document.getElementById('breadcrumb-path').textContent = 'Meu Drive';
+            initTree();
+        }
+
+        // =========================================================
+        // DOM READY
+        // =========================================================
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadFavorites();
+            renderFavorites();
+            loadProfiles();
+
+            const tf = document.getElementById('toggle-files');
+            if(tf) {
+                tf.addEventListener('change', () => {
+                    includeFiles = tf.checked;
+                    reloadTree();
+                });
+            }
+
+            const om = document.getElementById('output_mode');
+            if(om) om.addEventListener('change', updateOutputModeUI);
+
+            // Fecha Modal com clique fora
+            const bd = document.getElementById('modal-backdrop');
+            if(bd) {
+                bd.addEventListener('click', (e) => {
+                    if(e.target === bd) closeModal();
+                });
+            }
+            document.addEventListener('keydown', (e) => {
+                if(e.key === 'Escape') closeModal();
+            });
+
+            initTree();
+        });
+
+    </script>
+</body>
+
+</html>
