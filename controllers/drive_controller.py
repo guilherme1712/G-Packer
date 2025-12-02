@@ -33,7 +33,7 @@ from services.progress_service import (
 drive_bp = Blueprint("drive", __name__)
 
 # Nome da pasta física onde salvaremos os arquivos ZIP
-BACKUP_FOLDER_NAME = 'storage_backups'
+BACKUP_FOLDER_NAME = 'storage/backups'
 
 # -----------------------------------------------------------
 # Função auxiliar de Thread (Executada em Segundo Plano)

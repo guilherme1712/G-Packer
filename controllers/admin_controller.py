@@ -9,7 +9,7 @@ from models import TaskModel, BackupProfile
 admin_bp = Blueprint("admin", __name__)
 
 # Configuração da pasta onde os zips são salvos
-BACKUP_FOLDER_NAME = 'storage_backups'
+BACKUP_FOLDER_NAME = 'storage/backups'
 
 @admin_bp.route("/admin/db")
 def view_db():
