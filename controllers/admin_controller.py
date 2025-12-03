@@ -1,6 +1,7 @@
 # controllers/admin_controller.py
 import os
 from datetime import datetime
+from sqlalchemy import text, inspect
 
 from flask import (
     Blueprint,
@@ -20,11 +21,58 @@ admin_bp = Blueprint("admin", __name__)
 BACKUP_FOLDER_NAME = "storage/backups"
 
 
+def _run_auto_migrations():
+    """
+    Verifica se o esquema do banco SQLite está atualizado com as novas colunas.
+    Se não estiver, aplica os comandos ALTER TABLE necessários.
+    Isso evita o erro 'no such column' sem precisar deletar o banco.
+    """
+    try:
+        inspector = inspect(db.engine)
+        existing_tables = inspector.get_table_names()
+
+        # --- Migração Tabela TASKS ---
+        if 'tasks' in existing_tables:
+            columns = [c['name'] for c in inspector.get_columns('tasks')]
+            
+            with db.engine.connect() as conn:
+                if 'paused' not in columns:
+                    print("AUTOF IX: Adicionando coluna 'paused' em 'tasks'...")
+                    conn.execute(text("ALTER TABLE tasks ADD COLUMN paused BOOLEAN DEFAULT 0"))
+                    conn.commit()
+                
+                if 'canceled' not in columns:
+                    print("AUTOFIX: Adicionando coluna 'canceled' em 'tasks'...")
+                    conn.execute(text("ALTER TABLE tasks ADD COLUMN canceled BOOLEAN DEFAULT 0"))
+                    conn.commit()
+
+        # --- Migração Tabela BACKUP_PROFILES ---
+        if 'backup_profiles' in existing_tables:
+            columns = [c['name'] for c in inspector.get_columns('backup_profiles')]
+            
+            with db.engine.connect() as conn:
+                if 'zip_name' not in columns:
+                    print("AUTOFIX: Adicionando coluna 'zip_name' em 'backup_profiles'...")
+                    conn.execute(text("ALTER TABLE backup_profiles ADD COLUMN zip_name VARCHAR(150)"))
+                    conn.commit()
+                
+                if 'execution_mode' not in columns:
+                    print("AUTOFIX: Adicionando coluna 'execution_mode' em 'backup_profiles'...")
+                    conn.execute(text("ALTER TABLE backup_profiles ADD COLUMN execution_mode VARCHAR(20) DEFAULT 'immediate'"))
+                    conn.commit()
+
+    except Exception as e:
+        print(f"Aviso: Erro ao tentar auto-migrar o banco: {e}")
+
+
 @admin_bp.route("/admin/db")
 def view_db():
     creds = get_credentials()
     if not creds:
         return "Acesso negado. Faça login primeiro.", 403
+
+    # Tenta corrigir o banco antes de consultar
+    _run_auto_migrations()
 
     tasks = TaskModel.query.order_by(TaskModel.updated_at.desc()).limit(50).all()
     profiles = BackupProfile.query.all()
@@ -38,6 +86,9 @@ def api_tasks():
     if not creds:
         return jsonify({"error": "Unauthorized"}), 403
 
+    # Tenta corrigir o banco antes de consultar
+    _run_auto_migrations()
+
     tasks = TaskModel.query.order_by(TaskModel.updated_at.desc()).all()
     return jsonify([t.to_dict() for t in tasks])
 
@@ -46,14 +97,10 @@ def _sync_backups_from_disk():
     """
     Garante que todo .zip / .tar.gz existente na pasta de backups
     tenha um registro correspondente na tabela backup_files.
-
-    Se encontrar arquivo físico sem registro, cria o registro
-    com tamanho e data de modificação do arquivo.
     """
     folder_path = os.path.join(current_app.root_path, BACKUP_FOLDER_NAME)
     os.makedirs(folder_path, exist_ok=True)
 
-    # Mapear existentes no banco por filename
     existing_by_name = {
         b.filename: b for b in BackupFileModel.query.all()
     }
@@ -70,14 +117,12 @@ def _sync_backups_from_disk():
             continue
 
         if fname in existing_by_name:
-            # Já está no banco, só garante path atualizado se precisar
             b = existing_by_name[fname]
             if not b.path or b.path != full_path:
                 b.path = full_path
                 changed = True
             continue
 
-        # Arquivo não tem registro ainda → cria
         try:
             stat = os.stat(full_path)
             size_mb = stat.st_size / (1024 * 1024)
@@ -94,7 +139,6 @@ def _sync_backups_from_disk():
             db.session.add(bf)
             changed = True
         except Exception as e:
-            # Não trava a página se der erro em algum arquivo
             print(f"Erro ao sincronizar arquivo de backup '{fname}' para o DB: {e}")
 
     if changed:
@@ -107,18 +151,12 @@ def _sync_backups_from_disk():
 
 @admin_bp.route("/admin/backups")
 def list_backups():
-    """
-    Lista backups a partir da tabela backup_files, garantindo antes que
-    todos os .zip/.tar(.gz) presentes em disco tenham registro no DB.
-    """
     creds = get_credentials()
     if not creds:
         return "Acesso negado.", 403
 
-    # 1) Sincroniza diretório físico -> banco
     _sync_backups_from_disk()
 
-    # 2) Carrega lista do banco já sincronizado
     backups = BackupFileModel.query.order_by(
         BackupFileModel.created_at.desc()
     ).all()
@@ -143,9 +181,6 @@ def list_backups():
 
 @admin_bp.route("/admin/backups/delete/<filename>")
 def delete_backup(filename):
-    """
-    Apaga o arquivo físico e o registro em backup_files.
-    """
     creds = get_credentials()
     if not creds:
         return "Acesso negado.", 403
@@ -153,10 +188,8 @@ def delete_backup(filename):
     safe_filename = os.path.basename(filename)
     folder_path = os.path.join(current_app.root_path, BACKUP_FOLDER_NAME)
 
-    # busca no banco
     backup = BackupFileModel.query.filter_by(filename=safe_filename).first()
 
-    # path base: dentro da pasta de backups
     file_path = os.path.join(folder_path, safe_filename)
     if backup and backup.path:
         file_path = backup.path
@@ -170,7 +203,6 @@ def delete_backup(filename):
     else:
         flash("Arquivo físico não encontrado.")
 
-    # remove do banco
     if backup:
         try:
             db.session.delete(backup)

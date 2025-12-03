@@ -42,11 +42,14 @@
             border-radius: 99px;
             font-size: 0.75rem;
             font-weight: 600;
+            display: inline-block;
+            margin-right: 4px;
         }
         .status-concluido { background: #059669; color: white; }
         .status-erro { background: #dc2626; color: white; }
         .status-cancelado { background: #d97706; color: white; }
-        .status-iniciando, .status-baixando { background: #2563eb; color: white; }
+        .status-paused { background: #f59e0b; color: black; border: 1px solid #d97706; }
+        .status-iniciando, .status-baixando, .status-mapeando, .status-compactando { background: #2563eb; color: white; }
 
         pre {
             background: rgba(0,0,0,0.5);
@@ -56,6 +59,7 @@
             overflow-y: auto;
             margin: 0;
             font-size: 0.75rem;
+            white-space: pre-wrap;
         }
     </style>
 </head>
@@ -76,10 +80,10 @@
                 <thead>
                     <tr>
                         <th>ID</th>
-                        <th>Fase</th>
+                        <th>Estado</th>
                         <th>Msg</th>
-                        <th>Arquivos (Total)</th>
-                        <th>Baixados</th>
+                        <th>Progresso</th>
+                        <th>Arquivos (F/T)</th>
                         <th>Erros</th>
                         <th>Data Atualização</th>
                         <th>Logs Detalhados</th>
@@ -88,22 +92,36 @@
                 <tbody>
                     {% for t in tasks %}
                     <tr>
-                        <td style="font-family:monospace;">{{ t.id }}</td>
+                        <td style="font-family:monospace; font-size:0.8em;">{{ t.id }}</td>
                         <td>
+                            {% if t.paused %}
+                                <span class="status-badge status-paused">PAUSADO</span>
+                            {% endif %}
+                            {% if t.canceled %}
+                                <span class="status-badge status-cancelado">CANCELADO</span>
+                            {% endif %}
                             <span class="status-badge status-{{ t.phase }}">
                                 {{ t.phase }}
                             </span>
                         </td>
                         <td>{{ t.message }}</td>
-                        <td>{{ t.files_total }}</td>
-                        <td>{{ t.files_downloaded }}</td>
-                        <td>{{ t.errors_count }}</td>
-                        <td>{{ t.updated_at.strftime('%d/%m/%Y %H:%M:%S') if t.updated_at else '-' }}</td>
-                        <td style="width:300px;">
+                        <td>
+                            {% if t.files_total > 0 %}
+                                {{ ((t.files_downloaded / t.files_total) * 100) | int }}%
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>{{ t.files_downloaded }} / {{ t.files_total }}</td>
+                        <td style="{{ 'color:#ef4444; font-weight:bold;' if t.errors_count > 0 else '' }}">
+                            {{ t.errors_count }}
+                        </td>
+                        <td>{{ t.updated_at.strftime('%d/%m %H:%M:%S') if t.updated_at else '-' }}</td>
+                        <td style="width:350px;">
                             {% if t.history %}
                                 <pre>{{ t.history | join('\n') }}</pre>
                             {% else %}
-                                -
+                                <span style="color:#666">-</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -125,8 +143,8 @@
                         <th>ID</th>
                         <th>Nome</th>
                         <th>Padrão ZIP</th>
-                        <th>Filtros (Extensões)</th>
-                        <th>Tamanho Máx (MB)</th>
+                        <th>Execução</th>
+                        <th>Filtros</th>
                         <th>Modo</th>
                     </tr>
                 </thead>
@@ -135,9 +153,11 @@
                     <tr>
                         <td>{{ p.id }}</td>
                         <td><strong>{{ p.name }}</strong></td>
-                        <td>{{ p.zip_pattern }}</td>
+                        <td>{{ p.zip_name or p.zip_pattern }}</td>
+                        <td>
+                            <span class="status-badge" style="background:#4b5563;">{{ p.execution_mode }}</span>
+                        </td>
                         <td>{{ p.groups }}</td>
-                        <td>{{ p.max_size_mb if p.max_size_mb else '∞' }}</td>
                         <td>{{ p.output_mode }}</td>
                     </tr>
                     {% endfor %}
