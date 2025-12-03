@@ -1,4 +1,3 @@
-# services/profile_service.py
 from typing import Tuple, Optional
 
 from models import db, BackupProfile
@@ -35,6 +34,10 @@ def create_profile(data: dict) -> Tuple[Optional[dict], Optional[str]]:
     if not isinstance(items, list) or not items:
         return None, "Nenhum item selecionado para o modelo."
 
+    # Nome base do arquivo exibido no modal
+    zip_name = (data.get("zip_name") or "").strip() or None
+
+    # Padrão (pode ser igual ao nome ou conter {YYYYMMDD} etc.)
     zip_pattern = (data.get("zip_pattern") or "").strip() or "backup-{YYYYMMDD}"
 
     groups = data.get("groups") or []
@@ -51,10 +54,13 @@ def create_profile(data: dict) -> Tuple[Optional[dict], Optional[str]]:
     output_mode = (data.get("output_mode") or "archive").strip()
     local_mirror_path = (data.get("local_mirror_path") or "").strip() or None
 
+    execution_mode = (data.get("execution_mode") or "immediate").strip()
+
     try:
         profile = BackupProfile(
             name=name,
             zip_pattern=zip_pattern,
+            zip_name=zip_name,
             items=items,
             groups=groups,
             created_after=created_after,
@@ -64,6 +70,7 @@ def create_profile(data: dict) -> Tuple[Optional[dict], Optional[str]]:
             compression_level=compression_level,
             output_mode=output_mode,
             local_mirror_path=local_mirror_path,
+            execution_mode=execution_mode,
         )
         db.session.add(profile)
         db.session.commit()
