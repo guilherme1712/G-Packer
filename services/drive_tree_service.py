@@ -1,23 +1,45 @@
 # services/drive_tree_service.py
 import os
+import time
 import threading
 import concurrent.futures
 from googleapiclient.discovery import build
 
 from .drive_filters import safe_name, file_passes_filters, extract_size_bytes
-from .progress_service import sync_task_to_db
+from .progress_service import sync_task_to_db, update_progress
 
 
 _lock = threading.Lock()
 
 
+def check_status_pause_cancel(progress_dict, task_id):
+    """
+    Verifica se a tarefa foi cancelada ou pausada.
+    Se PAUSADA: entra em loop de sleep até ser resumida.
+    Se CANCELADA: lança exceção.
+    """
+    if not progress_dict or not task_id:
+        return
+
+    # Loop de pausa
+    while True:
+        # Acessamos o dict diretamente
+        info = progress_dict.get(task_id, {})
+        
+        if info.get("canceled"):
+            raise Exception("Cancelado pelo usuário")
+        
+        if info.get("paused"):
+            time.sleep(1) # Dorme 1s e verifica de novo
+            continue
+        
+        # Se não está pausado nem cancelado, sai do loop e continua o trabalho
+        break
+
+
 def list_children(service, parent_id: str, include_files: bool):
-    """
-    Lista filhos diretos de um item (usado apenas na UI da árvore, síncrono).
-    """
     items = []
     page_token = None
-
     while True:
         try:
             results = service.files().list(
@@ -56,19 +78,9 @@ def get_file_metadata(creds, file_id: str) -> dict:
     service = build("drive", "v3", credentials=creds)
     meta = service.files().get(
         fileId=file_id,
-        fields=(
-            "id,name,mimeType,size,createdTime,modifiedTime,"
-            "webViewLink,iconLink,thumbnailLink"
-        ),
+        fields="id,name,mimeType,size,createdTime,modifiedTime,webViewLink,iconLink,thumbnailLink",
     ).execute()
     return meta
-
-
-def check_cancellation(progress_dict, task_id):
-    if progress_dict and task_id:
-        info = progress_dict.get(task_id, {})
-        if info.get("canceled"):
-            raise Exception("Cancelado pelo usuário")
 
 
 def _worker_process_folder(
@@ -79,46 +91,29 @@ def _worker_process_folder(
     progress_dict,
     task_id,
 ):
-    """
-    Worker que processa UMA pasta.
-    IMPORTANTE: não chamar nada de Flask/DB aqui.
-    Apenas atualiza o dicionário em memória (PROGRESS).
-    """
     service = build("drive", "v3", credentials=creds, cache_discovery=False)
-
     local_files = []
     subfolders_to_scan = []
-
     page_token = None
 
     while True:
-        check_cancellation(progress_dict, task_id)
+        # Ponto de checagem: Pausa/Cancelamento
+        check_status_pause_cancel(progress_dict, task_id)
 
         try:
             results = service.files().list(
                 q=f"'{folder_id}' in parents and trashed = false",
-                fields=(
-                    "nextPageToken, files("
-                    "id, name, mimeType, createdTime, modifiedTime, size)"
-                ),
+                fields="nextPageToken, files(id, name, mimeType, createdTime, modifiedTime, size)",
                 pageToken=page_token,
                 pageSize=1000,
                 spaces="drive",
             ).execute()
         except Exception as e:
-            # Só loga em memória; o flush para o DB
-            # será feito pela thread "pai".
-            with _lock:
-                if progress_dict and task_id:
-                    info = progress_dict.get(task_id, {})
-                    hist = info.get("history", [])
-                    hist.append(f"ERRO ao ler pasta {base_path}: {e}")
-                    info["history"] = hist[-100:]
-                    progress_dict[task_id] = info
+            update_progress(task_id, {"history": [f"ERRO ao ler pasta {base_path}: {e}"]})
             return [], []
 
         for f in results.get("files", []):
-            check_cancellation(progress_dict, task_id)
+            check_status_pause_cancel(progress_dict, task_id)
 
             file_id = f["id"]
             name = f["name"]
@@ -130,19 +125,17 @@ def _worker_process_folder(
             else:
                 if not file_passes_filters(f, filters):
                     continue
-
+                
                 rel_path = os.path.join(base_path, safe_name(name))
                 size_bytes = extract_size_bytes(f)
-
-                local_files.append(
-                    {
-                        "id": file_id,
-                        "name": name,
-                        "mimeType": mime,
-                        "rel_path": rel_path,
-                        "size_bytes": size_bytes,
-                    }
-                )
+                
+                local_files.append({
+                    "id": file_id,
+                    "name": name,
+                    "mimeType": mime,
+                    "rel_path": rel_path,
+                    "size_bytes": size_bytes,
+                })
 
         page_token = results.get("nextPageToken")
         if not page_token:
@@ -159,43 +152,33 @@ def build_files_list_for_items(
     progress_dict=None,
     task_id: str | None = None,
 ):
-    """
-    Mapeia arquivos usando ThreadPoolExecutor para paralelismo.
-
-    ATENÇÃO:
-    - Esta função é chamada pela thread de background que já está
-      dentro de app_context (no drive_controller).
-    - As threads internas (_worker_process_folder) NÃO mexem com DB.
-    - O flush para o DB é feito AQUI, na thread de background,
-      chamando sync_task_to_db() de tempos em tempos.
-    """
     if not creds:
         if hasattr(service_main, "credentials"):
             creds = service_main.credentials
-
     if not creds:
-        raise ValueError("Credenciais não fornecidas para a thread de mapeamento.")
+        raise ValueError("Credenciais não fornecidas.")
 
     all_files_list: list[dict] = []
-    changes_since_sync = 0  # controle de flush para o DB
+    changes_since_sync = 0
 
+    # Inicializa status
     if progress_dict is not None and task_id is not None:
-        progress_dict[task_id].update(
-            {
-                "phase": "mapeando",
-                "files_found": 0,
-                "files_total": 0,
-                "bytes_found": 0,
-                "message": "Iniciando mapeamento paralelo...",
-                "history": ["Iniciando mapeamento (Multi-thread)..."],
-            }
-        )
+        update_progress(task_id, {
+            "phase": "mapeando",
+            "files_found": 0,
+            "files_total": 0,
+            "bytes_found": 0,
+            "message": "Iniciando mapeamento paralelo...",
+            "history": ["Iniciando mapeamento (Multi-thread)..."]
+        })
         sync_task_to_db(task_id)
 
     initial_folders = []
 
-    # --- Itens de topo (arquivos soltos + pastas raiz) ---
+    # 1. Processa itens raiz (seleção inicial)
     for it in items:
+        check_status_pause_cancel(progress_dict, task_id)
+        
         it_id = it.get("id")
         it_name = it.get("name") or "item"
         it_type = it.get("type", "file")
@@ -230,23 +213,22 @@ def build_files_list_for_items(
                             info = progress_dict[task_id]
                             info["files_found"] = info.get("files_found", 0) + 1
                             info["bytes_found"] = info.get("bytes_found", 0) + size_bytes
+                            # Adiciona histórico sem truncar
                             hist = info.get("history", [])
                             hist.append(f"Mapeado: {rel_path}")
-                            info["history"] = hist[-100:]
+                            info["history"] = hist 
                             progress_dict[task_id] = info
                             changes_since_sync += 1
 
-                    # flush a cada ~25 arquivos mapeados
                     if progress_dict and task_id and changes_since_sync >= 25:
                         sync_task_to_db(task_id)
                         changes_since_sync = 0
 
             except Exception as e:
-                print(f"Erro ao pegar arquivo raiz {it_name}: {e}")
+                print(f"Erro item raiz {it_name}: {e}")
 
+    # 2. Processa Subpastas (ThreadPool)
     MAX_WORKERS = 8
-
-    # --- ThreadPool para mapear subpastas ---
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         future_to_folder = {}
 
@@ -257,7 +239,8 @@ def build_files_list_for_items(
             future_to_folder[f] = fpath
 
         while future_to_folder:
-            check_cancellation(progress_dict, task_id)
+            # Checagem de status na thread principal do loop
+            check_status_pause_cancel(progress_dict, task_id)
 
             done, _ = concurrent.futures.wait(
                 future_to_folder.keys(),
@@ -266,7 +249,6 @@ def build_files_list_for_items(
 
             for future in done:
                 fpath_orig = future_to_folder.pop(future)
-
                 try:
                     found_files, found_subfolders = future.result()
 
@@ -275,19 +257,14 @@ def build_files_list_for_items(
                             all_files_list.extend(found_files)
                             if progress_dict and task_id:
                                 info = progress_dict[task_id]
-                                info["files_found"] = (
-                                    info.get("files_found", 0) + len(found_files)
-                                )
-                                total_bytes = sum(
-                                    x["size_bytes"] for x in found_files
-                                )
-                                info["bytes_found"] = (
-                                    info.get("bytes_found", 0) + total_bytes
-                                )
+                                info["files_found"] = info.get("files_found", 0) + len(found_files)
+                                total_bytes = sum(x["size_bytes"] for x in found_files)
+                                info["bytes_found"] = info.get("bytes_found", 0) + total_bytes
+                                
                                 hist = info.get("history", [])
                                 for ff in found_files:
                                     hist.append(f"Mapeado: {ff['rel_path']}")
-                                info["history"] = hist[-100:]
+                                info["history"] = hist
                                 progress_dict[task_id] = info
                                 changes_since_sync += 1
 
@@ -297,13 +274,7 @@ def build_files_list_for_items(
 
                     for sub_id, sub_path in found_subfolders:
                         new_future = executor.submit(
-                            _worker_process_folder,
-                            creds,
-                            sub_id,
-                            sub_path,
-                            filters,
-                            progress_dict,
-                            task_id,
+                            _worker_process_folder, creds, sub_id, sub_path, filters, progress_dict, task_id
                         )
                         future_to_folder[new_future] = sub_path
 
@@ -313,41 +284,24 @@ def build_files_list_for_items(
                         for pending in future_to_folder:
                             pending.cancel()
                         raise exc
-
-                    print(f"Erro na thread de pasta {fpath_orig}: {exc}")
-                    with _lock:
-                        if progress_dict and task_id:
-                            info = progress_dict[task_id]
-                            hist = info.get("history", [])
-                            hist.append(
-                                f"ERRO ao processar pasta {fpath_orig}: {exc}"
-                            )
-                            info["history"] = hist[-100:]
-                            progress_dict[task_id] = info
-                            changes_since_sync += 1
+                    
+                    update_progress(task_id, {"history": [f"ERRO processar pasta {fpath_orig}: {exc}"]})
+                    changes_since_sync += 1
 
                     if progress_dict and task_id and changes_since_sync >= 10:
                         sync_task_to_db(task_id)
                         changes_since_sync = 0
 
-    # --- Finalização do mapeamento ---
+    # Finalização
     if progress_dict is not None and task_id is not None:
         total_bytes = sum(f.get("size_bytes", 0) for f in all_files_list)
-        with _lock:
-            info = progress_dict.get(task_id, {})
-            info["files_total"] = len(all_files_list)
-            info["bytes_found"] = total_bytes
-            mb = total_bytes / (1024 * 1024) if total_bytes else 0
-            info["message"] = (
-                f"Mapeamento concluído (Paralelo). "
-                f"Total: {len(all_files_list)} arquivos (~{mb:.1f} MB)."
-            )
-            hist = info.get("history", [])
-            hist.append("Mapeamento finalizado.")
-            info["history"] = hist[-100:]
-            progress_dict[task_id] = info
-
-        # flush final para o DB
+        mb = total_bytes / (1024 * 1024) if total_bytes else 0
+        update_progress(task_id, {
+            "files_total": len(all_files_list),
+            "bytes_found": total_bytes,
+            "message": f"Mapeamento concluído. {len(all_files_list)} arquivos (~{mb:.1f} MB).",
+            "history": ["Mapeamento finalizado."]
+        })
         sync_task_to_db(task_id)
 
     return all_files_list

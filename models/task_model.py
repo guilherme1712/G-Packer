@@ -8,6 +8,10 @@ class TaskModel(db.Model):
     phase = db.Column(db.String(50))
     message = db.Column(db.String(255))
 
+    # Estados de Controle
+    canceled = db.Column(db.Boolean, default=False)
+    paused = db.Column(db.Boolean, default=False)  # NOVO: Controle de pausa
+
     # Contadores
     files_found = db.Column(db.Integer, default=0)
     files_total = db.Column(db.Integer, default=0)
@@ -15,10 +19,9 @@ class TaskModel(db.Model):
     bytes_found = db.Column(db.BigInteger, default=0)
     errors_count = db.Column(db.Integer, default=0)
 
-    # Histórico de logs (Salvo como JSON)
+    # Histórico de logs (Salvo como JSON - TODOS os logs)
     history = db.Column(db.JSON, default=list)
 
-    canceled = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -34,5 +37,6 @@ class TaskModel(db.Model):
             "errors": self.errors_count,
             "history": self.history or [],
             "canceled": self.canceled,
+            "paused": self.paused,
             "created_at": self.created_at.isoformat() if self.created_at else None
         }

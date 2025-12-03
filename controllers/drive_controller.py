@@ -27,8 +27,11 @@ from services.progress_service import (
     init_download_task,
     get_task_progress,
     sync_task_to_db,
+    get_all_active_tasks,
+    set_task_pause,
+    set_task_cancel
 )
-from models import db, BackupFileModel  # <- novo import
+from models import db, BackupFileModel
 
 drive_bp = Blueprint("drive", __name__)
 
@@ -65,9 +68,6 @@ def _background_backup_task(
                     task_id=task_id,
                     filters=filters,
                 )
-                PROGRESS[task_id]["message"] = "Espelhamento concluído."
-                sync_task_to_db(task_id)
-
             else:
                 # Gera o ZIP/TAR em pasta temporária
                 temp_zip_path = download_items_bundle(
@@ -123,13 +123,14 @@ def _background_backup_task(
                 sync_task_to_db(task_id)
 
         except Exception as e:
+            # Tratamento de erro geral
             print(f"Erro na thread de backup {task_id}: {e}")
             PROGRESS.setdefault(task_id, {})
-            PROGRESS[task_id]["phase"] = "erro"
+            PROGRESS[task_id]["phase"] = "erro" if "Cancelado" not in str(e) else "cancelado"
             PROGRESS[task_id]["message"] = str(e)
             hist = PROGRESS[task_id].get("history", [])
-            hist.append(f"ERRO: {str(e)}")
-            PROGRESS[task_id]["history"] = hist[-50:]
+            hist.append(f"Fim: {str(e)}")
+            PROGRESS[task_id]["history"] = hist
             sync_task_to_db(task_id)
 
 
@@ -145,9 +146,7 @@ def folders():
 @drive_bp.route("/api/folders/root")
 def api_folders_root():
     creds = get_credentials()
-    if not creds:
-        return jsonify({"error": "unauthorized"}), 401
-
+    if not creds: return jsonify({"error": "unauthorized"}), 401
     include_files = request.args.get("files") == "1"
     items = get_children(creds, "root", include_files=include_files)
     return jsonify({"items": items})
@@ -156,9 +155,7 @@ def api_folders_root():
 @drive_bp.route("/api/folders/children/<folder_id>")
 def api_folders_children(folder_id):
     creds = get_credentials()
-    if not creds:
-        return jsonify({"error": "unauthorized"}), 401
-
+    if not creds: return jsonify({"error": "unauthorized"}), 401
     include_files = request.args.get("files") == "1"
     items = get_children(creds, folder_id, include_files=include_files)
     return jsonify({"items": items})
@@ -167,9 +164,7 @@ def api_folders_children(folder_id):
 @drive_bp.route("/api/file/<file_id>")
 def api_file_details(file_id):
     creds = get_credentials()
-    if not creds:
-        return jsonify({"error": "unauthorized"}), 401
-
+    if not creds: return jsonify({"error": "unauthorized"}), 401
     meta = get_file_metadata(creds, file_id)
     return jsonify(meta)
 
@@ -181,13 +176,10 @@ def download():
         return jsonify({"ok": False, "error": "Sessão expirada"}), 401
 
     data = request.get_json() or {}
-
     items_raw = data.get("items_json")
     if isinstance(items_raw, str):
-        try:
-            items = json.loads(items_raw)
-        except Exception:
-            items = []
+        try: items = json.loads(items_raw)
+        except: items = []
     else:
         items = items_raw or []
 
@@ -195,8 +187,7 @@ def download():
         return jsonify({"ok": False, "error": "Nenhum item selecionado"}), 400
 
     zip_name = (data.get("zip_name") or "backup").strip()
-    if zip_name.lower().endswith(".zip"):
-        zip_name = zip_name[:-4]
+    if zip_name.lower().endswith(".zip"): zip_name = zip_name[:-4]
 
     archive_format = data.get("archive_format") or "zip"
     compression_level = data.get("compression_level") or "normal"
@@ -205,7 +196,6 @@ def download():
     execution_mode = data.get("execution_mode") or "immediate"
 
     task_id = data.get("task_id") or f"task-{int(time.time())}"
-
     filters = build_filters_from_form(data)
 
     storage_path = os.path.join(current_app.root_path, BACKUP_FOLDER_NAME)
@@ -219,45 +209,29 @@ def download():
     sync_task_to_db(task_id)
 
     app_ctx = current_app.app_context()
-
     t = Thread(
         target=_background_backup_task,
-        args=(
-            app_ctx,
-            task_id,
-            creds,
-            items,
-            output_mode,
-            local_mirror_path,
-            storage_path,
-            zip_name,
-            compression_level,
-            archive_format,
-            filters,
-        ),
+        args=(app_ctx, task_id, creds, items, output_mode, local_mirror_path, 
+              storage_path, zip_name, compression_level, archive_format, filters),
     )
     t.start()
 
-    return jsonify(
-        {
-            "ok": True,
-            "task_id": task_id,
-            "message": "Processo iniciado",
-            "mode": execution_mode,
-        }
-    )
+    return jsonify({
+        "ok": True, 
+        "task_id": task_id, 
+        "message": "Processo iniciado", 
+        "mode": execution_mode
+    })
 
 
 @drive_bp.route("/progress/<task_id>")
 def progress(task_id):
     data = get_task_progress(task_id)
-
     if data.get("phase") == "concluido":
         filename = PROGRESS.get(task_id, {}).get("final_filename")
         if filename:
             data["download_url"] = url_for("drive.get_file", filename=filename)
             data["filename"] = filename
-
     return jsonify(data)
 
 
@@ -267,22 +241,27 @@ def get_file(filename):
     if not creds:
         flash("Sessão expirada.")
         return redirect(url_for("auth.index"))
-
     storage_path = os.path.join(current_app.root_path, BACKUP_FOLDER_NAME)
-    full_p = os.path.join(storage_path, filename)
-    if not os.path.exists(full_p):
-        print(f"ERRO 404: Arquivo não encontrado no disco: {full_p}")
-
     return send_from_directory(storage_path, filename, as_attachment=True)
 
 
 @drive_bp.route("/cancel/<task_id>", methods=["POST"])
 def cancel_task(task_id):
-    if task_id in PROGRESS:
-        PROGRESS[task_id]["canceled"] = True
-        history = PROGRESS[task_id].get("history", [])
-        history.append("Solicitando cancelamento...")
-        PROGRESS[task_id]["history"] = history[-50:]
-        sync_task_to_db(task_id)
-        return jsonify({"ok": True})
-    return jsonify({"ok": False, "error": "Task not found"}), 404
+    set_task_cancel(task_id)
+    return jsonify({"ok": True})
+
+# --- NOVAS ROTAS PARA CONTROLE DE PAUSA ---
+
+@drive_bp.route("/api/tasks/active")
+def api_active_tasks():
+    return jsonify({"tasks": get_all_active_tasks()})
+
+@drive_bp.route("/api/tasks/pause/<task_id>", methods=["POST"])
+def api_pause_task(task_id):
+    set_task_pause(task_id, True)
+    return jsonify({"ok": True})
+
+@drive_bp.route("/api/tasks/resume/<task_id>", methods=["POST"])
+def api_resume_task(task_id):
+    set_task_pause(task_id, False)
+    return jsonify({"ok": True})

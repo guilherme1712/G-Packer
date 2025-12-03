@@ -1,19 +1,18 @@
 import threading
 import copy
+import time
 from models import db, TaskModel
 
 # Cache em memória
 PROGRESS: dict[str, dict] = {}
 
-# LOCK: O segredo para resolver conflitos de threads.
-# Qualquer leitura ou escrita no PROGRESS deve ser feita dentro deste lock.
+# LOCK para acesso seguro às threads
 _progress_lock = threading.Lock()
 
 
 def init_download_task(task_id: str) -> dict:
     """
     Inicializa a task na memória e cria o registro no Banco de Dados.
-    Thread-safe.
     """
     initial_state = {
         "phase": "iniciando",
@@ -26,14 +25,13 @@ def init_download_task(task_id: str) -> dict:
         "message": "Iniciando processo...",
         "history": ["Tarefa criada."],
         "canceled": False,
+        "paused": False,
     }
 
-    # Bloqueia o acesso enquanto escrevemos no dicionário
     with _progress_lock:
         PROGRESS[task_id] = initial_state
         state_copy = copy.deepcopy(PROGRESS[task_id])
 
-    # Persistência no DB
     try:
         new_task = TaskModel(
             id=task_id,
@@ -52,20 +50,28 @@ def init_download_task(task_id: str) -> dict:
 
 def update_progress(task_id: str, updates: dict):
     """
-    Atualiza o progresso em memória de forma segura.
+    Atualiza o progresso em memória.
+    NOTA: Não removemos mais logs antigos (history) conforme solicitado.
     """
     with _progress_lock:
         if task_id in PROGRESS:
-            PROGRESS[task_id].update(updates)
+            # Se houver histórico na atualização, fazemos o append
             if "history" in updates:
+                new_logs = updates.pop("history")
                 current_hist = PROGRESS[task_id].get("history", [])
-                if len(current_hist) > 100:
-                    PROGRESS[task_id]["history"] = current_hist[-100:]
+                # Concatena sem cortar
+                if isinstance(new_logs, list):
+                    current_hist.extend(new_logs)
+                else:
+                    current_hist.append(new_logs)
+                PROGRESS[task_id]["history"] = current_hist
+
+            PROGRESS[task_id].update(updates)
 
 
 def sync_task_to_db(task_id: str):
     """
-    Copia o estado atual da memória para o Banco de Dados.
+    Persiste o estado da memória para o Banco de Dados.
     """
     with _progress_lock:
         if task_id not in PROGRESS:
@@ -83,18 +89,17 @@ def sync_task_to_db(task_id: str):
             task.bytes_found = data.get("bytes_found", 0)
             task.errors_count = data.get("errors", 0)
             task.canceled = data.get("canceled", False)
+            task.paused = data.get("paused", False)
             task.history = list(data.get("history", []))
             db.session.commit()
     except Exception as e:
-        print(f"Erro ao sincronizar task {task_id} pro DB: {e}")
+        print(f"Erro ao sincronizar task {task_id}: {e}")
         db.session.rollback()
 
 
 def get_task_progress(task_id: str) -> dict:
     """
-    Retorna o progresso de forma segura:
-    - primeiro da memória
-    - se não achar, tenta do DB
+    Lê o progresso (Memória -> DB).
     """
     with _progress_lock:
         if task_id in PROGRESS:
@@ -103,18 +108,7 @@ def get_task_progress(task_id: str) -> dict:
     try:
         task = TaskModel.query.get(task_id)
         if task:
-            return {
-                "phase": task.phase,
-                "message": task.message,
-                "files_found": task.files_found,
-                "files_total": task.files_total,
-                "files_downloaded": task.files_downloaded,
-                "bytes_found": task.bytes_found,
-                "errors": task.errors_count,
-                "history": task.history,
-                "canceled": task.canceled,
-                "from_db": True,
-            }
+            return task.to_dict()
     except Exception:
         pass
 
@@ -123,3 +117,54 @@ def get_task_progress(task_id: str) -> dict:
         "message": "Tarefa não encontrada.",
         "history": [],
     }
+
+
+def get_all_active_tasks():
+    """
+    Retorna lista de tarefas que estão em memória (ativas recentemente).
+    Usado para o widget flutuante.
+    """
+    with _progress_lock:
+        # Filtra apenas o básico para a lista
+        active = []
+        for tid, data in PROGRESS.items():
+            if data.get("phase") not in ["concluido", "erro", "cancelado"]:
+                active.append({
+                    "id": tid,
+                    "phase": data.get("phase"),
+                    "message": data.get("message"),
+                    "paused": data.get("paused", False),
+                    "canceled": data.get("canceled", False),
+                    "percent": _calculate_percent(data)
+                })
+        return active
+
+def _calculate_percent(data):
+    phase = data.get("phase")
+    if phase == 'mapeando': return 10
+    if phase == 'compactando': return 90
+    if phase == 'baixando':
+        total = data.get("files_total", 0)
+        done = data.get("files_downloaded", 0)
+        if total > 0:
+            return 20 + int((done/total) * 70)
+        return 20
+    return 0
+
+# --- Controles de Estado ---
+
+def set_task_pause(task_id: str, paused: bool):
+    with _progress_lock:
+        if task_id in PROGRESS:
+            PROGRESS[task_id]["paused"] = paused
+            msg = "PAUSADO pelo usuário" if paused else "RESUMIDO pelo usuário"
+            PROGRESS[task_id]["history"].append(msg)
+            PROGRESS[task_id]["message"] = msg
+    sync_task_to_db(task_id)
+
+def set_task_cancel(task_id: str):
+    with _progress_lock:
+        if task_id in PROGRESS:
+            PROGRESS[task_id]["canceled"] = True
+            PROGRESS[task_id]["history"].append("Solicitando cancelamento...")
+    sync_task_to_db(task_id)

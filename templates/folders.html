@@ -71,6 +71,140 @@
             color: #0b7a0b;
             margin-top: 4px;
         }
+
+        /* Dropdown de sugestão */
+        .suggestion-wrapper {
+            position: relative;
+        }
+
+        .suggestion-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            display: none;
+            z-index: 100;
+            min-width: 200px;
+        }
+
+        .suggestion-menu.show {
+            display: block;
+        }
+
+        .suggestion-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            font-size: 13px;
+        }
+
+        .suggestion-item:hover {
+            background: #f0f0f0;
+        }
+
+        /* Estilos específicos para o Task Manager Dropdown (adaptado do log-panel) */
+        .task-dropdown-panel {
+            position: absolute;
+            top: 45px;
+            right: 0;
+            width: 350px;
+            background: white;
+            border: 1px solid #ccc;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            border-radius: 8px;
+            z-index: 1000;
+            display: none; /* Controlado via JS */
+        }
+        .task-dropdown-panel.show {
+            display: block;
+        }
+        
+        .task-manager-body {
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 0;
+        }
+
+        .task-item {
+            border-bottom: 1px solid #eee;
+            padding: 10px 15px;
+        }
+
+        .task-item:last-child {
+            border-bottom: none;
+        }
+        
+        .task-empty-state {
+            padding: 20px;
+            text-align: center;
+            color: #999;
+            font-size: 13px;
+        }
+
+        .task-info {
+            font-size: 13px;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #444;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .task-meta {
+            font-size: 11px;
+            color: #777;
+            margin-bottom: 8px;
+        }
+
+        .task-progress-bg {
+            height: 6px;
+            background: #eee;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .task-progress-fill {
+            height: 100%;
+            background: #4caf50;
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .task-progress-fill.paused {
+            background: #ff9800;
+        }
+
+        .task-controls {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .btn-mini {
+            padding: 4px 10px;
+            font-size: 11px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            color: white;
+            font-weight: 600;
+        }
+
+        .btn-mini.pause {
+            background: #ff9800;
+        }
+
+        .btn-mini.resume {
+            background: #2196f3;
+        }
+
+        .btn-mini.cancel {
+            background: #f44336;
+        }
     </style>
 </head>
 
@@ -81,7 +215,7 @@
                 <div>
                     <h1>📁 Escolha pastas e arquivos para baixar</h1>
                     <p class="subtitle">
-                        Selecione itens na árvore. Baixe agora ou gere em segundo plano para download posterior.
+                        Selecione itens na árvore. Baixe agora ou gere em segundo plano.
                     </p>
                 </div>
 
@@ -105,9 +239,31 @@
                         Baixar itens selecionados
                     </button>
 
+                    <!-- BOTÃO DE TAREFAS (TASK MANAGER) - NOVO -->
+                    <div class="notification-wrapper" style="margin-left: 8px;">
+                        <button class="notification-btn" onclick="toggleTaskPanel()" title="Gerenciador de Tarefas">
+                            <!-- Ícone de Lista/Tarefas -->
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path>
+                            </svg>
+                            <div id="task-badge" class="notification-badge hidden">0</div>
+                        </button>
+
+                        <div id="task-manager-panel" class="task-dropdown-panel">
+                            <div class="log-header" style="background: #f8f9fa; border-bottom: 1px solid #eee; padding: 10px 15px; border-radius: 8px 8px 0 0; display:flex; justify-content:space-between; align-items:center;">
+                                <span style="font-weight:600; font-size:14px; color:#333;">Tarefas de Segundo Plano</span>
+                                <button onclick="toggleTaskPanel()" class="btn-ghost btn-xs" style="padding: 2px 6px;">✕</button>
+                            </div>
+                            <div id="task-manager-list" class="task-manager-body">
+                                <div class="task-empty-state">Nenhuma tarefa ativa no momento.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- BOTÃO DE LOGS (Já existente) -->
                     <div class="notification-wrapper">
-                        <button class="notification-btn" id="notification-btn" onclick="toggleLogPanel()">
-                            <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"
+                        <button class="notification-btn" id="notification-btn" onclick="toggleLogPanel()" title="Logs de Atividade">
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"
                                 stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                                 <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
@@ -214,6 +370,7 @@
         </main>
     </div>
 
+    <!-- PROGRESSO FLUTUANTE (FOREGROUND) - APENAS PARA DOWNLOAD IMEDIATO -->
     <div id="progress-container" class="progress-container progress-floating hidden">
         <div class="progress-header">
             <span id="progress-phase">Processando...</span>
@@ -224,13 +381,14 @@
         </div>
         <p id="progress-text" class="progress-text"></p>
 
-        <div class="progress-controls">
-            <button type="button" class="btn-danger btn-xs" onclick="cancelTask()">
-                Cancelar
-            </button>
+        <div class="progress-controls" style="display:flex; gap:5px; justify-content:center; margin-top:8px;">
+            <button id="btn-pause-fg" type="button" class="btn-ghost btn-xs" onclick="togglePauseForeground()">⏸
+                Pausar</button>
+            <button type="button" class="btn-danger btn-xs" onclick="cancelTask()">⏹ Cancelar</button>
         </div>
     </div>
 
+    <!-- MODAL DE DOWNLOAD -->
     <div id="modal-backdrop" class="modal-backdrop hidden">
         <div class="modal">
             <h2 id="modal-title">Baixar</h2>
@@ -246,12 +404,20 @@
 
                         <div class="form-group">
                             <label for="zip_name">Nome do Arquivo</label>
-                            <div style="display:flex; gap:8px;">
+                            <div style="display:flex; gap:8px;" class="suggestion-wrapper">
                                 <input type="text" id="zip_name" name="zip_name" placeholder="Ex: backup_drive"
                                     style="flex:1;">
-                                <button type="button" class="btn-ghost btn-xs" onclick="suggestZipName()">
-                                    Sugestão
+                                <button type="button" class="btn-ghost btn-xs" onclick="toggleSuggestionMenu()">
+                                    Sugestão ▼
                                 </button>
+                                <div id="suggestion-menu" class="suggestion-menu">
+                                    <div class="suggestion-item" onclick="applySuggestion('date')">Nome + Data (Padrão)
+                                    </div>
+                                    <div class="suggestion-item" onclick="applySuggestion('clean')">Apenas Nome da Pasta
+                                    </div>
+                                    <div class="suggestion-item" onclick="applySuggestion('random')">Aleatório / Hash
+                                    </div>
+                                </div>
                             </div>
                             <small>A extensão será adicionada automaticamente.</small>
                         </div>
@@ -355,8 +521,7 @@
 
                         <div class="form-group">
                             <label for="zip_pattern">Padrão do nome do arquivo (opcional)</label>
-                            <input type="text" id="zip_pattern" name="zip_pattern"
-                                placeholder="Ex: backup-{YYYYMMDD}">
+                            <input type="text" id="zip_pattern" name="zip_pattern" placeholder="Ex: backup-{YYYYMMDD}">
                             <div class="form-hint">
                                 Você pode usar {YYYYMMDD}, {YYYY}, {YY}, {MM}, {DD} para datas.
                             </div>
@@ -387,12 +552,14 @@
         // =========================================================
         let currentTaskId = null;
         let progressTimer = null;
+        let activeTasksTimer = null;
         let includeFiles = false;
         let selectedItems = [];   // Array de objetos {id, name, type}
         let selectedNodeIds = new Set(); // Set de strings "type:id" para lookup rápido
         let favorites = [];
         let backupProfiles = [];
         let lastLogCount = 0;
+        let isPausedForeground = false;
 
         // =========================================================
         // UTILITÁRIOS
@@ -430,14 +597,26 @@
         }
 
         // =========================================================
+        // PAINEL DE TAREFAS (NOVO DROPDOWN)
+        // =========================================================
+        function toggleTaskPanel() {
+            const panel = document.getElementById('task-manager-panel');
+            panel.classList.toggle('show');
+            // Fechar logs se estiver aberto, para não sobrepor
+            document.getElementById('log-panel').classList.add('hidden');
+        }
+
+        // =========================================================
         // PAINEL DE LOGS
         // =========================================================
-
         function toggleLogPanel() {
             const panel = document.getElementById('log-panel');
             if (panel.classList.contains('hidden')) {
                 panel.classList.remove('hidden');
-                // Reseta badge
+                // Fechar tasks se estiver aberto
+                document.getElementById('task-manager-panel').classList.remove('show');
+
+                // Reseta badge de log
                 const badge = document.getElementById('notification-badge');
                 badge.classList.add('hidden');
                 badge.innerText = '0';
@@ -466,15 +645,17 @@
                 return;
             }
 
-            let html = '';
-            const recent = history.slice().reverse();
+            // Exibe os 50 mais recentes na interface
+            const recent = history.slice().reverse().slice(0, 50);
 
+            let html = '';
             recent.forEach(msg => {
                 let icon = '•';
                 if (msg.includes('Mapeado')) icon = '🔍';
                 else if (msg.includes('Baixado')) icon = '⬇️';
                 else if (msg.includes('Compactando')) icon = '📦';
                 else if (msg.includes('ERRO')) icon = '❌';
+                else if (msg.includes('PAUSADO')) icon = '⏸';
                 else if (msg.includes('CANCELADO')) icon = '⛔';
                 else if (msg.includes('concluído')) icon = '✅';
 
@@ -486,6 +667,29 @@
                 `;
             });
             listEl.innerHTML = html;
+        }
+
+        // =========================================================
+        // SUGESTÃO DE NOME
+        // =========================================================
+        function toggleSuggestionMenu() {
+            const menu = document.getElementById('suggestion-menu');
+            menu.classList.toggle('show');
+        }
+
+        function applySuggestion(type) {
+            const now = new Date();
+            const dateStr = now.toISOString().slice(0, 10).replace(/-/g, "");
+            let base = "backup";
+            if (selectedItems.length > 0) base = selectedItems[0].name.replace(/[^\w\s-]/gi, '_');
+
+            let finalName = "";
+            if (type === 'date') finalName = `${base}_${dateStr}`;
+            else if (type === 'clean') finalName = base;
+            else if (type === 'random') finalName = `${base}_${Math.random().toString(36).substring(7)}`;
+
+            document.getElementById('zip_name').value = finalName;
+            document.getElementById('suggestion-menu').classList.remove('show');
         }
 
         // =========================================================
@@ -715,7 +919,6 @@
             };
         }
 
-        // NOVA VERSÃO: usa campos do modal, sem alert/prompt nativo
         function saveCurrentAsProfile() {
             const feedbackEl = document.getElementById('profile-save-feedback');
             if (feedbackEl) {
@@ -747,7 +950,6 @@
             let zipPattern = (zipPatternInput?.value || '').trim();
 
             if (!zipPattern) {
-                // se não informar padrão, usamos exatamente o nome atual como "padrão"
                 zipPattern = zipName;
             }
 
@@ -809,7 +1011,6 @@
             updateOutputModeUI();
         }
 
-        // Rodar modelo diretamente (sem abrir detalhes)
         function runBackupProfile(profileId, autoRun) {
             const profile = backupProfiles.find(p => p.id === profileId);
             if (!profile) return;
@@ -837,14 +1038,12 @@
             if (radio) radio.checked = true;
 
             if (autoRun) {
-                // Executa imediatamente com as configs do modelo
                 startDownloadProcess();
             } else {
                 openModalForSelected();
             }
         }
 
-        // Abre modal de DETALHES do modelo com tudo preenchido
         function openProfileDetails(profileId) {
             const profile = backupProfiles.find(p => p.id === profileId);
             if (!profile) return;
@@ -901,29 +1100,19 @@
                 alert("Selecione pelo menos um item.");
                 return;
             }
+
+            // RESET DO FORMULÁRIO (Novo Requisito)
+            document.getElementById('download-form').reset();
+            document.getElementById('profile-save-feedback').innerText = '';
+            document.getElementById('modal-title').innerText = "Baixar"; // Reset título se foi alterado por perfil
+
+            // Popula os itens
             document.getElementById('items_json').value = JSON.stringify(selectedItems);
-
-            const titleEl = document.getElementById('modal-title');
             const subEl = document.getElementById('modal-subtitle');
-
-            titleEl.innerText = "Configurar Download";
             subEl.innerText = `${selectedItems.length} item(ns) selecionado(s).`;
 
-            const profileNameInput = document.getElementById('profile_name');
-            const zipPatternInput = document.getElementById('zip_pattern');
-            const feedbackEl = document.getElementById('profile-save-feedback');
-
-            if (profileNameInput) profileNameInput.value = '';
-            if (zipPatternInput) zipPatternInput.value = '';
-            if (feedbackEl) {
-                feedbackEl.textContent = '';
-                feedbackEl.className = 'form-hint';
-            }
-
-            const zipInput = document.getElementById('zip_name');
-            if (zipInput && !zipInput.value) {
-                suggestZipName();
-            }
+            // Aplica sugestão padrão (Data)
+            applySuggestion('date');
 
             updateOutputModeUI();
             document.getElementById('modal-backdrop').classList.remove('hidden');
@@ -931,19 +1120,7 @@
 
         function closeModal() {
             document.getElementById('modal-backdrop').classList.add('hidden');
-        }
-
-        function suggestZipName() {
-            const now = new Date();
-            const dateStr = now.toISOString().slice(0, 10).replace(/-/g, "");
-
-            let base = "backup";
-            if (selectedItems.length === 1) {
-                base = selectedItems[0].name.replace(/\.[^/.]+$/, "");
-            }
-
-            base = base.replace(/[\\/:*?"<>| ]/g, "_");
-            document.getElementById('zip_name').value = `${base}_${dateStr}`;
+            document.getElementById('suggestion-menu').classList.remove('show');
         }
 
         // LÓGICA PRINCIPAL DE EXECUÇÃO
@@ -958,18 +1135,14 @@
                 else delete payload[k];
             });
 
-            const taskId = 'task-' + Date.now();
-            currentTaskId = taskId;
-            payload.task_id = taskId;
+            closeModal();
 
             const executionMode = payload.execution_mode || 'immediate';
 
-            closeModal();
-
-            if (executionMode === 'immediate') {
-                showProgressUI();
+            if (executionMode === 'background') {
+                alert("Tarefa iniciada em segundo plano! Acompanhe no widget inferior direito.");
             } else {
-                alert("Processo iniciado em Segundo Plano!\n\nAcompanhe ou baixe depois em 'Meus Backups'.");
+                showProgressUI();
             }
 
             fetch('/download', {
@@ -980,7 +1153,14 @@
                 .then(r => r.json())
                 .then(data => {
                     if (data.ok) {
-                        startPolling(executionMode);
+                        if (executionMode === 'immediate') {
+                            currentTaskId = data.task_id;
+                            startPollingForeground();
+                        } else {
+                            // Background será pego pelo poller global
+                            // Força um poll imediato para atualizar o badge
+                            pollActiveTasks();
+                        }
                     } else {
                         alert("Erro ao iniciar: " + data.error);
                         hideProgressUI();
@@ -993,6 +1173,7 @@
                 });
         }
 
+        // --- PROGRESSO FOREGROUND ---
         function showProgressUI() {
             const c = document.getElementById('progress-container');
             c.classList.remove('hidden');
@@ -1001,6 +1182,8 @@
             document.getElementById('progress-percent').innerText = '0%';
             document.getElementById('progress-phase').innerText = 'INICIANDO';
             document.getElementById('progress-text').innerText = 'Conectando...';
+            document.getElementById('btn-pause-fg').innerText = "⏸ Pausar";
+            isPausedForeground = false;
 
             lastLogCount = 0;
             document.getElementById('log-list').innerHTML = '<li class="log-empty">Iniciando...</li>';
@@ -1010,40 +1193,35 @@
             document.getElementById('progress-container').classList.add('hidden');
         }
 
-        function startPolling(mode) {
+        function startPollingForeground() {
             if (progressTimer) clearInterval(progressTimer);
             progressTimer = setInterval(() => {
-                fetchProgress(mode);
-            }, 1000);
-        }
+                if (!currentTaskId) return;
+                fetch('/progress/' + currentTaskId)
+                    .then(r => r.json())
+                    .then(data => {
+                        updateProgressBar(data);
+                        if (data.history) updateLogPanel(data.history);
 
-        function fetchProgress(mode) {
-            if (!currentTaskId) return;
+                        if (data.phase === 'concluido') {
+                            clearInterval(progressTimer);
+                            document.getElementById('progress-phase').innerText = "CONCLUÍDO";
 
-            fetch('/progress/' + currentTaskId)
-                .then(r => r.json())
-                .then(data => {
-                    updateProgressBar(data);
-                    if (data.history) updateLogPanel(data.history);
-
-                    if (data.phase === 'concluido') {
-                        clearInterval(progressTimer);
-                        document.getElementById('progress-phase').innerText = "CONCLUÍDO";
-
-                        if (mode === 'immediate' && data.download_url) {
-                            document.getElementById('progress-text').innerText = "Baixando arquivo...";
-                            window.location.href = data.download_url;
-                            setTimeout(hideProgressUI, 3000);
-                        } else {
-                            document.getElementById('progress-text').innerText = "Salvo em 'Meus Backups'.";
+                            if (data.download_url) {
+                                document.getElementById('progress-text').innerText = "Baixando arquivo...";
+                                window.location.href = data.download_url;
+                                setTimeout(hideProgressUI, 3000);
+                            } else {
+                                document.getElementById('progress-text').innerText = "Finalizado.";
+                            }
+                        } else if (data.phase === 'erro' || data.phase === 'cancelado') {
+                            clearInterval(progressTimer);
+                            document.getElementById('progress-bar').classList.add('error');
+                            document.getElementById('progress-text').innerText = data.message;
                         }
-
-                    } else if (data.phase === 'erro' || data.phase === 'cancelado') {
-                        clearInterval(progressTimer);
-                        document.getElementById('progress-bar').classList.add('error');
-                    }
-                })
-                .catch(console.error);
+                    })
+                    .catch(console.error);
+            }, 1000);
         }
 
         function updateProgressBar(data) {
@@ -1055,7 +1233,7 @@
                 percent = Math.min(20, f * 0.1);
             } else if (phase === 'baixando') {
                 if (data.files_total > 0) {
-                    percent = 20 + ((data.files_downloaded / data.files_total) * 60);
+                    percent = 20 + ((data.files_downloaded / data.files_total) * 70);
                 } else {
                     percent = 30;
                 }
@@ -1073,6 +1251,18 @@
             }
         }
 
+        // --- CONTROLES DE PAUSA/CANCELAR (Foreground) ---
+        function togglePauseForeground() {
+            if (!currentTaskId) return;
+            const url = isPausedForeground ? `/api/tasks/resume/${currentTaskId}` : `/api/tasks/pause/${currentTaskId}`;
+            fetch(url, { method: 'POST' }).then(r => r.json()).then(d => {
+                if (d.ok) {
+                    isPausedForeground = !isPausedForeground;
+                    document.getElementById('btn-pause-fg').innerText = isPausedForeground ? "▶ Continuar" : "⏸ Pausar";
+                }
+            });
+        }
+
         function cancelTask() {
             if (!currentTaskId) return;
             if (!confirm("Cancelar tarefa?")) return;
@@ -1082,6 +1272,84 @@
                 .then(() => {
                     document.getElementById('progress-text').innerText = "Cancelando...";
                 });
+        }
+
+
+        // =========================================================
+        // GERENCIADOR DE TAREFAS (BACKGROUND/GLOBAL) - REFORMULADO
+        // =========================================================
+        function startActiveTasksPoller() {
+            if (activeTasksTimer) clearInterval(activeTasksTimer);
+            activeTasksTimer = setInterval(pollActiveTasks, 2000);
+            pollActiveTasks(); // Chama uma vez imediatamente
+        }
+
+        function pollActiveTasks() {
+            fetch('/api/tasks/active').then(r => r.json()).then(data => {
+                const tasks = data.tasks || [];
+                const list = document.getElementById('task-manager-list');
+                const badge = document.getElementById('task-badge');
+
+                // Atualiza o Badge (contador)
+                if (tasks.length > 0) {
+                    badge.innerText = tasks.length;
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.innerText = '0';
+                    badge.classList.add('hidden');
+                }
+
+                // CORREÇÃO: Preenche o log de notificações com a tarefa mais recente
+                if (!currentTaskId && tasks.length > 0) {
+                    const activeId = tasks[0].id;
+                    fetch('/progress/' + activeId)
+                        .then(r => r.json())
+                        .then(d => {
+                            if (d.history) updateLogPanel(d.history);
+                        })
+                        .catch(console.error);
+                }
+
+                // Atualiza o conteúdo da lista (o painel em si não é mais ocultado automaticamente)
+                if (tasks.length === 0) {
+                    list.innerHTML = '<div class="task-empty-state">Nenhuma tarefa ativa no momento.</div>';
+                    return;
+                }
+
+                list.innerHTML = tasks.map(t => `
+                    <div class="task-item">
+                        <div class="task-info">
+                            <span>${t.phase.toUpperCase()}</span>
+                            <span style="font-weight:normal; font-size:11px; color:#999;">${t.id.split('-').pop()}</span>
+                        </div>
+                        <div class="task-meta">${t.message}</div>
+                        <div class="task-progress-bg">
+                            <div class="task-progress-fill ${t.paused ? 'paused' : ''}" style="width: ${t.percent}%"></div>
+                        </div>
+                        <div class="task-controls">
+                            ${!t.paused ?
+                        `<button class="btn-mini pause" onclick="apiTaskAction('${t.id}', 'pause')">PAUSAR</button>` :
+                        `<button class="btn-mini resume" onclick="apiTaskAction('${t.id}', 'resume')">RESUMIR</button>`
+                    }
+                            <button class="btn-mini cancel" onclick="apiTaskAction('${t.id}', 'cancel')">CANCELAR</button>
+                        </div>
+                    </div>
+                `).join('');
+            });
+        }
+
+        window.apiTaskAction = function (tid, action) {
+            let url = '';
+            if (action === 'pause') url = `/api/tasks/pause/${tid}`;
+            if (action === 'resume') url = `/api/tasks/resume/${tid}`;
+            if (action === 'cancel') url = `/cancel/${tid}`;
+
+            fetch(url, { method: 'POST' })
+            .then(r => r.json())
+            .then(d => {
+                // Força update imediato da UI
+                pollActiveTasks();
+            });
         }
 
 
@@ -1130,7 +1398,7 @@
             // Eventos
             const item = { id: folder.id, name: folder.name, type: 'folder' };
 
-            if(isFavorite(item.id)) favBtn.classList.add('fav-on');
+            if (isFavorite(item.id)) favBtn.classList.add('fav-on');
 
             favBtn.onclick = (e) => {
                 e.stopPropagation();
@@ -1144,7 +1412,7 @@
             };
 
             row.onclick = (e) => {
-                if([toggleBtn, checkbox, favBtn].includes(e.target)) return;
+                if ([toggleBtn, checkbox, favBtn].includes(e.target)) return;
                 // Clique na linha seleciona/deseleciona
                 checkbox.checked = !checkbox.checked;
                 handleCheckboxChange(checkbox, li, item);
@@ -1154,7 +1422,7 @@
             toggleBtn.onclick = (e) => {
                 e.stopPropagation();
                 const isCollapsed = li.classList.contains('collapsed');
-                if(isCollapsed && !li.dataset.loaded) {
+                if (isCollapsed && !li.dataset.loaded) {
                     loadChildren(folder.id, childrenUl, li, toggleBtn);
                 }
                 setCollapsedState(li, !isCollapsed);
@@ -1201,7 +1469,7 @@
             };
 
             row.onclick = (e) => {
-                if(e.target === checkbox) return;
+                if (e.target === checkbox) return;
                 showFilePreview(item, li);
             };
 
@@ -1217,39 +1485,39 @@
             containerUl.innerHTML = '<li class="tree-node"><div class="tree-row"><span>Carregando...</span></div></li>';
 
             fetch(url)
-            .then(r => r.json())
-            .then(data => {
-                containerUl.innerHTML = '';
-                const items = data.items || [];
+                .then(r => r.json())
+                .then(data => {
+                    containerUl.innerHTML = '';
+                    const items = data.items || [];
 
-                if(!items.length) {
-                    toggleBtn.textContent = '';
-                    toggleBtn.classList.add('placeholder');
-                    toggleBtn.disabled = true;
-                    return;
-                }
+                    if (!items.length) {
+                        toggleBtn.textContent = '';
+                        toggleBtn.classList.add('placeholder');
+                        toggleBtn.disabled = true;
+                        return;
+                    }
 
-                const parentCheckbox = li.querySelector(':scope > .tree-row .select-checkbox');
-                const parentChecked = parentCheckbox && parentCheckbox.checked && !parentCheckbox.indeterminate;
+                    const parentCheckbox = li.querySelector(':scope > .tree-row .select-checkbox');
+                    const parentChecked = parentCheckbox && parentCheckbox.checked && !parentCheckbox.indeterminate;
 
-                items.forEach(it => {
-                    const node = (it.type === 'folder') ? createFolderNode(it) : createFileNode(it);
-                    containerUl.appendChild(node);
-                    if(parentChecked) setNodeCheckedDeep(node, true);
+                    items.forEach(it => {
+                        const node = (it.type === 'folder') ? createFolderNode(it) : createFileNode(it);
+                        containerUl.appendChild(node);
+                        if (parentChecked) setNodeCheckedDeep(node, true);
+                    });
+
+                    li.dataset.loaded = 'true';
+                })
+                .catch(err => {
+                    console.error(err);
+                    containerUl.innerHTML = '<li class="tree-node">Erro.</li>';
                 });
-
-                li.dataset.loaded = 'true';
-            })
-            .catch(err => {
-                console.error(err);
-                containerUl.innerHTML = '<li class="tree-node">Erro.</li>';
-            });
         }
 
         function setCollapsedState(li, collapsed) {
             const ul = li.querySelector(':scope > .tree-children');
-            if(!ul) return;
-            if(collapsed) {
+            if (!ul) return;
+            if (collapsed) {
                 li.classList.add('collapsed');
                 ul.style.display = 'none';
             } else {
@@ -1265,15 +1533,15 @@
         function handleCheckboxChange(checkbox, li, item, updateParents = true) {
             const key = `${item.type}:${item.id}`;
 
-            if(checkbox && checkbox.checked) {
-                if(!selectedNodeIds.has(key)) {
+            if (checkbox && checkbox.checked) {
+                if (!selectedNodeIds.has(key)) {
                     selectedNodeIds.add(key);
                     selectedItems.push(item);
                 }
                 li.classList.add('tree-node-selected');
                 updateBreadcrumbFromNode(li);
             } else {
-                if(selectedNodeIds.has(key)) {
+                if (selectedNodeIds.has(key)) {
                     selectedNodeIds.delete(key);
                     selectedItems = selectedItems.filter(x => !(x.id === item.id && x.type === item.type));
                 }
@@ -1281,16 +1549,16 @@
             }
 
             updateSelectionInfo();
-            if(updateParents) propagateSelectionUp(li);
+            if (updateParents) propagateSelectionUp(li);
         }
 
         function updateSelectionInfo() {
             const lbl = document.getElementById('selected-folder-label');
             const cnt = document.getElementById('selection-counter');
 
-            if(!selectedItems.length) {
-                if(lbl) lbl.textContent = 'nenhum';
-                if(cnt) cnt.textContent = 'Nenhum item selecionado.';
+            if (!selectedItems.length) {
+                if (lbl) lbl.textContent = 'nenhum';
+                if (cnt) cnt.textContent = 'Nenhum item selecionado.';
                 return;
             }
 
@@ -1298,13 +1566,13 @@
             const fls = selectedItems.filter(i => i.type === 'file').length;
 
             const txt = `${fld} pastas e ${fls} arquivos`;
-            if(lbl) lbl.textContent = txt;
-            if(cnt) cnt.textContent = txt + ' selecionados.';
+            if (lbl) lbl.textContent = txt;
+            if (cnt) cnt.textContent = txt + ' selecionados.';
         }
 
         function setNodeCheckedDeep(li, checked) {
             const cb = li.querySelector(':scope > .tree-row .select-checkbox');
-            if(cb) {
+            if (cb) {
                 cb.checked = checked;
                 cb.indeterminate = false;
             }
@@ -1326,17 +1594,17 @@
 
         function propagateSelectionUp(li) {
             const parent = li.parentElement.closest('.tree-node');
-            if(!parent) return;
+            if (!parent) return;
 
             const childrenCB = parent.querySelectorAll(':scope > .tree-children > .tree-node > .tree-row .select-checkbox');
             const all = Array.from(childrenCB);
-            if(!all.length) return;
+            if (!all.length) return;
 
             const allChecked = all.every(c => c.checked);
             const someChecked = all.some(c => c.checked || c.indeterminate);
 
             const pCB = parent.querySelector(':scope > .tree-row .select-checkbox');
-            if(pCB) {
+            if (pCB) {
                 pCB.checked = allChecked;
                 pCB.indeterminate = !allChecked && someChecked;
 
@@ -1362,30 +1630,30 @@
             updateBreadcrumbFromNode(li);
 
             fetch('/api/file/' + encodeURIComponent(item.id))
-            .then(r => r.json())
-            .then(meta => {
-                document.getElementById('preview-type').textContent = meta.mimeType || '-';
-                document.getElementById('preview-size').textContent = humanSize(parseInt(meta.size||0));
+                .then(r => r.json())
+                .then(meta => {
+                    document.getElementById('preview-type').textContent = meta.mimeType || '-';
+                    document.getElementById('preview-size').textContent = humanSize(parseInt(meta.size || 0));
 
-                if(meta.modifiedTime) {
-                    document.getElementById('preview-modified').textContent = new Date(meta.modifiedTime).toLocaleString('pt-BR');
-                }
+                    if (meta.modifiedTime) {
+                        document.getElementById('preview-modified').textContent = new Date(meta.modifiedTime).toLocaleString('pt-BR');
+                    }
 
-                const link = document.getElementById('preview-open-link');
-                if(meta.webViewLink) {
-                    link.href = meta.webViewLink;
-                    link.classList.remove('disabled');
-                } else {
-                    link.classList.add('disabled');
-                }
+                    const link = document.getElementById('preview-open-link');
+                    if (meta.webViewLink) {
+                        link.href = meta.webViewLink;
+                        link.classList.remove('disabled');
+                    } else {
+                        link.classList.add('disabled');
+                    }
 
-                if(meta.thumbnailLink) {
-                    const img = document.getElementById('preview-thumbnail');
-                    img.src = meta.thumbnailLink;
-                    document.getElementById('preview-thumbnail-wrapper').classList.remove('hidden');
-                }
-            })
-            .catch(console.error);
+                    if (meta.thumbnailLink) {
+                        const img = document.getElementById('preview-thumbnail');
+                        img.src = meta.thumbnailLink;
+                        document.getElementById('preview-thumbnail-wrapper').classList.remove('hidden');
+                    }
+                })
+                .catch(console.error);
         }
 
         // =========================================================
@@ -1437,9 +1705,9 @@
             ul.appendChild(rootLi);
 
             // Events Root
-            const item = { id:'root', name:'Meu Drive', type:'folder'};
+            const item = { id: 'root', name: 'Meu Drive', type: 'folder' };
 
-            if(isFavorite('root')) fav.classList.add('fav-on');
+            if (isFavorite('root')) fav.classList.add('fav-on');
 
             fav.onclick = (e) => { e.stopPropagation(); toggleFavorite(item, rootLi, fav); };
             cb.onchange = (e) => {
@@ -1449,7 +1717,7 @@
             };
 
             row.onclick = (e) => {
-                if(![toggle, cb, fav].includes(e.target)) {
+                if (![toggle, cb, fav].includes(e.target)) {
                     cb.checked = !cb.checked;
                     handleCheckboxChange(cb, rootLi, item);
                     propagateSelectionDown(rootLi, cb.checked);
@@ -1459,7 +1727,7 @@
             toggle.onclick = (e) => {
                 e.stopPropagation();
                 const isC = rootLi.classList.contains('collapsed');
-                if(isC && !rootLi.dataset.loaded) loadChildren('root', childrenUl, rootLi, toggle);
+                if (isC && !rootLi.dataset.loaded) loadChildren('root', childrenUl, rootLi, toggle);
                 setCollapsedState(rootLi, !isC);
                 toggle.textContent = rootLi.classList.contains('collapsed') ? '▸' : '▾';
             };
@@ -1485,6 +1753,9 @@
             loadFavorites();
             renderFavorites();
             loadProfiles();
+
+            // Inicia poller de tarefas em background
+            startActiveTasksPoller();
 
             const tf = document.getElementById('toggle-files');
             if (tf) {
