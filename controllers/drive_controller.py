@@ -20,7 +20,7 @@ from flask import (
 
 from services.auth_service import get_credentials
 from services.drive_filters import build_filters_from_form
-from services.drive_tree_service import get_children, get_file_metadata
+from services.drive_tree_service import get_children, get_file_metadata, get_ancestors_path
 from services.drive_download_service import download_items_bundle, mirror_items_to_local
 from services.progress_service import (
     PROGRESS,
@@ -31,7 +31,7 @@ from services.progress_service import (
     set_task_pause,
     set_task_cancel
 )
-from models import db, BackupFileModel
+from models import db, BackupFileModel, FavoriteModel
 
 drive_bp = Blueprint("drive", __name__)
 
@@ -140,6 +140,7 @@ def folders():
     if not creds:
         flash("Faça login no Google primeiro.")
         return redirect(url_for("auth.index"))
+    
     return render_template("folders.html")
 
 
@@ -161,6 +162,17 @@ def api_folders_children(folder_id):
     return jsonify({"items": items})
 
 
+@drive_bp.route("/api/path/<file_id>")
+def api_resolve_path(file_id):
+    """Retorna a lista de IDs ancestrais para um arquivo/pasta."""
+    creds = get_credentials()
+    if not creds: return jsonify({"error": "unauthorized"}), 401
+    
+    # Chama o serviço para obter a árvore de IDs até o root
+    path_ids = get_ancestors_path(creds, file_id)
+    return jsonify({"path": path_ids})
+
+
 @drive_bp.route("/api/file/<file_id>")
 def api_file_details(file_id):
     creds = get_credentials()
@@ -168,6 +180,58 @@ def api_file_details(file_id):
     meta = get_file_metadata(creds, file_id)
     return jsonify(meta)
 
+
+# --- ROTAS DE FAVORITOS (DB) ---
+
+@drive_bp.route("/api/favorites", methods=["GET"])
+def list_favorites():
+    favs = FavoriteModel.query.all()
+    return jsonify({"favorites": [f.to_dict() for f in favs]})
+
+
+@drive_bp.route("/api/favorites", methods=["POST"])
+def add_favorite():
+    data = request.json or {}
+    item_id = data.get('id')
+    name = data.get('name')
+    path = data.get('path')
+    item_type = data.get('type', 'folder')
+
+    if not item_id or not name:
+        return jsonify({"ok": False, "error": "Dados inválidos"}), 400
+
+    existing = FavoriteModel.query.get(item_id)
+    if existing:
+        # Atualiza se já existe (ex: caminho mudou)
+        existing.name = name
+        existing.path = path
+        existing.type = item_type
+    else:
+        new_fav = FavoriteModel(id=item_id, name=name, path=path, type=item_type)
+        db.session.add(new_fav)
+    
+    try:
+        db.session.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@drive_bp.route("/api/favorites/<item_id>", methods=["DELETE"])
+def delete_favorite(item_id):
+    fav = FavoriteModel.query.get(item_id)
+    if fav:
+        try:
+            db.session.delete(fav)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"ok": False, "error": str(e)}), 500
+    return jsonify({"ok": True})
+
+
+# -------------------------------
 
 @drive_bp.route("/download", methods=["POST"])
 def download():

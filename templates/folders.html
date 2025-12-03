@@ -205,6 +205,50 @@
         .btn-mini.cancel {
             background: #f44336;
         }
+
+        /* Estilos para a lista de itens no perfil */
+        .profile-items-preview {
+            margin-top: 8px;
+            padding: 6px;
+            background: #fdfdfd;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+        .profile-items-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #555;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .profile-item-row {
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 2px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .profile-item-row:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Ajuste visual favoritos */
+        .favorite-item {
+            display: block;
+            width: 100%;
+            text-align: left;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
     </style>
 </head>
 
@@ -314,7 +358,7 @@
                     <small>(clique na estrela ao lado de uma pasta)</small>
                 </div>
                 <div id="favorites-list" class="favorites-list">
-                    Nenhum favorito ainda.
+                    Carregando...
                 </div>
             </div>
 
@@ -693,22 +737,29 @@
         }
 
         // =========================================================
-        // FAVORITOS
+        // FAVORITOS (AGORA INTEGRADO AO DB)
         // =========================================================
 
         function loadFavorites() {
-            try {
-                const raw = localStorage.getItem('gpacker_favorites');
-                favorites = raw ? JSON.parse(raw) : [];
-            } catch (e) {
-                favorites = [];
-            }
-        }
-
-        function saveFavorites() {
-            try {
-                localStorage.setItem('gpacker_favorites', JSON.stringify(favorites));
-            } catch (e) { }
+            fetch('/api/favorites')
+                .then(r => r.json())
+                .then(data => {
+                    favorites = data.favorites || [];
+                    renderFavorites();
+                    
+                    // Atualiza ícones na árvore se ela já estiver carregada
+                    favorites.forEach(fav => {
+                        const node = document.querySelector(`.tree-node[data-id="${fav.id}"]`);
+                        if(node) {
+                            const btn = node.querySelector('.fav-btn');
+                            if(btn) btn.classList.add('fav-on');
+                        }
+                    });
+                })
+                .catch(err => {
+                    console.error("Erro ao carregar favoritos:", err);
+                    document.getElementById('favorites-list').textContent = 'Erro ao carregar.';
+                });
         }
 
         function isFavorite(id) {
@@ -721,7 +772,7 @@
             box.innerHTML = '';
 
             if (!favorites.length) {
-                box.textContent = 'Nenhum favorito ainda.';
+                box.textContent = 'Nenhum favorito salvo.';
                 return;
             }
 
@@ -729,44 +780,173 @@
                 const btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'favorite-item';
-                btn.textContent = '⭐ ' + (fav.path || fav.name);
+                
+                // MUDANÇA: Exibir apenas o NOME no botão
+                btn.textContent = '⭐ ' + fav.name; 
+                
+                // MUDANÇA: Exibir o CAMINHO COMPLETO no tooltip
+                btn.title = fav.path || fav.name; 
+
                 btn.addEventListener('click', () => {
                     focusNodeById(fav.id);
                 });
+                
                 box.appendChild(btn);
             });
         }
 
         function toggleFavorite(item, li, favBtn) {
             const path = computeBreadcrumb(li);
+            
             if (isFavorite(item.id)) {
-                favorites = favorites.filter(f => f.id !== item.id);
-                favBtn.classList.remove('fav-on');
+                // REMOVER (DELETE API)
+                fetch('/api/favorites/' + encodeURIComponent(item.id), { method: 'DELETE' })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.ok) {
+                            favorites = favorites.filter(f => f.id !== item.id);
+                            favBtn.classList.remove('fav-on');
+                            renderFavorites();
+                        } else {
+                            alert("Erro ao remover favorito.");
+                        }
+                    })
+                    .catch(console.error);
             } else {
-                favorites.push({ id: item.id, name: item.name, path });
-                favBtn.classList.add('fav-on');
+                // ADICIONAR (POST API)
+                const payload = {
+                    id: item.id, 
+                    name: item.name, 
+                    path: path,
+                    type: item.type 
+                };
+
+                fetch('/api/favorites', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.ok) {
+                        // Atualiza lista local para refletir imediatamente
+                        // (ou poderia recarregar loadFavorites(), mas push é mais rápido)
+                        const exists = favorites.find(f => f.id === item.id);
+                        if (!exists) favorites.push(payload);
+                        
+                        favBtn.classList.add('fav-on');
+                        renderFavorites();
+                    } else {
+                        alert("Erro ao salvar favorito.");
+                    }
+                })
+                .catch(console.error);
             }
-            saveFavorites();
-            renderFavorites();
         }
 
-        function focusNodeById(id) {
-            const node = document.querySelector(`.tree-node[data-id="${id}"]`);
-            if (!node) {
-                alert("Pasta não encontrada na visualização atual (pode não estar carregada).");
+        // -------------------------------------------------------------
+        // NOVA LÓGICA DE NAVEGAÇÃO PROFUNDA (DEEP LINKING)
+        // -------------------------------------------------------------
+        async function focusNodeById(targetId) {
+            // 1. Tenta achar imediatamente
+            let node = document.querySelector(`.tree-node[data-id="${targetId}"]`);
+            if (node) {
+                revealNode(node);
                 return;
             }
+
+            // 2. Se não achou, precisamos do caminho completo (ancestrais)
+            const originalTitle = document.title;
+            document.title = "Localizando pasta...";
+            document.body.style.cursor = 'wait';
+
+            try {
+                const resp = await fetch(`/api/path/${targetId}`);
+                const data = await resp.json();
+                
+                if (!data.path || !Array.isArray(data.path)) {
+                    alert("Não foi possível localizar o caminho desta pasta.");
+                    return;
+                }
+
+                const pathIds = data.path; 
+                
+                for (const id of pathIds) {
+                    let currentNode = document.querySelector(`.tree-node[data-id="${id}"]`);
+                    
+                    if (currentNode) {
+                        if (id !== targetId) {
+                            await ensureNodeExpanded(currentNode);
+                        }
+                    } else {
+                        console.warn(`Nó intermediário ${id} não encontrado na árvore.`);
+                    }
+                }
+
+                node = document.querySelector(`.tree-node[data-id="${targetId}"]`);
+                if (node) {
+                    revealNode(node);
+                } else {
+                    alert("Pasta não encontrada após expansão.");
+                }
+
+            } catch (err) {
+                console.error(err);
+                alert("Erro ao buscar caminho da pasta.");
+            } finally {
+                document.body.style.cursor = 'default';
+                document.title = originalTitle;
+            }
+        }
+
+        function ensureNodeExpanded(node) {
+            return new Promise((resolve) => {
+                if (!node.classList.contains('collapsed')) {
+                    resolve();
+                    return;
+                }
+
+                const toggle = node.querySelector(':scope > .tree-row .tree-toggle');
+                if (toggle) {
+                    if (node.dataset.loaded === 'true') {
+                        toggle.click();
+                        resolve();
+                    } else {
+                        const parentId = node.dataset.id;
+                        const childrenUl = node.querySelector(':scope > .tree-children');
+                        
+                        node.classList.remove('collapsed');
+                        childrenUl.style.display = 'block';
+                        toggle.textContent = '▾';
+                        
+                        loadChildren(parentId, childrenUl, node, toggle).then(() => {
+                            resolve();
+                        });
+                    }
+                } else {
+                    resolve();
+                }
+            });
+        }
+
+        function revealNode(node) {
             let current = node.parentElement.closest('.tree-node');
             while (current) {
                 const toggle = current.querySelector(':scope > .tree-row .tree-toggle');
                 if (toggle && current.classList.contains('collapsed')) {
-                    toggle.click();
+                    current.classList.remove('collapsed');
+                    const ul = current.querySelector(':scope > .tree-children');
+                    if (ul) ul.style.display = 'block';
+                    toggle.textContent = '▾';
                 }
                 current = current.parentElement.closest('.tree-node');
             }
-            node.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            node.classList.add('tree-node-highlight');
-            setTimeout(() => node.classList.remove('tree-node-highlight'), 1500);
+            
+            setTimeout(() => {
+                node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                node.classList.add('tree-node-highlight');
+                setTimeout(() => node.classList.remove('tree-node-highlight'), 2000);
+            }, 100);
         }
 
         // =========================================================
@@ -830,6 +1010,25 @@
                 const displayName = profile.zip_name
                     || (pattern ? applyZipPattern(pattern) : 'backup');
                 subtitle.textContent = `Arquivo: ${displayName}`;
+
+                if(profile.items && profile.items.length > 0) {
+                    const itemsContainer = document.createElement('div');
+                    itemsContainer.className = 'profile-items-preview';
+                    
+                    const header = document.createElement('div');
+                    header.className = 'profile-items-title';
+                    header.textContent = `Itens (${profile.items.length})`;
+                    itemsContainer.appendChild(header);
+
+                    profile.items.forEach(it => {
+                        const row = document.createElement('div');
+                        row.className = 'profile-item-row';
+                        const icon = it.type === 'folder' ? '📁' : '📄';
+                        row.innerHTML = `<span style="font-size:10px;">${icon}</span> <span>${it.name}</span>`;
+                        itemsContainer.appendChild(row);
+                    });
+                    wrapper.appendChild(itemsContainer);
+                }
 
                 const actions = document.createElement('div');
                 actions.className = 'profile-actions';
@@ -1484,7 +1683,8 @@
 
             containerUl.innerHTML = '<li class="tree-node"><div class="tree-row"><span>Carregando...</span></div></li>';
 
-            fetch(url)
+            // AGORA RETORNA A PROMISE PARA PERMITIR EXPANSÃO AUTOMÁTICA
+            return fetch(url)
                 .then(r => r.json())
                 .then(data => {
                     containerUl.innerHTML = '';
@@ -1751,7 +1951,7 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             loadFavorites();
-            renderFavorites();
+            // renderFavorites(); // Chamado dentro de loadFavorites agora
             loadProfiles();
 
             // Inicia poller de tarefas em background

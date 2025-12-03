@@ -83,6 +83,43 @@ def get_file_metadata(creds, file_id: str) -> dict:
     return meta
 
 
+def get_ancestors_path(creds, target_id: str) -> list:
+    """
+    Retorna uma lista de IDs [root, folderA, folderB, target_id]
+    representando o caminho da raiz até o item alvo.
+    """
+    service = build("drive", "v3", credentials=creds, cache_discovery=False)
+    path_ids = []
+    current_id = target_id
+    
+    # Limite de segurança para evitar loops infinitos (ex: atalhos cíclicos ou erros)
+    for _ in range(50):
+        if not current_id:
+            break
+            
+        path_ids.insert(0, current_id)
+        
+        if current_id == 'root':
+            break
+            
+        try:
+            # Obtém apenas os pais do arquivo atual
+            f = service.files().get(fileId=current_id, fields="parents").execute()
+            parents = f.get('parents')
+            
+            if parents:
+                # O Drive permite múltiplos pais, mas para árvore hierárquica seguimos o primeiro
+                current_id = parents[0]
+            else:
+                # Se não tem pais, pode ser compartilhado ou órfão, paramos aqui
+                break
+        except Exception as e:
+            print(f"Erro ao resolver caminho para {current_id}: {e}")
+            break
+            
+    return path_ids
+
+
 def _worker_process_folder(
     creds,
     folder_id,
