@@ -8,10 +8,12 @@ import zipfile
 import tarfile
 import threading
 import concurrent.futures
+import random
 
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from google.oauth2.credentials import Credentials
+from googleapiclient.errors import HttpError
 
 from .drive_filters import safe_name, file_passes_filters
 from .drive_tree_service import build_files_list_for_items
@@ -19,6 +21,10 @@ from .progress_service import sync_task_to_db, update_progress
 
 _dl_lock = threading.Lock()
 
+# Configuração de alta performance
+MAX_DOWNLOAD_WORKERS = 20         # Aumentado para 20 downloads paralelos
+CHUNK_SIZE = 20 * 1024 * 1024     # 20 MB por chunk (Reduz requests HTTP, muito mais rápido)
+RETRY_LIMIT = 10                  # Mais tentativas para downloads
 
 def prepare_long_path(path: str) -> str:
     if os.name == "nt":
@@ -29,11 +35,6 @@ def prepare_long_path(path: str) -> str:
 
 
 def check_status_pause_cancel(progress_dict, task_id):
-    """
-    Verifica se a tarefa foi cancelada ou pausada.
-    Lança exceção se cancelada.
-    Dorme se pausada.
-    """
     if not progress_dict or not task_id:
         return
 
@@ -41,26 +42,25 @@ def check_status_pause_cancel(progress_dict, task_id):
         info = progress_dict.get(task_id, {})
         if info.get("canceled"):
             raise Exception("Cancelado pelo usuário")
-        
+
         if info.get("paused"):
             time.sleep(1)
             continue
-        
         break
 
 
 def get_export_info(mime_type: str, file_name: str):
     if mime_type == "application/vnd.google-apps.document":
-        return ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", 
+        return ("application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 file_name if file_name.lower().endswith(".docx") else file_name + ".docx")
     if mime_type == "application/vnd.google-apps.spreadsheet":
-        return ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+        return ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 file_name if file_name.lower().endswith(".xlsx") else file_name + ".xlsx")
     if mime_type == "application/vnd.google-apps.presentation":
-        return ("application/vnd.openxmlformats-officedocument.presentationml.presentation", 
+        return ("application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 file_name if file_name.lower().endswith(".pptx") else file_name + ".pptx")
     if mime_type == "application/vnd.google-apps.drawing":
-        return ("image/png", 
+        return ("image/png",
                 file_name if file_name.lower().endswith(".png") else file_name + ".png")
     return (None, None)
 
@@ -74,6 +74,7 @@ def _worker_download_one(
     task_id,
     filters,
 ):
+    # Cria serviço dedicado à thread (melhor para paralelismo)
     service = build("drive", "v3", credentials=creds, cache_discovery=False)
 
     file_id = f_info["id"]
@@ -83,7 +84,6 @@ def _worker_download_one(
     rel_dir = os.path.dirname(raw_rel_path)
     download_name = original_name
 
-    # Checa status antes de começar
     check_status_pause_cancel(progress_dict, task_id)
 
     # Tratamento de Atalhos
@@ -103,30 +103,41 @@ def _worker_download_one(
         except Exception:
             return
 
+    # Tenta obter o Request de Download com Retry
     request_dl = None
-    if mime.startswith("application/vnd.google-apps."):
-        export_mime, new_name = get_export_info(mime, download_name)
-        if export_mime:
-            download_name = new_name
-            request_dl = service.files().export_media(fileId=file_id, mimeType=export_mime)
+    export_mime = None
+
+    try:
+        if mime.startswith("application/vnd.google-apps."):
+            export_mime, new_name = get_export_info(mime, download_name)
+            if export_mime:
+                download_name = new_name
+                request_dl = service.files().export_media(fileId=file_id, mimeType=export_mime)
+            else:
+                return
         else:
-            return
-    else:
-        request_dl = service.files().get_media(fileId=file_id)
+            request_dl = service.files().get_media(fileId=file_id)
+    except Exception as e:
+        # Se falhar na criação do request, loga e sai
+        with _dl_lock:
+             if progress_dict and task_id:
+                info = progress_dict[task_id]
+                hist = info.get("history", [])
+                hist.append(f"FALHA Meta {download_name}: {str(e)}")
+                info["history"] = hist
+        return
 
-    final_rel_path = ""
-    local_path = ""
-
+    # Define caminhos locais
     with _dl_lock:
         base_name_safe = safe_name(download_name)
         candidate_rel = os.path.join(rel_dir, base_name_safe) if rel_dir else base_name_safe
-        
+
         root, ext = os.path.splitext(candidate_rel)
         counter = 1
         while candidate_rel in used_rel_paths:
             candidate_rel = f"{root} ({counter}){ext}"
             counter += 1
-        
+
         used_rel_paths.add(candidate_rel)
         final_rel_path = candidate_rel
         raw_local_path = os.path.join(dest_root, final_rel_path)
@@ -134,40 +145,65 @@ def _worker_download_one(
         dir_name = os.path.dirname(local_path)
         os.makedirs(dir_name, exist_ok=True)
 
+    # Executa Download com Chunking e Retry Robusto
+    fh = io.FileIO(local_path, "wb")
     try:
-        fh = io.FileIO(local_path, "wb")
-        downloader = MediaIoBaseDownload(fh, request_dl)
+        downloader = MediaIoBaseDownload(fh, request_dl, chunksize=CHUNK_SIZE)
         done = False
-        while not done:
-            # Checa status DURANTE o download (chunk by chunk)
-            check_status_pause_cancel(progress_dict, task_id)
-            
-            status, done = downloader.next_chunk()
-    except Exception as e:
-        if not fh.closed:
-            fh.close()
-        if os.path.exists(local_path):
-            try:
-                os.remove(local_path)
-            except Exception:
-                pass
-        
-        if "Cancelado" in str(e):
-            raise e
 
-        # Log de erro no histórico completo
+        retry_count = 0
+        while not done:
+            check_status_pause_cancel(progress_dict, task_id)
+
+            try:
+                status, done = downloader.next_chunk()
+                # Reset retry count após sucesso de um chunk
+                retry_count = 0
+
+            except HttpError as err:
+                # Trata Limite de Taxa (Rate Limit)
+                if err.resp.status in [403, 429, 500, 502, 503]:
+                    retry_count += 1
+                    if retry_count > RETRY_LIMIT:
+                        raise err
+
+                    sleep_s = (2 ** retry_count) + random.uniform(0, 1)
+                    print(f"Download Rate Limit ({download_name}). Esperando {sleep_s:.1f}s...")
+                    time.sleep(sleep_s)
+                    # O downloader do googleapiclient geralmente é inteligente o suficiente
+                    # para retomar, mas precisamos manter o loop.
+                    continue
+                else:
+                    raise err
+
+            except Exception as e:
+                # Outros erros de rede
+                if "Cancelado" in str(e): raise e
+
+                retry_count += 1
+                if retry_count > RETRY_LIMIT:
+                    raise e
+                time.sleep(2)
+                continue
+
+    except Exception as e:
+        if not fh.closed: fh.close()
+        if os.path.exists(local_path):
+            try: os.remove(local_path)
+            except: pass
+
+        if "Cancelado" in str(e): raise e
+
         with _dl_lock:
             if progress_dict and task_id:
                 info = progress_dict[task_id]
                 info["errors"] = info.get("errors", 0) + 1
                 hist = info.get("history", [])
-                hist.append(f"FALHA {download_name}: {str(e)}")
-                info["history"] = hist 
-                progress_dict[task_id] = info
+                hist.append(f"FALHA Download {download_name}: {str(e)}")
+                info["history"] = hist
         return
     finally:
-        if not fh.closed:
-            fh.close()
+        if not fh.closed: fh.close()
 
     f_info["local_rel_path"] = final_rel_path
 
@@ -178,12 +214,15 @@ def _worker_download_one(
             dl_now = info.get("files_downloaded", 0) + 1
             info["files_downloaded"] = dl_now
             total = info.get("files_total", 0)
-            info["message"] = f"Baixando arquivos ({dl_now}/{total})..."
-            
-            hist = info.get("history", [])
-            hist.append(f"Baixado: {download_name}")
-            info["history"] = hist
-            progress_dict[task_id] = info
+
+            # Só notifica a cada X arquivos para não travar a UI/DB com updates excessivos
+            if dl_now % 5 == 0 or dl_now == total:
+                info["message"] = f"Baixando ({dl_now}/{total})..."
+                # Opcional: não encher o histórico com cada arquivo se forem muitos
+                # hist = info.get("history", [])
+                # hist.append(f"Baixado: {download_name}")
+                # info["history"] = hist
+                progress_dict[task_id] = info
 
 
 def download_files_to_folder(
@@ -202,16 +241,16 @@ def download_files_to_folder(
         "phase": "baixando",
         "files_downloaded": 0,
         "files_total": total,
-        "message": f"Iniciando download de {total} itens...",
-        "history": ["Iniciando downloads paralelos..."]
+        "message": f"Iniciando download turbo ({MAX_DOWNLOAD_WORKERS} threads) de {total} itens...",
+        "history": [f"Iniciando downloads (Max Threads: {MAX_DOWNLOAD_WORKERS})..."]
     })
     sync_task_to_db(task_id)
 
     used_rel_paths = set()
-    MAX_WORKERS = 8
     changes_since_sync = 0
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+    # ThreadPool Executor com mais workers
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_DOWNLOAD_WORKERS) as executor:
         futures = []
         for f_info in files_list:
             fut = executor.submit(
@@ -223,7 +262,8 @@ def download_files_to_folder(
             try:
                 future.result()
                 changes_since_sync += 1
-                if progress_dict and task_id and changes_since_sync >= 25:
+                # Reduzi a frequência de sync para dar mais performance
+                if progress_dict and task_id and changes_since_sync >= 50:
                     sync_task_to_db(task_id)
                     changes_since_sync = 0
             except Exception as exc:
@@ -247,6 +287,7 @@ def download_items_bundle(
     progress_dict=None,
     task_id: str | None = None,
     filters: dict | None = None,
+    processing_mode: str = "parallel",
 ) -> str:
     service_main = build("drive", "v3", credentials=creds)
 
@@ -275,7 +316,7 @@ def download_items_bundle(
         # 3. Compactação
         update_progress(task_id, {
             "phase": "compactando",
-            "message": "Compactando arquivos...",
+            "message": "Compactando arquivos (Isso pode levar um tempo)...",
             "history": ["Iniciando compactação..."]
         })
         sync_task_to_db(task_id)
@@ -288,8 +329,9 @@ def download_items_bundle(
             archive_path = os.path.join(out_dir, f"{base_name}.zip")
             comp = zipfile.ZIP_DEFLATED
             level = 1 if compression_level == "fast" else (9 if compression_level == "max" else 6)
-            
-            with zipfile.ZipFile(archive_path, "w", compression=comp, compresslevel=level) as zf:
+
+            # Usando ZIP_DEFLATED com allowZip64 para arquivos grandes
+            with zipfile.ZipFile(archive_path, "w", compression=comp, compresslevel=level, allowZip64=True) as zf:
                 for f_info in files_list:
                     check_status_pause_cancel(progress_dict, task_id)
                     rel = f_info.get("local_rel_path")
@@ -335,6 +377,7 @@ def mirror_items_to_local(
     progress_dict=None,
     task_id: str | None = None,
     filters: dict | None = None,
+    processing_mode: str = "parallel",
 ) -> None:
     service_main = build("drive", "v3", credentials=creds)
 

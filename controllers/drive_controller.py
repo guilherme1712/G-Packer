@@ -22,8 +22,7 @@ from services.auth_service import get_credentials
 from services.drive_filters import build_filters_from_form
 from services.drive_tree_service import get_children, get_file_metadata, get_ancestors_path
 from services.drive_download_service import download_items_bundle, mirror_items_to_local
-# IMPORT NOVO
-from services.drive_activity_service import fetch_activity_log 
+from services.drive_activity_service import fetch_activity_log
 from services.progress_service import (
     PROGRESS,
     init_download_task,
@@ -52,6 +51,7 @@ def _background_backup_task(
     compression_level,
     archive_format,
     filters,
+    processing_mode,
 ):
     with app_context:
         try:
@@ -66,6 +66,7 @@ def _background_backup_task(
                     progress_dict=PROGRESS,
                     task_id=task_id,
                     filters=filters,
+                    processing_mode=processing_mode
                 )
             else:
                 temp_zip_path = download_items_bundle(
@@ -77,6 +78,7 @@ def _background_backup_task(
                     progress_dict=PROGRESS,
                     task_id=task_id,
                     filters=filters,
+                    processing_mode=processing_mode
                 )
 
                 generated_filename = os.path.basename(temp_zip_path)
@@ -135,7 +137,7 @@ def folders():
     if not creds:
         flash("Faça login no Google primeiro.")
         return redirect(url_for("auth.index"))
-    
+
     return render_template("folders.html")
 
 
@@ -173,15 +175,13 @@ def api_file_details(file_id):
     return jsonify(meta)
 
 
-# --- ROTA DE ATIVIDADE (NOVA) ---
 @drive_bp.route("/api/activity/<file_id>")
 def api_file_activity(file_id):
     creds = get_credentials()
     if not creds: return jsonify({"error": "unauthorized"}), 401
-    
+
     activities = fetch_activity_log(creds, file_id)
     return jsonify({"activity": activities})
-# --------------------------------
 
 
 @drive_bp.route("/api/favorites", methods=["GET"])
@@ -209,7 +209,7 @@ def add_favorite():
     else:
         new_fav = FavoriteModel(id=item_id, name=name, path=path, type=item_type)
         db.session.add(new_fav)
-    
+
     try:
         db.session.commit()
         return jsonify({"ok": True})
@@ -255,7 +255,9 @@ def download():
     compression_level = data.get("compression_level") or "normal"
     output_mode = data.get("output_mode") or "archive"
     local_mirror_path = (data.get("local_mirror_path") or "").strip()
+
     execution_mode = data.get("execution_mode") or "immediate"
+    processing_mode = data.get("processing_mode") or "parallel"  # Default agora é parallel para ser mais rápido
 
     task_id = data.get("task_id") or f"task-{int(time.time())}"
     filters = build_filters_from_form(data)
@@ -273,15 +275,15 @@ def download():
     app_ctx = current_app.app_context()
     t = Thread(
         target=_background_backup_task,
-        args=(app_ctx, task_id, creds, items, output_mode, local_mirror_path, 
-              storage_path, zip_name, compression_level, archive_format, filters),
+        args=(app_ctx, task_id, creds, items, output_mode, local_mirror_path,
+              storage_path, zip_name, compression_level, archive_format, filters, processing_mode),
     )
     t.start()
 
     return jsonify({
-        "ok": True, 
-        "task_id": task_id, 
-        "message": "Processo iniciado", 
+        "ok": True,
+        "task_id": task_id,
+        "message": "Processo iniciado",
         "mode": execution_mode
     })
 

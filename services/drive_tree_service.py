@@ -3,7 +3,9 @@ import os
 import time
 import threading
 import concurrent.futures
+import random
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 from .drive_filters import safe_name, file_passes_filters, extract_size_bytes
 from .progress_service import sync_task_to_db, update_progress
@@ -11,30 +13,56 @@ from .progress_service import sync_task_to_db, update_progress
 
 _lock = threading.Lock()
 
+# Configuração de alta performance
+MAX_MAPPING_WORKERS = 20  # Threads de mapeamento
+RETRY_LIMIT = 5           # Tentativas em caso de erro 403/500
+
 
 def check_status_pause_cancel(progress_dict, task_id):
     """
     Verifica se a tarefa foi cancelada ou pausada.
-    Se PAUSADA: entra em loop de sleep até ser resumida.
-    Se CANCELADA: lança exceção.
     """
     if not progress_dict or not task_id:
         return
 
-    # Loop de pausa
     while True:
-        # Acessamos o dict diretamente
         info = progress_dict.get(task_id, {})
-        
         if info.get("canceled"):
             raise Exception("Cancelado pelo usuário")
-        
+
         if info.get("paused"):
-            time.sleep(1) # Dorme 1s e verifica de novo
+            time.sleep(1)
             continue
-        
-        # Se não está pausado nem cancelado, sai do loop e continua o trabalho
+
         break
+
+
+def exponential_backoff(func):
+    """Decorador para tentar novamente em caso de Rate Limit (403/429)."""
+    def wrapper(*args, **kwargs):
+        delay = 1
+        for i in range(RETRY_LIMIT):
+            try:
+                return func(*args, **kwargs)
+            except HttpError as e:
+                # Erros de cota ou temporários do servidor
+                if e.resp.status in [403, 429, 500, 502, 503]:
+                    if i == RETRY_LIMIT - 1:
+                        raise e
+                    sleep_time = delay + random.uniform(0, 1)
+                    print(f"Rate Limit/Erro API ({e.resp.status}). Tentando em {sleep_time:.2f}s...")
+                    time.sleep(sleep_time)
+                    delay *= 2  # Backoff exponencial
+                else:
+                    raise e
+            except Exception as e:
+                raise e
+    return wrapper
+
+
+@exponential_backoff
+def safe_list_execute(request_obj):
+    return request_obj.execute()
 
 
 def list_children(service, parent_id: str, include_files: bool):
@@ -42,13 +70,14 @@ def list_children(service, parent_id: str, include_files: bool):
     page_token = None
     while True:
         try:
-            results = service.files().list(
+            req = service.files().list(
                 q=f"'{parent_id}' in parents and trashed = false",
                 fields="nextPageToken, files(id, name, mimeType)",
                 pageToken=page_token,
                 pageSize=1000,
                 spaces="drive",
-            ).execute()
+            )
+            results = safe_list_execute(req)
         except Exception as e:
             print(f"Erro ao listar filhos de {parent_id}: {e}")
             break
@@ -70,53 +99,40 @@ def list_children(service, parent_id: str, include_files: bool):
 
 
 def get_children(creds, parent_id: str, include_files: bool):
-    service = build("drive", "v3", credentials=creds)
+    service = build("drive", "v3", credentials=creds, cache_discovery=False)
     return list_children(service, parent_id, include_files)
 
 
 def get_file_metadata(creds, file_id: str) -> dict:
-    service = build("drive", "v3", credentials=creds)
-    meta = service.files().get(
+    service = build("drive", "v3", credentials=creds, cache_discovery=False)
+    req = service.files().get(
         fileId=file_id,
         fields="id,name,mimeType,size,createdTime,modifiedTime,webViewLink,iconLink,thumbnailLink",
-    ).execute()
+    )
+    meta = safe_list_execute(req)
     return meta
 
 
 def get_ancestors_path(creds, target_id: str) -> list:
-    """
-    Retorna uma lista de IDs [root, folderA, folderB, target_id]
-    representando o caminho da raiz até o item alvo.
-    """
     service = build("drive", "v3", credentials=creds, cache_discovery=False)
     path_ids = []
     current_id = target_id
-    
-    # Limite de segurança para evitar loops infinitos (ex: atalhos cíclicos ou erros)
+
     for _ in range(50):
-        if not current_id:
-            break
-            
+        if not current_id: break
         path_ids.insert(0, current_id)
-        
-        if current_id == 'root':
-            break
-            
+        if current_id == 'root': break
+
         try:
-            # Obtém apenas os pais do arquivo atual
-            f = service.files().get(fileId=current_id, fields="parents").execute()
+            req = service.files().get(fileId=current_id, fields="parents")
+            f = safe_list_execute(req)
             parents = f.get('parents')
-            
-            if parents:
-                # O Drive permite múltiplos pais, mas para árvore hierárquica seguimos o primeiro
-                current_id = parents[0]
-            else:
-                # Se não tem pais, pode ser compartilhado ou órfão, paramos aqui
-                break
+            if parents: current_id = parents[0]
+            else: break
         except Exception as e:
             print(f"Erro ao resolver caminho para {current_id}: {e}")
             break
-            
+
     return path_ids
 
 
@@ -128,23 +144,24 @@ def _worker_process_folder(
     progress_dict,
     task_id,
 ):
+    # Cria serviço local para a thread para thread-safety e performance
     service = build("drive", "v3", credentials=creds, cache_discovery=False)
     local_files = []
     subfolders_to_scan = []
     page_token = None
 
     while True:
-        # Ponto de checagem: Pausa/Cancelamento
         check_status_pause_cancel(progress_dict, task_id)
 
         try:
-            results = service.files().list(
+            req = service.files().list(
                 q=f"'{folder_id}' in parents and trashed = false",
                 fields="nextPageToken, files(id, name, mimeType, createdTime, modifiedTime, size)",
                 pageToken=page_token,
                 pageSize=1000,
                 spaces="drive",
-            ).execute()
+            )
+            results = safe_list_execute(req)
         except Exception as e:
             update_progress(task_id, {"history": [f"ERRO ao ler pasta {base_path}: {e}"]})
             return [], []
@@ -162,10 +179,10 @@ def _worker_process_folder(
             else:
                 if not file_passes_filters(f, filters):
                     continue
-                
+
                 rel_path = os.path.join(base_path, safe_name(name))
                 size_bytes = extract_size_bytes(f)
-                
+
                 local_files.append({
                     "id": file_id,
                     "name": name,
@@ -198,24 +215,23 @@ def build_files_list_for_items(
     all_files_list: list[dict] = []
     changes_since_sync = 0
 
-    # Inicializa status
     if progress_dict is not None and task_id is not None:
         update_progress(task_id, {
             "phase": "mapeando",
             "files_found": 0,
             "files_total": 0,
             "bytes_found": 0,
-            "message": "Iniciando mapeamento paralelo...",
-            "history": ["Iniciando mapeamento (Multi-thread)..."]
+            "message": f"Iniciando mapeamento ultra-rápido ({MAX_MAPPING_WORKERS} threads)...",
+            "history": ["Iniciando mapeamento otimizado..."]
         })
         sync_task_to_db(task_id)
 
     initial_folders = []
 
-    # 1. Processa itens raiz (seleção inicial)
+    # 1. Processa itens raiz
     for it in items:
         check_status_pause_cancel(progress_dict, task_id)
-        
+
         it_id = it.get("id")
         it_name = it.get("name") or "item"
         it_type = it.get("type", "file")
@@ -225,10 +241,11 @@ def build_files_list_for_items(
             initial_folders.append((it_id, root_prefix))
         else:
             try:
-                meta = service_main.files().get(
+                req = service_main.files().get(
                     fileId=it_id,
                     fields="id, name, mimeType, createdTime, modifiedTime, size",
-                ).execute()
+                )
+                meta = safe_list_execute(req)
 
                 if file_passes_filters(meta, filters):
                     fname = meta["name"]
@@ -245,30 +262,29 @@ def build_files_list_for_items(
                     }
                     all_files_list.append(obj)
 
+                    # Atualização inicial
                     with _lock:
                         if progress_dict and task_id:
                             info = progress_dict[task_id]
                             info["files_found"] = info.get("files_found", 0) + 1
                             info["bytes_found"] = info.get("bytes_found", 0) + size_bytes
-                            # Adiciona histórico sem truncar
-                            hist = info.get("history", [])
-                            hist.append(f"Mapeado: {rel_path}")
-                            info["history"] = hist 
+                            # Feedback visual imediato
+                            info["message"] = f"Mapeando: {info['files_found']} itens encontrados..."
                             progress_dict[task_id] = info
                             changes_since_sync += 1
 
-                    if progress_dict and task_id and changes_since_sync >= 25:
+                    if progress_dict and task_id and changes_since_sync >= 50:
                         sync_task_to_db(task_id)
                         changes_since_sync = 0
 
             except Exception as e:
                 print(f"Erro item raiz {it_name}: {e}")
 
-    # 2. Processa Subpastas (ThreadPool)
-    MAX_WORKERS = 8
-    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+    # 2. Processa Subpastas (ThreadPool Otimizado)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_MAPPING_WORKERS) as executor:
         future_to_folder = {}
 
+        # Submete iniciais
         for fid, fpath in initial_folders:
             f = executor.submit(
                 _worker_process_folder, creds, fid, fpath, filters, progress_dict, task_id
@@ -276,7 +292,6 @@ def build_files_list_for_items(
             future_to_folder[f] = fpath
 
         while future_to_folder:
-            # Checagem de status na thread principal do loop
             check_status_pause_cancel(progress_dict, task_id)
 
             done, _ = concurrent.futures.wait(
@@ -294,21 +309,32 @@ def build_files_list_for_items(
                             all_files_list.extend(found_files)
                             if progress_dict and task_id:
                                 info = progress_dict[task_id]
-                                info["files_found"] = info.get("files_found", 0) + len(found_files)
+                                count_now = info.get("files_found", 0) + len(found_files)
+                                info["files_found"] = count_now
+                                
                                 total_bytes = sum(x["size_bytes"] for x in found_files)
                                 info["bytes_found"] = info.get("bytes_found", 0) + total_bytes
+
+                                # -- AQUI ESTÁ A ATUALIZAÇÃO DO CONTADOR VISUAL NA MENSAGEM --
+                                info["message"] = f"Mapeando: {count_now} itens encontrados..."
                                 
+                                # Histórico
                                 hist = info.get("history", [])
-                                for ff in found_files:
-                                    hist.append(f"Mapeado: {ff['rel_path']}")
+                                if len(found_files) < 5:
+                                    for ff in found_files:
+                                        hist.append(f"Mapeado: {ff['rel_path']}")
+                                else:
+                                    hist.append(f"Mapeados +{len(found_files)} arquivos em {fpath_orig}")
                                 info["history"] = hist
+                                
                                 progress_dict[task_id] = info
                                 changes_since_sync += 1
 
-                        if progress_dict and task_id and changes_since_sync >= 25:
+                        if progress_dict and task_id and changes_since_sync >= 50:
                             sync_task_to_db(task_id)
                             changes_since_sync = 0
 
+                    # Adiciona novas subpastas para processamento IMEDIATO
                     for sub_id, sub_path in found_subfolders:
                         new_future = executor.submit(
                             _worker_process_folder, creds, sub_id, sub_path, filters, progress_dict, task_id
@@ -321,13 +347,9 @@ def build_files_list_for_items(
                         for pending in future_to_folder:
                             pending.cancel()
                         raise exc
-                    
+
                     update_progress(task_id, {"history": [f"ERRO processar pasta {fpath_orig}: {exc}"]})
                     changes_since_sync += 1
-
-                    if progress_dict and task_id and changes_since_sync >= 10:
-                        sync_task_to_db(task_id)
-                        changes_since_sync = 0
 
     # Finalização
     if progress_dict is not None and task_id is not None:

@@ -1761,25 +1761,43 @@ input[type="checkbox"]:checked:hover {
                     return;
                 }
 
-                list.innerHTML = tasks.map(t => `
+                list.innerHTML = tasks.map(t => {
+                    // LÓGICA DE EXIBIÇÃO DO CONTADOR NO TÍTULO
+                    let phaseDisplay = t.phase.toUpperCase();
+                    let isMapping = false;
+
+                    if (t.phase === 'mapeando') {
+                        isMapping = true;
+                        // Se estiver mapeando, mostra a contagem
+                        if (t.files_found && t.files_found > 0) {
+                            phaseDisplay = `MAPEANDO (${t.files_found})`;
+                        }
+                    }
+
+                    // Classe especial para barra de progresso durante o mapeamento
+                    let progressClass = '';
+                    if (isMapping) progressClass = 'mapping';
+                    else if (t.paused) progressClass = 'paused';
+
+                    return `
                     <div class="task-item">
                         <div class="task-info">
-                            <span>${t.phase.toUpperCase()}</span>
+                            <span>${phaseDisplay}</span>
                             <span style="font-weight:normal; font-size:11px; color:#999;">${t.id.split('-').pop()}</span>
                         </div>
                         <div class="task-meta">${t.message}</div>
                         <div class="task-progress-bg">
-                            <div class="task-progress-fill ${t.paused ? 'paused' : ''}" style="width: ${t.percent}%"></div>
+                            <div class="task-progress-fill ${progressClass}" style="width: ${t.percent}%"></div>
                         </div>
                         <div class="task-controls">
                             ${!t.paused ?
-                        `<button class="btn-mini pause" onclick="apiTaskAction('${t.id}', 'pause')">PAUSAR</button>` :
-                        `<button class="btn-mini resume" onclick="apiTaskAction('${t.id}', 'resume')">RESUMIR</button>`
-                    }
+                            `<button class="btn-mini pause" onclick="apiTaskAction('${t.id}', 'pause')">PAUSAR</button>` :
+                            `<button class="btn-mini resume" onclick="apiTaskAction('${t.id}', 'resume')">RESUMIR</button>`
+                        }
                             <button class="btn-mini cancel" onclick="apiTaskAction('${t.id}', 'cancel')">CANCELAR</button>
                         </div>
                     </div>
-                `).join('');
+                `}).join('');
             });
         }
 
