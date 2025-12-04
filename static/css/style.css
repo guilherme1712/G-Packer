@@ -25,7 +25,8 @@ body {
     max-width: 1320px;
     padding: 24px;
     display: grid;
-    grid-template-columns: 280px minmax(0, 1fr);
+    /* AGORA 3 COLUNAS: ESQUERDA (FAVORITOS), CENTRO (ÁRVORE), DIREITA (DETALHES) */
+    grid-template-columns: 280px minmax(0, 1fr) 320px;
     gap: 20px;
     align-items: flex-start;
     position: relative;
@@ -202,6 +203,11 @@ body {
 }
 
 .main-column {
+    min-width: 0;
+}
+
+/* NOVO: COLUNA DA DIREITA (DETALHES / ATIVIDADE) */
+.details-column {
     min-width: 0;
 }
 
@@ -732,5 +738,6 @@ small, .form-hint {
     .page { grid-template-columns: 1fr; }
     .side-menu { order: 2; }
     .main-column { order: 1; }
+    .details-column { order: 3; margin-top: 16px; }
     .modal-grid { grid-template-columns: 1fr; }
 }

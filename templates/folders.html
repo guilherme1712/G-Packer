@@ -7,7 +7,9 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        /* Estilos inline adicionais para os novos elementos da UI */
+        /* =========================================
+           ESTILOS ORIGINAIS (FOLDERS COMPLETO)
+           ========================================= */
         .radio-group-vertical {
             display: flex;
             flex-direction: column;
@@ -105,7 +107,7 @@
             background: #f0f0f0;
         }
 
-        /* Estilos específicos para o Task Manager Dropdown (adaptado do log-panel) */
+        /* Task Manager Dropdown */
         .task-dropdown-panel {
             position: absolute;
             top: 45px;
@@ -113,15 +115,16 @@
             width: 350px;
             background: white;
             border: 1px solid #ccc;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
             border-radius: 8px;
             z-index: 1000;
-            display: none; /* Controlado via JS */
+            display: none;
         }
+
         .task-dropdown-panel.show {
             display: block;
         }
-        
+
         .task-manager-body {
             max-height: 300px;
             overflow-y: auto;
@@ -136,7 +139,7 @@
         .task-item:last-child {
             border-bottom: none;
         }
-        
+
         .task-empty-state {
             padding: 20px;
             text-align: center;
@@ -206,7 +209,7 @@
             background: #f44336;
         }
 
-        /* Estilos para a lista de itens no perfil */
+        /* Perfis */
         .profile-items-preview {
             margin-top: 8px;
             padding: 6px;
@@ -216,6 +219,7 @@
             max-height: 100px;
             overflow-y: auto;
         }
+
         .profile-items-title {
             font-size: 11px;
             font-weight: 700;
@@ -224,6 +228,7 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
+
         .profile-item-row {
             font-size: 11px;
             color: #666;
@@ -235,11 +240,12 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+
         .profile-item-row:last-child {
             margin-bottom: 0;
         }
 
-        /* Ajuste visual favoritos */
+        /* Favoritos */
         .favorite-item {
             display: block;
             width: 100%;
@@ -249,6 +255,206 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+
+        .tree-row {
+            cursor: pointer;
+        }
+
+        .tree-row:hover {
+            background-color: #f0f0f0;
+        }
+
+        /* =========================================
+           NOVOS ESTILOS (INTEGRAÇÃO DE FOLDERS.HTML)
+           ABAS E ATIVIDADES
+           ========================================= */
+        .panel-tabs {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 10px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            background: none;
+            border: none;
+            padding: 8px 0;
+            font-size: 13px;
+            font-weight: 600;
+            color: #666;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .tab-btn:hover {
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .tab-btn.active {
+            color: #1a73e8;
+            border-bottom-color: #1a73e8;
+        }
+
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.2s;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        /* Lista de Atividade */
+        .activity-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .activity-item {
+            display: flex;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .act-icon {
+            width: 24px;
+            height: 24px;
+            background: #e8f0fe;
+            color: #1a73e8;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+
+        .act-details {
+            flex: 1;
+        }
+
+        .act-action {
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .act-meta {
+            font-size: 11px;
+            margin-top: 2px;
+        }
+
+        .act-date {
+            font-size: 10px;
+            color: #999;
+            text-align: right;
+            min-width: 60px;
+        }
+
+        .preview-empty-state {
+            text-align: center;
+            padding: 20px;
+            color: #888;
+            font-size: 13px;
+            font-style: italic;
+        }
+
+        /* =========================================
+           NOVO: SCROLL PARA O PAINEL DE PREVIEW
+           ========================================= */
+        .tab-scrollable-area {
+            max-height: 350px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 5px;
+            scrollbar-width: thin;
+            scrollbar-color: #bbb #f1f1f1;
+        }
+
+        .tab-scrollable-area::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .tab-scrollable-area::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+
+        .tab-scrollable-area::-webkit-scrollbar-thumb {
+            background: #bbb;
+            border-radius: 3px;
+        }
+
+        .tab-scrollable-area::-webkit-scrollbar-thumb:hover {
+            background: #999;
+        }
+
+        /* Remove o estilo padrão feio do navegador */
+input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    background-color: #fff;
+    margin: 0;
+    font: inherit;
+    color: currentColor;
+    width: 1.15em;
+    height: 1.15em;
+    border: 2px solid #757575; /* Borda cinza suave */
+    border-radius: 4px; /* Cantos levemente arredondados */
+    display: grid;
+    place-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+}
+
+/* Estado Marcado (Checked) */
+input[type="checkbox"]:checked {
+    background-color: #1a73e8; /* Azul Google */
+    border-color: #1a73e8;
+}
+
+/* O "V" (Checkmark) */
+input[type="checkbox"]::before {
+    content: "";
+    width: 0.65em;
+    height: 0.65em;
+    transform: scale(0);
+    transition: 120ms transform ease-in-out;
+    box-shadow: inset 1em 1em white; /* Cor do checkmark */
+    transform-origin: center;
+    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+
+input[type="checkbox"]:checked::before {
+    transform: scale(1);
+}
+
+/* Estado Hover (Ao passar o mouse) */
+input[type="checkbox"]:hover {
+    border-color: #1a73e8;
+    background-color: #f0f7ff;
+}
+
+input[type="checkbox"]:checked:hover {
+    background-color: #1557b0; /* Azul um pouco mais escuro */
+}
     </style>
 </head>
 
@@ -283,20 +489,22 @@
                         Baixar itens selecionados
                     </button>
 
-                    <!-- BOTÃO DE TAREFAS (TASK MANAGER) - NOVO -->
                     <div class="notification-wrapper" style="margin-left: 8px;">
                         <button class="notification-btn" onclick="toggleTaskPanel()" title="Gerenciador de Tarefas">
-                            <!-- Ícone de Lista/Tarefas -->
-                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2"
+                                fill="none" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path>
                             </svg>
                             <div id="task-badge" class="notification-badge hidden">0</div>
                         </button>
 
                         <div id="task-manager-panel" class="task-dropdown-panel">
-                            <div class="log-header" style="background: #f8f9fa; border-bottom: 1px solid #eee; padding: 10px 15px; border-radius: 8px 8px 0 0; display:flex; justify-content:space-between; align-items:center;">
-                                <span style="font-weight:600; font-size:14px; color:#333;">Tarefas de Segundo Plano</span>
-                                <button onclick="toggleTaskPanel()" class="btn-ghost btn-xs" style="padding: 2px 6px;">✕</button>
+                            <div class="log-header"
+                                style="background: #f8f9fa; border-bottom: 1px solid #eee; padding: 10px 15px; border-radius: 8px 8px 0 0; display:flex; justify-content:space-between; align-items:center;">
+                                <span style="font-weight:600; font-size:14px; color:#333;">Tarefas de Segundo
+                                    Plano</span>
+                                <button onclick="toggleTaskPanel()" class="btn-ghost btn-xs"
+                                    style="padding: 2px 6px;">✕</button>
                             </div>
                             <div id="task-manager-list" class="task-manager-body">
                                 <div class="task-empty-state">Nenhuma tarefa ativa no momento.</div>
@@ -304,11 +512,11 @@
                         </div>
                     </div>
 
-                    <!-- BOTÃO DE LOGS (Já existente) -->
                     <div class="notification-wrapper">
-                        <button class="notification-btn" id="notification-btn" onclick="toggleLogPanel()" title="Logs de Atividade">
-                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"
-                                stroke-linecap="round" stroke-linejoin="round">
+                        <button class="notification-btn" id="notification-btn" onclick="toggleLogPanel()"
+                            title="Logs de Atividade">
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2"
+                                fill="none" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                                 <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                             </svg>
@@ -351,6 +559,7 @@
         {% endif %}
         {% endwith %}
 
+        <!-- COLUNA ESQUERDA (FAVORITOS / MODELOS) -->
         <aside class="side-menu">
             <div class="favorites-box">
                 <div class="favorites-header">
@@ -371,34 +580,9 @@
                     Nenhum perfil salvo.
                 </div>
             </div>
-
-            <section class="preview-panel" id="preview-panel">
-                <h2 class="preview-title">Detalhes</h2>
-                <p id="preview-empty" class="preview-empty">
-                    Clique em um arquivo para ver detalhes.
-                </p>
-
-                <div id="preview-content" class="preview-content hidden">
-                    <div class="preview-name" id="preview-name"></div>
-
-                    <div class="preview-meta">
-                        <div><span class="label">Tipo:</span> <span id="preview-type"></span></div>
-                        <div><span class="label">Tamanho:</span> <span id="preview-size"></span></div>
-                        <div><span class="label">Modificado em:</span> <span id="preview-modified"></span></div>
-                    </div>
-
-                    <div id="preview-thumbnail-wrapper" class="preview-thumbnail-wrapper hidden">
-                        <img id="preview-thumbnail" alt="Miniatura do arquivo">
-                    </div>
-
-                    <a id="preview-open-link" href="#" target="_blank" class="btn-link disabled"
-                        rel="noopener noreferrer">
-                        Abrir no Google Drive
-                    </a>
-                </div>
-            </section>
         </aside>
 
+        <!-- COLUNA CENTRAL (ÁRVORE DE PASTAS) -->
         <main class="main-column">
             <div class="card main-card">
                 <div class="breadcrumb-box">
@@ -412,9 +596,59 @@
                 </div>
             </div>
         </main>
+
+        <!-- NOVA COLUNA DIREITA (DETALHES / ATIVIDADE) -->
+        <aside class="details-column">
+            <section class="preview-panel" id="preview-panel" data-current-id="">
+                <h2 class="preview-title" id="preview-main-title">Informações</h2>
+
+                <p id="preview-empty" class="preview-empty">
+                    Clique em um arquivo ou pasta para ver informações.
+                </p>
+
+                <div id="preview-wrapper" class="hidden">
+                    <div class="panel-tabs">
+                        <button id="tab-btn-details" class="tab-btn active"
+                            onclick="switchTab('details')">Detalhes</button>
+                        <button id="tab-btn-activity" class="tab-btn" onclick="switchTab('activity')">Atividade</button>
+                    </div>
+
+                    <div id="tab-details" class="tab-content active">
+                        <div id="details-content-inner" class="tab-scrollable-area">
+
+                            <div class="preview-meta">
+                                <div><span class="label">Tipo:</span> <span id="preview-type"></span></div>
+                                <div><span class="label">Tamanho:</span> <span id="preview-size"></span></div>
+                                <div><span class="label">Modificado em:</span> <span id="preview-modified"></span></div>
+                            </div>
+
+                            <div id="preview-thumbnail-wrapper" class="preview-thumbnail-wrapper hidden">
+                                <img id="preview-thumbnail" alt="Miniatura do arquivo" referrerpolicy="no-referrer">
+                            </div>
+
+                            <a id="preview-open-link" href="#" target="_blank" class="btn-link disabled"
+                                rel="noopener noreferrer">
+                                Abrir no Google Drive
+                            </a>
+                        </div>
+
+                        <div id="details-folder-message" class="preview-empty-state hidden">
+                            Detalhes técnicos simplificados para pastas.
+                        </div>
+                    </div>
+
+                    <div id="tab-activity" class="tab-content">
+                        <div id="activity-loading" class="preview-empty-state hidden">Carregando atividade...</div>
+
+                        <ul id="activity-list" class="activity-list tab-scrollable-area">
+                        </ul>
+                    </div>
+                </div>
+            </section>
+        </aside>
+
     </div>
 
-    <!-- PROGRESSO FLUTUANTE (FOREGROUND) - APENAS PARA DOWNLOAD IMEDIATO -->
     <div id="progress-container" class="progress-container progress-floating hidden">
         <div class="progress-header">
             <span id="progress-phase">Processando...</span>
@@ -432,7 +666,6 @@
         </div>
     </div>
 
-    <!-- MODAL DE DOWNLOAD -->
     <div id="modal-backdrop" class="modal-backdrop hidden">
         <div class="modal">
             <h2 id="modal-title">Baixar</h2>
@@ -553,7 +786,6 @@
                         </div>
                     </div>
 
-                    <!-- NOVA SEÇÃO: CAMPOS PARA SALVAR MODELO -->
                     <div class="form-section">
                         <div class="form-section-title">Salvar como modelo</div>
 
@@ -605,15 +837,18 @@
         let lastLogCount = 0;
         let isPausedForeground = false;
 
+        // CACHE DE METADADOS EM MEMÓRIA
+        const itemCache = new Map();
+
         // =========================================================
         // UTILITÁRIOS
         // =========================================================
 
         function humanSize(bytes) {
-            if (!bytes || isNaN(bytes)) return '—';
+            if (bytes === undefined || bytes === null || isNaN(bytes)) return '—';
             const units = ['B', 'KB', 'MB', 'GB', 'TB'];
             let i = 0;
-            let v = bytes;
+            let v = parseInt(bytes);
             while (v >= 1024 && i < units.length - 1) {
                 v /= 1024;
                 i++;
@@ -641,12 +876,59 @@
         }
 
         // =========================================================
-        // PAINEL DE TAREFAS (NOVO DROPDOWN)
+        // LÓGICA DE ABAS (TABS)
+        // =========================================================
+
+        function switchTab(tabName) {
+            // Remove active de todos
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            // Adiciona active no selecionado
+            document.getElementById(`tab-btn-${tabName}`).classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+        }
+
+        // =========================================================
+        // LÓGICA DE CACHE
+        // =========================================================
+
+        function updateItemCache(items, parentId) {
+            let totalBytes = 0;
+            let hasFiles = false;
+
+            items.forEach(item => {
+                // Guarda metadados completos no cache
+                itemCache.set(item.id, item);
+
+                // Soma tamanhos para estimativa da pasta pai
+                if (item.size) {
+                    totalBytes += parseInt(item.size);
+                    hasFiles = true;
+                }
+            });
+
+            // Se temos um pai conhecido no cache, atualizamos a estimativa dele
+            if (parentId && itemCache.has(parentId)) {
+                const parent = itemCache.get(parentId);
+                parent.estimatedSize = totalBytes;
+                parent.hasCalculatedSize = true;
+                itemCache.set(parentId, parent);
+
+                // Se o painel de detalhes estiver mostrando este pai agora, atualiza a view
+                const currentPreviewId = document.getElementById('preview-panel').dataset.currentId;
+                if (currentPreviewId === parentId) {
+                    showItemPreview(parent, null); // null pois não precisamos do li para refresh
+                }
+            }
+        }
+
+        // =========================================================
+        // PAINEL DE TAREFAS
         // =========================================================
         function toggleTaskPanel() {
             const panel = document.getElementById('task-manager-panel');
             panel.classList.toggle('show');
-            // Fechar logs se estiver aberto, para não sobrepor
             document.getElementById('log-panel').classList.add('hidden');
         }
 
@@ -657,10 +939,7 @@
             const panel = document.getElementById('log-panel');
             if (panel.classList.contains('hidden')) {
                 panel.classList.remove('hidden');
-                // Fechar tasks se estiver aberto
                 document.getElementById('task-manager-panel').classList.remove('show');
-
-                // Reseta badge de log
                 const badge = document.getElementById('notification-badge');
                 badge.classList.add('hidden');
                 badge.innerText = '0';
@@ -689,9 +968,7 @@
                 return;
             }
 
-            // Exibe os 50 mais recentes na interface
             const recent = history.slice().reverse().slice(0, 50);
-
             let html = '';
             recent.forEach(msg => {
                 let icon = '•';
@@ -737,7 +1014,7 @@
         }
 
         // =========================================================
-        // FAVORITOS (AGORA INTEGRADO AO DB)
+        // FAVORITOS
         // =========================================================
 
         function loadFavorites() {
@@ -746,13 +1023,11 @@
                 .then(data => {
                     favorites = data.favorites || [];
                     renderFavorites();
-                    
-                    // Atualiza ícones na árvore se ela já estiver carregada
                     favorites.forEach(fav => {
                         const node = document.querySelector(`.tree-node[data-id="${fav.id}"]`);
-                        if(node) {
+                        if (node) {
                             const btn = node.querySelector('.fav-btn');
-                            if(btn) btn.classList.add('fav-on');
+                            if (btn) btn.classList.add('fav-on');
                         }
                     });
                 })
@@ -780,26 +1055,18 @@
                 const btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'favorite-item';
-                
-                // MUDANÇA: Exibir apenas o NOME no botão
-                btn.textContent = '⭐ ' + fav.name; 
-                
-                // MUDANÇA: Exibir o CAMINHO COMPLETO no tooltip
-                btn.title = fav.path || fav.name; 
-
+                btn.textContent = '⭐ ' + fav.name;
+                btn.title = fav.path || fav.name;
                 btn.addEventListener('click', () => {
                     focusNodeById(fav.id);
                 });
-                
                 box.appendChild(btn);
             });
         }
 
         function toggleFavorite(item, li, favBtn) {
             const path = computeBreadcrumb(li);
-            
             if (isFavorite(item.id)) {
-                // REMOVER (DELETE API)
                 fetch('/api/favorites/' + encodeURIComponent(item.id), { method: 'DELETE' })
                     .then(r => r.json())
                     .then(data => {
@@ -813,12 +1080,11 @@
                     })
                     .catch(console.error);
             } else {
-                // ADICIONAR (POST API)
                 const payload = {
-                    id: item.id, 
-                    name: item.name, 
+                    id: item.id,
+                    name: item.name,
                     path: path,
-                    type: item.type 
+                    type: item.type
                 };
 
                 fetch('/api/favorites', {
@@ -826,36 +1092,38 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.ok) {
-                        // Atualiza lista local para refletir imediatamente
-                        // (ou poderia recarregar loadFavorites(), mas push é mais rápido)
-                        const exists = favorites.find(f => f.id === item.id);
-                        if (!exists) favorites.push(payload);
-                        
-                        favBtn.classList.add('fav-on');
-                        renderFavorites();
-                    } else {
-                        alert("Erro ao salvar favorito.");
-                    }
-                })
-                .catch(console.error);
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.ok) {
+                            const exists = favorites.find(f => f.id === item.id);
+                            if (!exists) favorites.push(payload);
+                            favBtn.classList.add('fav-on');
+                            renderFavorites();
+                        } else {
+                            alert("Erro ao salvar favorito.");
+                        }
+                    })
+                    .catch(console.error);
             }
         }
 
         // -------------------------------------------------------------
-        // NOVA LÓGICA DE NAVEGAÇÃO PROFUNDA (DEEP LINKING)
+        // NAVEGAÇÃO PROFUNDA (DEEP LINKING)
         // -------------------------------------------------------------
         async function focusNodeById(targetId) {
-            // 1. Tenta achar imediatamente
             let node = document.querySelector(`.tree-node[data-id="${targetId}"]`);
             if (node) {
                 revealNode(node);
+                // Força update do preview ao focar via favorito
+                const item = {
+                    id: node.dataset.id,
+                    name: node.dataset.name,
+                    type: node.dataset.type
+                };
+                showItemPreview(item, node);
                 return;
             }
 
-            // 2. Se não achou, precisamos do caminho completo (ancestrais)
             const originalTitle = document.title;
             document.title = "Localizando pasta...";
             document.body.style.cursor = 'wait';
@@ -863,17 +1131,16 @@
             try {
                 const resp = await fetch(`/api/path/${targetId}`);
                 const data = await resp.json();
-                
+
                 if (!data.path || !Array.isArray(data.path)) {
                     alert("Não foi possível localizar o caminho desta pasta.");
                     return;
                 }
 
-                const pathIds = data.path; 
-                
+                const pathIds = data.path;
+
                 for (const id of pathIds) {
                     let currentNode = document.querySelector(`.tree-node[data-id="${id}"]`);
-                    
                     if (currentNode) {
                         if (id !== targetId) {
                             await ensureNodeExpanded(currentNode);
@@ -886,6 +1153,12 @@
                 node = document.querySelector(`.tree-node[data-id="${targetId}"]`);
                 if (node) {
                     revealNode(node);
+                    const item = {
+                        id: node.dataset.id,
+                        name: node.dataset.name,
+                        type: node.dataset.type
+                    };
+                    showItemPreview(item, node);
                 } else {
                     alert("Pasta não encontrada após expansão.");
                 }
@@ -905,7 +1178,6 @@
                     resolve();
                     return;
                 }
-
                 const toggle = node.querySelector(':scope > .tree-row .tree-toggle');
                 if (toggle) {
                     if (node.dataset.loaded === 'true') {
@@ -914,11 +1186,9 @@
                     } else {
                         const parentId = node.dataset.id;
                         const childrenUl = node.querySelector(':scope > .tree-children');
-                        
                         node.classList.remove('collapsed');
                         childrenUl.style.display = 'block';
                         toggle.textContent = '▾';
-                        
                         loadChildren(parentId, childrenUl, node, toggle).then(() => {
                             resolve();
                         });
@@ -941,7 +1211,7 @@
                 }
                 current = current.parentElement.closest('.tree-node');
             }
-            
+
             setTimeout(() => {
                 node.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 node.classList.add('tree-node-highlight');
@@ -950,9 +1220,8 @@
         }
 
         // =========================================================
-        // PERFIS DE BACKUP (Profiles)
+        // PERFIS DE BACKUP
         // =========================================================
-
         function applyZipPattern(pattern) {
             if (!pattern) pattern = "backup-{YYYYMMDD}";
             const now = new Date();
@@ -1011,10 +1280,9 @@
                     || (pattern ? applyZipPattern(pattern) : 'backup');
                 subtitle.textContent = `Arquivo: ${displayName}`;
 
-                if(profile.items && profile.items.length > 0) {
+                if (profile.items && profile.items.length > 0) {
                     const itemsContainer = document.createElement('div');
                     itemsContainer.className = 'profile-items-preview';
-                    
                     const header = document.createElement('div');
                     header.className = 'profile-items-title';
                     header.textContent = `Itens (${profile.items.length})`;
@@ -1095,7 +1363,6 @@
             const localPath = document.getElementById('local_mirror_path')?.value || '';
             const archiveFormat = document.getElementById('archive_format')?.value || 'zip';
             const compressionLevel = document.getElementById('compression_level')?.value || 'normal';
-
             const execRadio = document.querySelector('input[name="execution_mode"]:checked');
             const executionMode = execRadio ? execRadio.value : 'immediate';
 
@@ -1299,20 +1566,13 @@
                 alert("Selecione pelo menos um item.");
                 return;
             }
-
-            // RESET DO FORMULÁRIO (Novo Requisito)
             document.getElementById('download-form').reset();
             document.getElementById('profile-save-feedback').innerText = '';
-            document.getElementById('modal-title').innerText = "Baixar"; // Reset título se foi alterado por perfil
-
-            // Popula os itens
+            document.getElementById('modal-title').innerText = "Baixar";
             document.getElementById('items_json').value = JSON.stringify(selectedItems);
             const subEl = document.getElementById('modal-subtitle');
             subEl.innerText = `${selectedItems.length} item(ns) selecionado(s).`;
-
-            // Aplica sugestão padrão (Data)
             applySuggestion('date');
-
             updateOutputModeUI();
             document.getElementById('modal-backdrop').classList.remove('hidden');
         }
@@ -1322,7 +1582,6 @@
             document.getElementById('suggestion-menu').classList.remove('show');
         }
 
-        // LÓGICA PRINCIPAL DE EXECUÇÃO
         function startDownloadProcess() {
             const form = document.getElementById('download-form');
             const formData = new FormData(form);
@@ -1335,7 +1594,6 @@
             });
 
             closeModal();
-
             const executionMode = payload.execution_mode || 'immediate';
 
             if (executionMode === 'background') {
@@ -1356,8 +1614,6 @@
                             currentTaskId = data.task_id;
                             startPollingForeground();
                         } else {
-                            // Background será pego pelo poller global
-                            // Força um poll imediato para atualizar o badge
                             pollActiveTasks();
                         }
                     } else {
@@ -1383,7 +1639,6 @@
             document.getElementById('progress-text').innerText = 'Conectando...';
             document.getElementById('btn-pause-fg').innerText = "⏸ Pausar";
             isPausedForeground = false;
-
             lastLogCount = 0;
             document.getElementById('log-list').innerHTML = '<li class="log-empty">Iniciando...</li>';
         }
@@ -1405,7 +1660,6 @@
                         if (data.phase === 'concluido') {
                             clearInterval(progressTimer);
                             document.getElementById('progress-phase').innerText = "CONCLUÍDO";
-
                             if (data.download_url) {
                                 document.getElementById('progress-text').innerText = "Baixando arquivo...";
                                 window.location.href = data.download_url;
@@ -1426,7 +1680,6 @@
         function updateProgressBar(data) {
             let percent = 0;
             const phase = data.phase || 'processando';
-
             if (phase === 'mapeando') {
                 const f = data.files_found || 0;
                 percent = Math.min(20, f * 0.1);
@@ -1441,7 +1694,6 @@
             } else if (phase === 'concluido') {
                 percent = 100;
             }
-
             document.getElementById('progress-bar').style.width = percent + '%';
             document.getElementById('progress-percent').innerText = Math.round(percent) + '%';
             document.getElementById('progress-phase').innerText = phase.toUpperCase();
@@ -1450,7 +1702,6 @@
             }
         }
 
-        // --- CONTROLES DE PAUSA/CANCELAR (Foreground) ---
         function togglePauseForeground() {
             if (!currentTaskId) return;
             const url = isPausedForeground ? `/api/tasks/resume/${currentTaskId}` : `/api/tasks/pause/${currentTaskId}`;
@@ -1465,7 +1716,6 @@
         function cancelTask() {
             if (!currentTaskId) return;
             if (!confirm("Cancelar tarefa?")) return;
-
             fetch('/cancel/' + currentTaskId, { method: 'POST' })
                 .then(r => r.json())
                 .then(() => {
@@ -1473,14 +1723,13 @@
                 });
         }
 
-
         // =========================================================
-        // GERENCIADOR DE TAREFAS (BACKGROUND/GLOBAL) - REFORMULADO
+        // GERENCIADOR DE TAREFAS (BACKGROUND/GLOBAL)
         // =========================================================
         function startActiveTasksPoller() {
             if (activeTasksTimer) clearInterval(activeTasksTimer);
-            activeTasksTimer = setInterval(pollActiveTasks, 2000);
-            pollActiveTasks(); // Chama uma vez imediatamente
+            activeTasksTimer = setInterval(pollActiveTasks, 500);
+            pollActiveTasks();
         }
 
         function pollActiveTasks() {
@@ -1489,7 +1738,6 @@
                 const list = document.getElementById('task-manager-list');
                 const badge = document.getElementById('task-badge');
 
-                // Atualiza o Badge (contador)
                 if (tasks.length > 0) {
                     badge.innerText = tasks.length;
                     badge.classList.remove('hidden');
@@ -1498,7 +1746,6 @@
                     badge.classList.add('hidden');
                 }
 
-                // CORREÇÃO: Preenche o log de notificações com a tarefa mais recente
                 if (!currentTaskId && tasks.length > 0) {
                     const activeId = tasks[0].id;
                     fetch('/progress/' + activeId)
@@ -1509,7 +1756,6 @@
                         .catch(console.error);
                 }
 
-                // Atualiza o conteúdo da lista (o painel em si não é mais ocultado automaticamente)
                 if (tasks.length === 0) {
                     list.innerHTML = '<div class="task-empty-state">Nenhuma tarefa ativa no momento.</div>';
                     return;
@@ -1544,11 +1790,10 @@
             if (action === 'cancel') url = `/cancel/${tid}`;
 
             fetch(url, { method: 'POST' })
-            .then(r => r.json())
-            .then(d => {
-                // Força update imediato da UI
-                pollActiveTasks();
-            });
+                .then(r => r.json())
+                .then(d => {
+                    pollActiveTasks();
+                });
         }
 
 
@@ -1594,10 +1839,11 @@
 
             li.append(row, childrenUl);
 
-            // Eventos
+            // Item reference
             const item = { id: folder.id, name: folder.name, type: 'folder' };
-
             if (isFavorite(item.id)) favBtn.classList.add('fav-on');
+
+            // --- EVENTOS ---
 
             favBtn.onclick = (e) => {
                 e.stopPropagation();
@@ -1610,12 +1856,11 @@
                 propagateSelectionDown(li, checkbox.checked);
             };
 
+            // Clique na linha mostra PREVIEW (Detalhes/Atividade)
             row.onclick = (e) => {
+                // Se clicar nos botões específicos, não faz preview
                 if ([toggleBtn, checkbox, favBtn].includes(e.target)) return;
-                // Clique na linha seleciona/deseleciona
-                checkbox.checked = !checkbox.checked;
-                handleCheckboxChange(checkbox, li, item);
-                propagateSelectionDown(li, checkbox.checked);
+                showItemPreview(item, li);
             };
 
             toggleBtn.onclick = (e) => {
@@ -1642,7 +1887,7 @@
             row.className = 'tree-row';
 
             const spacer = document.createElement('span');
-            spacer.className = 'tree-spacer'; // Espaço onde ficaria o toggle
+            spacer.className = 'tree-spacer';
 
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
@@ -1667,9 +1912,10 @@
                 propagateSelectionUp(li);
             };
 
+            // MODIFICAÇÃO: Renomeado de showFilePreview para showItemPreview
             row.onclick = (e) => {
                 if (e.target === checkbox) return;
-                showFilePreview(item, li);
+                showItemPreview(item, li);
             };
 
             return li;
@@ -1683,12 +1929,14 @@
 
             containerUl.innerHTML = '<li class="tree-node"><div class="tree-row"><span>Carregando...</span></div></li>';
 
-            // AGORA RETORNA A PROMISE PARA PERMITIR EXPANSÃO AUTOMÁTICA
             return fetch(url)
                 .then(r => r.json())
                 .then(data => {
                     containerUl.innerHTML = '';
                     const items = data.items || [];
+
+                    // --- Atualizar Cache Global com os itens carregados ---
+                    updateItemCache(items, parentId);
 
                     if (!items.length) {
                         toggleBtn.textContent = '';
@@ -1727,7 +1975,7 @@
         }
 
         // =========================================================
-        // LÓGICA DE SELEÇÃO E PREVIEW
+        // LÓGICA DE SELEÇÃO
         // =========================================================
 
         function handleCheckboxChange(checkbox, li, item, updateParents = true) {
@@ -1776,14 +2024,12 @@
                 cb.checked = checked;
                 cb.indeterminate = false;
             }
-
             const item = {
                 id: li.dataset.id,
                 name: li.dataset.name,
                 type: li.dataset.type
             };
-            handleCheckboxChange(cb, li, item, false); // não propaga pra cima aqui, pois já estamos descendo
-
+            handleCheckboxChange(cb, li, item, false);
             const children = li.querySelectorAll(':scope > .tree-children > .tree-node');
             children.forEach(c => setNodeCheckedDeep(c, checked));
         }
@@ -1795,7 +2041,6 @@
         function propagateSelectionUp(li) {
             const parent = li.parentElement.closest('.tree-node');
             if (!parent) return;
-
             const childrenCB = parent.querySelectorAll(':scope > .tree-children > .tree-node > .tree-row .select-checkbox');
             const all = Array.from(childrenCB);
             if (!all.length) return;
@@ -1807,53 +2052,236 @@
             if (pCB) {
                 pCB.checked = allChecked;
                 pCB.indeterminate = !allChecked && someChecked;
-
                 const pItem = { id: parent.dataset.id, name: parent.dataset.name, type: parent.dataset.type };
                 handleCheckboxChange(pCB, parent, pItem, false);
             }
             propagateSelectionUp(parent);
         }
 
-        function showFilePreview(item, li) {
-            const panel = document.getElementById('preview-content');
+        // =========================================================
+        // ATIVIDADE (FETCH & RENDER)
+        // =========================================================
+        function fetchAndRenderActivity(itemId) {
+            const listEl = document.getElementById('activity-list');
+            const loader = document.getElementById('activity-loading');
+
+            listEl.innerHTML = '';
+            loader.classList.remove('hidden');
+
+            fetch(`/api/activity/${itemId}`)
+                .then(r => r.json())
+                .then(data => {
+                    loader.classList.add('hidden');
+                    const activities = data.activity || [];
+
+                    if (activities.length === 0) {
+                        listEl.innerHTML = '<li class="preview-empty-state">Sem atividade recente.</li>';
+                        return;
+                    }
+
+                    let html = '';
+                    activities.forEach(act => {
+                        let icon = '📝';
+                        if (act.action === 'CRIAR') icon = '✨';
+                        if (act.action === 'MOVER') icon = '🚚';
+                        if (act.action === 'EXCLUIR') icon = '🗑️';
+                        if (act.action === 'RENOMEAR') icon = '🏷️';
+                        if (act.action === 'EDITAR') icon = '✏️';
+
+                        html += `
+                        <li class="activity-item">
+                            <div class="act-icon">${icon}</div>
+                            <div class="act-details">
+                                <div class="act-action">${act.action}</div>
+                                <div class="act-meta">por ${act.actor}</div>
+                            </div>
+                            <div class="act-date">${act.date}</div>
+                        </li>`;
+                    });
+                    listEl.innerHTML = html;
+                })
+                .catch(err => {
+                    console.error("Erro ao buscar atividade:", err);
+                    loader.classList.add('hidden');
+                    listEl.innerHTML = '<li class="form-error">Erro ao carregar atividade.</li>';
+                });
+        }
+
+        // =========================================================
+        // PREVIEW E DETALHES (CORRIGIDO E ROBUSTO)
+        // =========================================================
+
+        function showItemPreview(item, li) {
             const empty = document.getElementById('preview-empty');
+            const wrapper = document.getElementById('preview-wrapper');
+            const container = document.getElementById('preview-panel');
 
+            // Define ID atual
+            container.dataset.currentId = item.id;
+
+            // 1. Reset Visual Imediato (Limpa dados antigos para não piscar informação errada)
             empty.classList.add('hidden');
-            panel.classList.remove('hidden');
+            wrapper.classList.remove('hidden');
 
-            document.getElementById('preview-name').textContent = item.name;
+            // Limpa campos antes de preencher
             document.getElementById('preview-type').textContent = '...';
             document.getElementById('preview-size').textContent = '...';
             document.getElementById('preview-modified').textContent = '...';
             document.getElementById('preview-thumbnail-wrapper').classList.add('hidden');
 
-            updateBreadcrumbFromNode(li);
+            const linkBtn = document.getElementById('preview-open-link');
+            linkBtn.classList.add('disabled');
+            linkBtn.href = '#';
 
-            fetch('/api/file/' + encodeURIComponent(item.id))
-                .then(r => r.json())
-                .then(meta => {
-                    document.getElementById('preview-type').textContent = meta.mimeType || '-';
-                    document.getElementById('preview-size').textContent = humanSize(parseInt(meta.size || 0));
+            if (li) updateBreadcrumbFromNode(li);
 
-                    if (meta.modifiedTime) {
-                        document.getElementById('preview-modified').textContent = new Date(meta.modifiedTime).toLocaleString('pt-BR');
-                    }
+            // --- LÓGICA DE DETALHES ---
+            const detailsInner = document.getElementById('details-content-inner');
+            const detailsMsg = document.getElementById('details-folder-message');
 
-                    const link = document.getElementById('preview-open-link');
-                    if (meta.webViewLink) {
-                        link.href = meta.webViewLink;
-                        link.classList.remove('disabled');
+            if (item.type === 'folder') {
+                detailsInner.classList.add('hidden');
+                detailsMsg.classList.remove('hidden');
+            } else {
+                detailsInner.classList.remove('hidden');
+                detailsMsg.classList.add('hidden');
+
+                // Tenta recuperar do cache
+                const cached = itemCache.get(item.id);
+
+                // Verifica se temos dados completos (Size ou Link indicam que já foi feita a busca detalhada)
+                const hasDeepData = cached && (cached.webViewLink || cached.size !== undefined);
+
+                if (hasDeepData) {
+                    renderPreviewData(cached, item.type);
+                } else {
+                    // Estado de Carregamento Explícito
+                    document.getElementById('preview-type').textContent = "Buscando detalhes...";
+
+                    fetch('/api/file/' + encodeURIComponent(item.id))
+                        .then(r => r.json())
+                        .then(meta => {
+                            // Se der erro na API
+                            if (meta.error) {
+                                document.getElementById('preview-type').textContent = "Erro ao carregar info";
+                                return;
+                            }
+
+                            // Mescla os dados novos com o que já tínhamos (id, name)
+                            const newData = { ...item, ...meta };
+
+                            // Salva no cache
+                            itemCache.set(item.id, newData);
+
+                            // Só atualiza a tela se o usuário AINDA estiver com esse item selecionado
+                            if (container.dataset.currentId === item.id) {
+                                renderPreviewData(newData, item.type);
+                            }
+                        })
+                        .catch(err => {
+                            console.error(err);
+                            if (container.dataset.currentId === item.id) {
+                                document.getElementById('preview-type').textContent = "Erro de conexão";
+                            }
+                        });
+                }
+            }
+
+            // --- LÓGICA DE ATIVIDADE ---
+            fetchAndRenderActivity(item.id);
+        }
+
+        function renderPreviewData(meta, type) {
+            // 2. Tipo
+            const typeEl = document.getElementById('preview-type');
+            if (typeEl) {
+                if (meta.mimeType === 'application/vnd.google-apps.folder' || type === 'folder') {
+                    typeEl.textContent = 'Pasta do Google Drive';
+                } else {
+                    typeEl.textContent = meta.mimeType || 'Arquivo';
+                }
+            }
+
+            // 3. Tamanho
+            const sizeEl = document.getElementById('preview-size');
+            if (sizeEl) {
+                if (meta.mimeType === 'application/vnd.google-apps.folder' || type === 'folder') {
+                    if (meta.hasCalculatedSize) {
+                        sizeEl.textContent = humanSize(meta.estimatedSize) + ' (estimado)';
                     } else {
-                        link.classList.add('disabled');
+                        sizeEl.textContent = '—';
+                    }
+                } else {
+                    if (meta.size !== undefined && meta.size !== null) {
+                        sizeEl.textContent = humanSize(parseInt(meta.size));
+                    } else {
+                        sizeEl.textContent = 'Indisponível';
+                    }
+                }
+            }
+
+            // 4. Data
+            const modEl = document.getElementById('preview-modified');
+            if (modEl) {
+                if (meta.modifiedTime) {
+                    try {
+                        modEl.textContent = new Date(meta.modifiedTime).toLocaleString('pt-BR');
+                    } catch (e) { modEl.textContent = meta.modifiedTime; }
+                } else {
+                    modEl.textContent = '-';
+                }
+            }
+
+            // 5. Link
+            const link = document.getElementById('preview-open-link');
+            if (link) {
+                if (meta.webViewLink) {
+                    link.href = meta.webViewLink;
+                    link.classList.remove('disabled');
+                    link.style.pointerEvents = 'auto';
+                } else {
+                    link.classList.add('disabled');
+                    link.removeAttribute('href');
+                }
+            }
+
+            // 6. Thumbnail (CORRIGIDO)
+            const thumbWrapper = document.getElementById('preview-thumbnail-wrapper');
+            const img = document.getElementById('preview-thumbnail');
+
+            if (thumbWrapper && img) {
+                if (meta.thumbnailLink) {
+                    // Define comportamento de erro ANTES de carregar
+                    img.onerror = function () {
+                        // Se falhar ao carregar a versão grande (s600), tenta a original
+                        if (this.src.includes('=s600')) {
+                            console.warn("Falha ao carregar thumbnail HD, tentando original...");
+                            this.src = meta.thumbnailLink;
+                        } else {
+                            // Se falhar a original também, esconde tudo
+                            thumbWrapper.classList.add('hidden');
+                        }
+                    };
+
+                    img.onload = function () {
+                        thumbWrapper.classList.remove('hidden');
+                    };
+
+                    // Usa Regex para substituir qualquer tamanho (=s220, =s100, etc) por =s600
+                    // Se não tiver parametro de tamanho, apenas adiciona.
+                    let hdLink = meta.thumbnailLink;
+                    if (hdLink.match(/=s\d+/)) {
+                        hdLink = hdLink.replace(/=s\d+/, '=s600');
+                    } else {
+                        hdLink += '=s600';
                     }
 
-                    if (meta.thumbnailLink) {
-                        const img = document.getElementById('preview-thumbnail');
-                        img.src = meta.thumbnailLink;
-                        document.getElementById('preview-thumbnail-wrapper').classList.remove('hidden');
-                    }
-                })
-                .catch(console.error);
+                    img.src = hdLink;
+                    thumbWrapper.classList.remove('hidden'); // Mostra container preventivamente
+                } else {
+                    thumbWrapper.classList.add('hidden');
+                }
+            }
         }
 
         // =========================================================
@@ -1873,17 +2301,14 @@
             const row = document.createElement('div');
             row.className = 'tree-row';
 
-            // Toggle
             const toggle = document.createElement('button');
             toggle.className = 'tree-toggle';
             toggle.textContent = '▾';
 
-            // Checkbox
             const cb = document.createElement('input');
             cb.type = 'checkbox';
             cb.className = 'select-checkbox';
 
-            // Fav
             const fav = document.createElement('button');
             fav.className = 'fav-btn';
             fav.textContent = '☆';
@@ -1897,19 +2322,27 @@
             span.textContent = 'Meu Drive';
 
             row.append(toggle, cb, fav, icon, span);
-
             const childrenUl = document.createElement('ul');
             childrenUl.className = 'tree-children';
 
             rootLi.append(row, childrenUl);
             ul.appendChild(rootLi);
 
-            // Events Root
+            // Item reference
             const item = { id: 'root', name: 'Meu Drive', type: 'folder' };
+
+            // Inicializa Cache do Root
+            itemCache.set('root', {
+                id: 'root',
+                name: 'Meu Drive',
+                mimeType: 'application/vnd.google-apps.folder',
+                webViewLink: 'https://drive.google.com'
+            });
 
             if (isFavorite('root')) fav.classList.add('fav-on');
 
             fav.onclick = (e) => { e.stopPropagation(); toggleFavorite(item, rootLi, fav); };
+
             cb.onchange = (e) => {
                 e.stopPropagation();
                 handleCheckboxChange(cb, rootLi, item);
@@ -1918,9 +2351,7 @@
 
             row.onclick = (e) => {
                 if (![toggle, cb, fav].includes(e.target)) {
-                    cb.checked = !cb.checked;
-                    handleCheckboxChange(cb, rootLi, item);
-                    propagateSelectionDown(rootLi, cb.checked);
+                    showItemPreview(item, rootLi);
                 }
             };
 
@@ -1932,7 +2363,6 @@
                 toggle.textContent = rootLi.classList.contains('collapsed') ? '▸' : '▾';
             };
 
-            // Carga inicial
             loadChildren('root', childrenUl, rootLi, toggle);
             setCollapsedState(rootLi, false);
         }
@@ -1945,16 +2375,9 @@
             initTree();
         }
 
-        // =========================================================
-        // DOM READY
-        // =========================================================
-
         document.addEventListener('DOMContentLoaded', () => {
             loadFavorites();
-            // renderFavorites(); // Chamado dentro de loadFavorites agora
             loadProfiles();
-
-            // Inicia poller de tarefas em background
             startActiveTasksPoller();
 
             const tf = document.getElementById('toggle-files');

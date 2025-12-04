@@ -22,6 +22,8 @@ from services.auth_service import get_credentials
 from services.drive_filters import build_filters_from_form
 from services.drive_tree_service import get_children, get_file_metadata, get_ancestors_path
 from services.drive_download_service import download_items_bundle, mirror_items_to_local
+# IMPORT NOVO
+from services.drive_activity_service import fetch_activity_log 
 from services.progress_service import (
     PROGRESS,
     init_download_task,
@@ -51,9 +53,6 @@ def _background_backup_task(
     archive_format,
     filters,
 ):
-    """
-    Função executada na Thread de segundo plano.
-    """
     with app_context:
         try:
             if output_mode == "mirror":
@@ -69,7 +68,6 @@ def _background_backup_task(
                     filters=filters,
                 )
             else:
-                # Gera o ZIP/TAR em pasta temporária
                 temp_zip_path = download_items_bundle(
                     creds,
                     items,
@@ -86,11 +84,9 @@ def _background_backup_task(
 
                 shutil.move(temp_zip_path, final_dest_path)
 
-                # Atualiza progresso
                 PROGRESS[task_id]["final_filename"] = generated_filename
                 PROGRESS[task_id]["message"] = "Arquivo gerado e salvo com sucesso."
 
-                # Salva metadados do backup no banco
                 try:
                     stat = os.stat(final_dest_path)
                     size_mb = round(stat.st_size / (1024 * 1024), 2)
@@ -123,7 +119,6 @@ def _background_backup_task(
                 sync_task_to_db(task_id)
 
         except Exception as e:
-            # Tratamento de erro geral
             print(f"Erro na thread de backup {task_id}: {e}")
             PROGRESS.setdefault(task_id, {})
             PROGRESS[task_id]["phase"] = "erro" if "Cancelado" not in str(e) else "cancelado"
@@ -164,11 +159,8 @@ def api_folders_children(folder_id):
 
 @drive_bp.route("/api/path/<file_id>")
 def api_resolve_path(file_id):
-    """Retorna a lista de IDs ancestrais para um arquivo/pasta."""
     creds = get_credentials()
     if not creds: return jsonify({"error": "unauthorized"}), 401
-    
-    # Chama o serviço para obter a árvore de IDs até o root
     path_ids = get_ancestors_path(creds, file_id)
     return jsonify({"path": path_ids})
 
@@ -181,7 +173,16 @@ def api_file_details(file_id):
     return jsonify(meta)
 
 
-# --- ROTAS DE FAVORITOS (DB) ---
+# --- ROTA DE ATIVIDADE (NOVA) ---
+@drive_bp.route("/api/activity/<file_id>")
+def api_file_activity(file_id):
+    creds = get_credentials()
+    if not creds: return jsonify({"error": "unauthorized"}), 401
+    
+    activities = fetch_activity_log(creds, file_id)
+    return jsonify({"activity": activities})
+# --------------------------------
+
 
 @drive_bp.route("/api/favorites", methods=["GET"])
 def list_favorites():
@@ -202,7 +203,6 @@ def add_favorite():
 
     existing = FavoriteModel.query.get(item_id)
     if existing:
-        # Atualiza se já existe (ex: caminho mudou)
         existing.name = name
         existing.path = path
         existing.type = item_type
@@ -230,8 +230,6 @@ def delete_favorite(item_id):
             return jsonify({"ok": False, "error": str(e)}), 500
     return jsonify({"ok": True})
 
-
-# -------------------------------
 
 @drive_bp.route("/download", methods=["POST"])
 def download():
@@ -314,7 +312,6 @@ def cancel_task(task_id):
     set_task_cancel(task_id)
     return jsonify({"ok": True})
 
-# --- NOVAS ROTAS PARA CONTROLE DE PAUSA ---
 
 @drive_bp.route("/api/tasks/active")
 def api_active_tasks():

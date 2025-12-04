@@ -5,6 +5,7 @@ from . import drive_filters
 from . import drive_tree_service
 from . import drive_download_service
 from . import progress_service
+from . import drive_activity_service
 
 __all__ = [
     "auth_service",
@@ -13,4 +14,5 @@ __all__ = [
     "drive_tree_service",
     "drive_download_service",
     "progress_service",
+    "drive_activity_service"
 ]
