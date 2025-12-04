@@ -417,9 +417,7 @@
             width: 1.15em;
             height: 1.15em;
             border: 2px solid #757575;
-            /* Borda cinza suave */
             border-radius: 4px;
-            /* Cantos levemente arredondados */
             display: grid;
             place-content: center;
             cursor: pointer;
@@ -429,7 +427,6 @@
         /* Estado Marcado (Checked) */
         input[type="checkbox"]:checked {
             background-color: #1a73e8;
-            /* Azul Google */
             border-color: #1a73e8;
         }
 
@@ -441,7 +438,6 @@
             transform: scale(0);
             transition: 120ms transform ease-in-out;
             box-shadow: inset 1em 1em white;
-            /* Cor do checkmark */
             transform-origin: center;
             clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
         }
@@ -458,7 +454,123 @@
 
         input[type="checkbox"]:checked:hover {
             background-color: #1557b0;
-            /* Azul um pouco mais escuro */
+        }
+
+        /* =========================================
+   TOASTS (NOTIFICAÇÕES FLUTUANTES)
+   ========================================= */
+        #toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+            /* Permite clicar através do container */
+        }
+
+        .custom-toast {
+            background: #fff;
+            color: #333;
+            padding: 12px 16px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            min-width: 300px;
+            font-size: 13px;
+            border-left: 5px solid #333;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            opacity: 0;
+            transform: translateX(50px);
+            transition: all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+            pointer-events: auto;
+        }
+
+        .custom-toast.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .custom-toast.toast-success {
+            border-left-color: #2ecc71;
+        }
+
+        .custom-toast.toast-error {
+            border-left-color: #e74c3c;
+        }
+
+        .custom-toast.toast-info {
+            border-left-color: #3498db;
+        }
+
+        .custom-toast.toast-warning {
+            border-left-color: #f1c40f;
+        }
+
+        .toast-icon {
+            font-size: 18px;
+        }
+
+        .toast-body {
+            flex: 1;
+        }
+
+        .toast-close {
+            cursor: pointer;
+            color: #999;
+            font-weight: bold;
+        }
+
+        /* =========================================
+            ESTILO DO MODAL DE RESUMO
+        ========================================= */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 15px 0;
+        }
+
+        .summary-card {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .summary-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1a73e8;
+            display: block;
+        }
+
+        .summary-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .file-preview-list {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 10px;
+            font-size: 12px;
+            color: #555;
+            max-height: 100px;
+            overflow-y: auto;
+            margin-top: 5px;
+        }
+
+        .file-preview-item {
+            padding: 3px 0;
+            border-bottom: 1px solid #f0f0f0;
         }
     </style>
 </head>
@@ -469,28 +581,24 @@
             <div class="page-header-top">
                 <div>
                     <h1>📁 Escolha pastas e arquivos para baixar</h1>
-                    <p class="subtitle">
-                        Selecione itens na árvore. Baixe agora ou gere em segundo plano.
-                    </p>
+                    <p class="subtitle">Selecione itens na árvore. Baixe agora ou gere em segundo plano.</p>
                 </div>
 
                 <div class="tree-toolbar">
                     <label class="checkbox-inline">
-                        <input type="checkbox" id="toggle-files">
-                        Mostrar arquivos também
+                        <input type="checkbox" id="toggle-files"> Mostrar arquivos também
                     </label>
 
                     <a href="{{ url_for('admin.list_backups') }}" class="btn-ghost btn-xs"
-                        style="text-decoration: none; margin-right: 4px;" target="_blank">
-                        📦 Meus Backups
-                    </a>
-
+                        style="text-decoration: none; margin-right: 4px;" target="_blank">📦 Meus Backups</a>
                     <a href="{{ url_for('admin.view_db') }}" class="btn-ghost btn-xs"
-                        style="text-decoration: none; margin-right: 8px;" target="_blank">
-                        📊 Admin DB
-                    </a>
+                        style="text-decoration: none; margin-right: 8px;" target="_blank">📊 Admin DB</a>
 
-                    <button type="button" class="btn-primary btn-xs" onclick="openModalForSelected()">
+                    <button type="button" class="btn-ghost btn-xs" onclick="openProfileModal()">
+                        💾 Salvar como Modelo
+                    </button>
+
+                    <button type="button" class="btn-primary btn-xs" onclick="openDownloadModal()">
                         Baixar itens selecionados
                     </button>
 
@@ -502,7 +610,6 @@
                             </svg>
                             <div id="task-badge" class="notification-badge hidden">0</div>
                         </button>
-
                         <div id="task-manager-panel" class="task-dropdown-panel">
                             <div class="log-header"
                                 style="background: #f8f9fa; border-bottom: 1px solid #eee; padding: 10px 15px; border-radius: 8px 8px 0 0; display:flex; justify-content:space-between; align-items:center;">
@@ -527,7 +634,6 @@
                             </svg>
                             <div id="notification-badge" class="notification-badge hidden">0</div>
                         </button>
-
                         <div id="log-panel" class="log-panel hidden">
                             <div class="log-header">
                                 <span>Atividade Recente</span>
@@ -541,7 +647,6 @@
                             </div>
                         </div>
                     </div>
-
                 </div>
             </div>
 
@@ -556,102 +661,68 @@
         {% if messages %}
         <div class="page-flash">
             <div class="alert">
-                {% for msg in messages %}
-                <p>{{ msg }}</p>
-                {% endfor %}
+                {% for msg in messages %} <p>{{ msg }}</p> {% endfor %}
             </div>
         </div>
         {% endif %}
         {% endwith %}
 
-        <!-- COLUNA ESQUERDA (FAVORITOS / MODELOS) -->
         <aside class="side-menu">
             <div class="favorites-box">
-                <div class="favorites-header">
-                    <span>⭐ Favoritos</span>
-                    <small>(clique na estrela ao lado de uma pasta)</small>
-                </div>
-                <div id="favorites-list" class="favorites-list">
-                    Carregando...
-                </div>
+                <div class="favorites-header"><span>⭐ Favoritos</span><small>(clique na estrela)</small></div>
+                <div id="favorites-list" class="favorites-list">Carregando...</div>
             </div>
-
             <div class="profiles-box">
-                <div class="favorites-header">
-                    <span>⚙️ Modelos de backup</span>
-                    <small>Salve configurações frequentes.</small>
-                </div>
-                <div id="profiles-list" class="favorites-list">
-                    Nenhum perfil salvo.
-                </div>
+                <div class="favorites-header"><span>⚙️ Modelos de backup</span><small>Salve configurações.</small></div>
+                <div id="profiles-list" class="favorites-list">Nenhum perfil salvo.</div>
             </div>
         </aside>
 
-        <!-- COLUNA CENTRAL (ÁRVORE DE PASTAS) -->
         <main class="main-column">
             <div class="card main-card">
                 <div class="breadcrumb-box">
-                    <span class="breadcrumb-label">Caminho:</span>
-                    <span id="breadcrumb-path" class="breadcrumb-path">Meu Drive</span>
+                    <span class="breadcrumb-label">Caminho:</span><span id="breadcrumb-path" class="breadcrumb-path">Meu
+                        Drive</span>
                 </div>
-
                 <div class="tree-wrapper">
-                    <ul id="tree-root" class="tree-root">
-                    </ul>
+                    <ul id="tree-root" class="tree-root"></ul>
                 </div>
             </div>
         </main>
 
-        <!-- NOVA COLUNA DIREITA (DETALHES / ATIVIDADE) -->
         <aside class="details-column">
             <section class="preview-panel" id="preview-panel" data-current-id="">
                 <h2 class="preview-title" id="preview-main-title">Informações</h2>
-
-                <p id="preview-empty" class="preview-empty">
-                    Clique em um arquivo ou pasta para ver informações.
-                </p>
-
+                <p id="preview-empty" class="preview-empty">Clique em um arquivo ou pasta.</p>
                 <div id="preview-wrapper" class="hidden">
                     <div class="panel-tabs">
                         <button id="tab-btn-details" class="tab-btn active"
                             onclick="switchTab('details')">Detalhes</button>
                         <button id="tab-btn-activity" class="tab-btn" onclick="switchTab('activity')">Atividade</button>
                     </div>
-
                     <div id="tab-details" class="tab-content active">
                         <div id="details-content-inner" class="tab-scrollable-area">
-
                             <div class="preview-meta">
                                 <div><span class="label">Tipo:</span> <span id="preview-type"></span></div>
                                 <div><span class="label">Tamanho:</span> <span id="preview-size"></span></div>
                                 <div><span class="label">Modificado em:</span> <span id="preview-modified"></span></div>
                             </div>
-
                             <div id="preview-thumbnail-wrapper" class="preview-thumbnail-wrapper hidden">
-                                <img id="preview-thumbnail" alt="Miniatura do arquivo" referrerpolicy="no-referrer">
+                                <img id="preview-thumbnail" alt="Miniatura" referrerpolicy="no-referrer">
                             </div>
-
                             <a id="preview-open-link" href="#" target="_blank" class="btn-link disabled"
-                                rel="noopener noreferrer">
-                                Abrir no Google Drive
-                            </a>
+                                rel="noopener noreferrer">Abrir no Drive</a>
                         </div>
-
-                        <div id="details-folder-message" class="preview-empty-state hidden">
-                            Detalhes técnicos simplificados para pastas.
-                        </div>
+                        <div id="details-folder-message" class="preview-empty-state hidden">Detalhes simplificados para
+                            pastas.</div>
                     </div>
-
                     <div id="tab-activity" class="tab-content">
-                        <div id="activity-loading" class="preview-empty-state hidden">Carregando atividade...</div>
-
-                        <ul id="activity-list" class="activity-list tab-scrollable-area">
-                        </ul>
+                        <div id="activity-loading" class="preview-empty-state hidden">Carregando...</div>
+                        <ul id="activity-list" class="activity-list tab-scrollable-area"></ul>
                     </div>
                 </div>
             </section>
         </aside>
-
     </div>
 
     <div id="progress-container" class="progress-container progress-floating hidden">
@@ -663,7 +734,6 @@
             <div id="progress-bar" class="progress-bar-fill"></div>
         </div>
         <p id="progress-text" class="progress-text"></p>
-
         <div class="progress-controls" style="display:flex; gap:5px; justify-content:center; margin-top:8px;">
             <button id="btn-pause-fg" type="button" class="btn-ghost btn-xs" onclick="togglePauseForeground()">⏸
                 Pausar</button>
@@ -671,10 +741,11 @@
         </div>
     </div>
 
-    <div id="modal-backdrop" class="modal-backdrop hidden">
+    <!-- MODAL DE DOWNLOAD -->
+    <div id="modal-backdrop-download" class="modal-backdrop hidden">
         <div class="modal">
-            <h2 id="modal-title">Baixar</h2>
-            <p class="subtitle" id="modal-subtitle"></p>
+            <h2 id="modal-dl-title">Baixar Itens</h2>
+            <p class="subtitle" id="modal-dl-subtitle"></p>
 
             <form id="download-form" onsubmit="return false;">
                 <input type="hidden" name="items_json" id="items_json">
@@ -682,78 +753,58 @@
 
                 <div class="modal-grid">
                     <div class="form-section modal-section-wide">
-                        <div class="form-section-title">Configurações Gerais</div>
+                        <div class="form-section-title">Configurações de Download</div>
 
                         <div class="form-group">
                             <label for="zip_name">Nome do Arquivo</label>
                             <div style="display:flex; gap:8px;" class="suggestion-wrapper">
                                 <input type="text" id="zip_name" name="zip_name" placeholder="Ex: backup_drive"
                                     style="flex:1;">
-                                <button type="button" class="btn-ghost btn-xs" onclick="toggleSuggestionMenu()">
-                                    Sugestão ▼
-                                </button>
+                                <button type="button" class="btn-ghost btn-xs" onclick="toggleSuggestionMenu()">Sugestão
+                                    ▼</button>
                                 <div id="suggestion-menu" class="suggestion-menu">
-                                    <div class="suggestion-item" onclick="applySuggestion('date')">Nome + Data (Padrão)
-                                    </div>
-                                    <div class="suggestion-item" onclick="applySuggestion('clean')">Apenas Nome da Pasta
-                                    </div>
-                                    <div class="suggestion-item" onclick="applySuggestion('random')">Aleatório / Hash
-                                    </div>
+                                    <div class="suggestion-item" onclick="applySuggestion('date')">Nome + Data</div>
+                                    <div class="suggestion-item" onclick="applySuggestion('clean')">Apenas Nome</div>
+                                    <div class="suggestion-item" onclick="applySuggestion('random')">Aleatório</div>
                                 </div>
                             </div>
-                            <small>A extensão será adicionada automaticamente.</small>
                         </div>
 
-                        <div class="form-group box-highlight"
-                            style="margin-top: 10px; border-color: #ffe0b2; background-color: #fff8e1;">
+                        <div class="form-group box-warning">
                             <label style="margin-bottom:8px; display:block; font-weight:600; color: #f57c00;">Estratégia
                                 de Fluxo</label>
                             <div class="radio-group-vertical">
                                 <label class="radio-option">
                                     <input type="radio" name="processing_mode" value="sequential" checked>
-                                    <div>
-                                        <strong>Sequencial (Padrão)</strong>
-                                        <span>Mapeia tudo primeiro, calcula total, depois baixa. (Barra de progresso
-                                            mais precisa).</span>
-                                    </div>
+                                    <div><strong>Sequencial (Padrão)</strong><span>Mapeia tudo primeiro, calcula total,
+                                            depois baixa.</span></div>
                                 </label>
                                 <label class="radio-option">
                                     <input type="radio" name="processing_mode" value="concurrent">
-                                    <div>
-                                        <strong>Concorrente (Turbo)</strong>
-                                        <span>Envia arquivos para download assim que são encontrados. (Inicia mais
-                                            rápido).</span>
-                                    </div>
+                                    <div><strong>Concorrente (Turbo)</strong><span>Inicia o download imediatamente
+                                            (Mapeamento simultâneo).</span></div>
                                 </label>
                             </div>
                         </div>
 
                         <div class="form-group box-highlight">
-                            <label style="margin-bottom:8px; display:block; font-weight:600;">Como deseja
-                                processar?</label>
+                            <label style="margin-bottom:8px; display:block; font-weight:600;">Modo de Execução</label>
                             <div class="radio-group-vertical">
                                 <label class="radio-option">
                                     <input type="radio" name="execution_mode" value="immediate" checked>
-                                    <div>
-                                        <strong>Baixar Agora</strong>
-                                        <span>Aguarda o processamento e inicia o download automaticamente ao
-                                            final.</span>
-                                    </div>
+                                    <div><strong>Baixar Agora</strong><span>Aguarda e baixa direto.</span></div>
                                 </label>
                                 <label class="radio-option">
                                     <input type="radio" name="execution_mode" value="background">
-                                    <div>
-                                        <strong>Segundo Plano</strong>
-                                        <span>O servidor processa e salva na aba "Meus Backups". Você pode fechar esta
-                                            janela.</span>
-                                    </div>
+                                    <div><strong>Segundo Plano</strong><span>Processa no servidor e salva em "Meus
+                                            Backups".</span></div>
                                 </label>
                             </div>
                         </div>
 
                         <div class="form-group">
                             <label for="output_mode">Formato de Saída</label>
-                            <select id="output_mode" name="output_mode">
+                            <select id="output_mode" name="output_mode" onchange="updateOutputModeUI()">
                                 <option value="archive" selected>Arquivo Compactado (ZIP/Tar)</option>
                                 <option value="mirror">Espelho Local (Sync)</option>
                             </select>
@@ -766,28 +817,25 @@
                                 <option value="tar.gz">Tar GZip (.tar.gz)</option>
                             </select>
                         </div>
-
                         <div class="form-group archive-only">
                             <label for="compression_level">Compressão</label>
                             <select id="compression_level" name="compression_level">
-                                <option value="fast">Rápida (Menor)</option>
+                                <option value="fast">Rápida</option>
                                 <option value="normal" selected>Normal</option>
-                                <option value="max">Máxima (Mais lento)</option>
+                                <option value="max">Máxima</option>
                             </select>
                         </div>
-
                         <div class="form-group mirror-only" style="display:none;">
-                            <label for="local_mirror_path">Pasta Local (Servidor)</label>
+                            <label for="local_mirror_path">Caminho Local</label>
                             <input type="text" id="local_mirror_path" name="local_mirror_path"
-                                placeholder="/home/user/Backups/ClienteA">
+                                placeholder="/home/user/Backups">
                         </div>
                     </div>
 
                     <div class="form-section">
-                        <div class="form-section-title">Filtros de Arquivo</div>
-
+                        <div class="form-section-title">Filtros</div>
                         <div class="form-group">
-                            <label>Tipos a incluir</label>
+                            <label>Tipos</label>
                             <div class="filter-types">
                                 <label><input type="checkbox" name="type_pdf" value="1" checked> PDF</label>
                                 <label><input type="checkbox" name="type_docs" value="1" checked> Docs</label>
@@ -797,9 +845,7 @@
                                 <label><input type="checkbox" name="type_others" value="1" checked> Outros</label>
                             </div>
                         </div>
-
                         <div class="form-section-title" style="margin-top: 15px;">Filtros Avançados</div>
-
                         <div class="form-group">
                             <label>Data</label>
                             <div class="filter-dates">
@@ -807,49 +853,203 @@
                                 <label>Editado pós: <input type="date" name="modified_after"></label>
                             </div>
                         </div>
-
                         <div class="form-group">
                             <label for="max_size_mb">Tam. Máx (MB)</label>
-                            <input type="number" id="max_size_mb" name="max_size_mb"
-                                placeholder="Ignorar maiores que...">
+                            <input type="number" id="max_size_mb" name="max_size_mb" placeholder="Ignorar > X MB">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn-ghost" onclick="closeModal('download')">Cancelar</button>
+                    <button type="button" class="btn-primary" onclick="startDownloadProcess()">INICIAR DOWNLOAD</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL DE PERFIL / MODELO -->
+    <div id="modal-backdrop-profile" class="modal-backdrop hidden">
+        <div class="modal">
+            <h2 id="modal-prof-title">Criar Modelo de Backup</h2>
+            <p class="subtitle" id="modal-prof-subtitle">Salve todas as configurações para uso futuro.</p>
+
+            <form id="profile-form" onsubmit="return false;">
+                <div class="modal-grid">
+                    <div class="form-section modal-section-wide">
+                        <div class="form-section-title">Dados do Modelo</div>
+                        <div class="form-group">
+                            <label for="prof_name">Nome do Modelo (Obrigatório)</label>
+                            <input type="text" id="prof_name" name="prof_name" placeholder="Ex: Backup Mensal"
+                                style="font-weight:bold;">
+                        </div>
+                        <div class="form-group">
+                            <label for="prof_zip_pattern">Padrão de Nome do Arquivo</label>
+                            <input type="text" id="prof_zip_pattern" name="prof_zip_pattern"
+                                placeholder="Ex: backup-{YYYYMMDD}">
+                            <div class="form-hint">Tags: {YYYYMMDD}, {YYYY}, {MM}, {DD}</div>
+                        </div>
+
+                        <div class="form-group box-warning">
+                            <label style="margin-bottom:8px; display:block; font-weight:600; color: #f57c00;">Estratégia
+                                de Fluxo</label>
+                            <div class="radio-group-vertical">
+                                <label class="radio-option">
+                                    <input type="radio" name="prof_processing_mode" value="sequential" checked>
+                                    <div><strong>Sequencial</strong><span>Mapeamento preciso antes do download.</span>
+                                    </div>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="prof_processing_mode" value="concurrent">
+                                    <div><strong>Concorrente</strong><span>Mapeamento e download simultâneos.</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group box-highlight">
+                            <label style="margin-bottom:8px; display:block; font-weight:600;">Modo Padrão</label>
+                            <div class="radio-group-vertical">
+                                <label class="radio-option">
+                                    <input type="radio" name="prof_execution_mode" value="immediate" checked>
+                                    <div><strong>Baixar Agora</strong></div>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="prof_execution_mode" value="background">
+                                    <div><strong>Segundo Plano</strong></div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="prof_output_mode">Formato de Saída</label>
+                            <select id="prof_output_mode" name="prof_output_mode" onchange="updateProfileOutputUI()">
+                                <option value="archive" selected>Arquivo Compactado</option>
+                                <option value="mirror">Espelho Local</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group prof-archive-only">
+                            <label for="prof_archive_format">Formato</label>
+                            <select id="prof_archive_format" name="prof_archive_format">
+                                <option value="zip">ZIP</option>
+                                <option value="tar.gz">Tar GZip</option>
+                            </select>
+                        </div>
+                        <div class="form-group prof-archive-only">
+                            <label for="prof_compression_level">Compressão</label>
+                            <select id="prof_compression_level" name="prof_compression_level">
+                                <option value="fast">Rápida</option>
+                                <option value="normal" selected>Normal</option>
+                                <option value="max">Máxima</option>
+                            </select>
+                        </div>
+                        <div class="form-group prof-mirror-only" style="display:none;">
+                            <label for="prof_local_mirror_path">Caminho Local</label>
+                            <input type="text" id="prof_local_mirror_path" name="prof_local_mirror_path"
+                                placeholder="/home/user/Backups">
                         </div>
                     </div>
 
                     <div class="form-section">
-                        <div class="form-section-title">Salvar como modelo</div>
-
+                        <div class="form-section-title">Filtros do Modelo</div>
                         <div class="form-group">
-                            <label for="profile_name">Nome do modelo</label>
-                            <input type="text" id="profile_name" name="profile_name"
-                                placeholder="Ex: Backup mensal Cliente A">
-                        </div>
-
-                        <div class="form-group">
-                            <label for="zip_pattern">Padrão do nome do arquivo (opcional)</label>
-                            <input type="text" id="zip_pattern" name="zip_pattern" placeholder="Ex: backup-{YYYYMMDD}">
-                            <div class="form-hint">
-                                Você pode usar {YYYYMMDD}, {YYYY}, {YY}, {MM}, {DD} para datas.
+                            <label>Tipos</label>
+                            <div class="filter-types">
+                                <label><input type="checkbox" name="prof_type_pdf" value="1" checked> PDF</label>
+                                <label><input type="checkbox" name="prof_type_docs" value="1" checked> Docs</label>
+                                <label><input type="checkbox" name="prof_type_sheets" value="1" checked>
+                                    Planilhas</label>
+                                <label><input type="checkbox" name="prof_type_images" value="1" checked> Imagens</label>
+                                <label><input type="checkbox" name="prof_type_videos" value="1" checked> Vídeos</label>
+                                <label><input type="checkbox" name="prof_type_others" value="1" checked> Outros</label>
                             </div>
                         </div>
-
+                        <div class="form-section-title" style="margin-top: 15px;">Filtros Avançados</div>
+                        <div class="form-group">
+                            <label>Data</label>
+                            <div class="filter-dates">
+                                <label>Criado pós: <input type="date" name="prof_created_after"
+                                        id="prof_created_after"></label>
+                                <label>Editado pós: <input type="date" name="prof_modified_after"
+                                        id="prof_modified_after"></label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="prof_max_size_mb">Tam. Máx (MB)</label>
+                            <input type="number" id="prof_max_size_mb" name="prof_max_size_mb"
+                                placeholder="Ignorar > X MB">
+                        </div>
                         <div id="profile-save-feedback" class="form-hint"></div>
                     </div>
                 </div>
 
                 <div class="modal-footer">
-                    <div>
-                        <button type="button" class="btn-ghost" onclick="closeModal()">Cancelar</button>
-                        <button type="button" class="btn-ghost" onclick="saveCurrentAsProfile()">
-                            Salvar Modelo
-                        </button>
-                    </div>
-                    <button type="button" class="btn-primary" onclick="startDownloadProcess()">
-                        Confirmar
-                    </button>
+                    <button type="button" class="btn-ghost" onclick="closeModal('profile')">Cancelar</button>
+                    <button type="button" class="btn-primary" onclick="saveCurrentAsProfile()">SALVAR MODELO</button>
                 </div>
             </form>
         </div>
     </div>
+    <div id="toast-container"></div>
+
+    <div id="modal-backdrop-summary" class="modal-backdrop hidden">
+        <div class="modal" style="max-width: 500px;">
+            <h2 id="summary-title">Resumo da Seleção</h2>
+            <p class="subtitle">Verifique os dados antes de confirmar o download.</p>
+
+            <div id="summary-loading" class="hidden" style="text-align:center; padding: 30px;">
+                <div class="spinner"
+                    style="border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto;">
+                </div>
+                <p style="margin-top:10px; color:#666;">Calculando tamanho total...</p>
+            </div>
+
+            <div id="summary-content">
+                <div class="summary-grid">
+                    <div class="summary-card">
+                        <span class="summary-value" id="sum-files">0</span>
+                        <span class="summary-label">Arquivos</span>
+                    </div>
+                    <div class="summary-card">
+                        <span class="summary-value" id="sum-folders">0</span>
+                        <span class="summary-label">Pastas</span>
+                    </div>
+                </div>
+
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <span style="font-size: 14px; color: #555;">Tamanho Estimado:</span>
+                    <div style="font-size: 28px; font-weight: 800; color: #2ecc71;" id="sum-size">0 MB</div>
+                </div>
+
+                <details>
+                    <summary style="cursor:pointer; color:#1a73e8; font-size:13px; font-weight:600;">Ver exemplos de
+                        arquivos</summary>
+                    <div id="sum-preview-list" class="file-preview-list"></div>
+                </details>
+            </div>
+
+            <div class="modal-footer" style="margin-top: 20px;">
+                <button type="button" class="btn-ghost" onclick="closeModal('summary')">Voltar</button>
+                <button type="button" class="btn-primary" id="btn-confirm-download" onclick="confirmAndDownload()">
+                    ✅ Confirmar e Baixar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+
 
     <script>
         // =========================================================
@@ -909,11 +1109,8 @@
         // =========================================================
 
         function switchTab(tabName) {
-            // Remove active de todos
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-
-            // Adiciona active no selecionado
             document.getElementById(`tab-btn-${tabName}`).classList.add('active');
             document.getElementById(`tab-${tabName}`).classList.add('active');
         }
@@ -927,27 +1124,22 @@
             let hasFiles = false;
 
             items.forEach(item => {
-                // Guarda metadados completos no cache
                 itemCache.set(item.id, item);
-
-                // Soma tamanhos para estimativa da pasta pai
                 if (item.size) {
                     totalBytes += parseInt(item.size);
                     hasFiles = true;
                 }
             });
 
-            // Se temos um pai conhecido no cache, atualizamos a estimativa dele
             if (parentId && itemCache.has(parentId)) {
                 const parent = itemCache.get(parentId);
                 parent.estimatedSize = totalBytes;
                 parent.hasCalculatedSize = true;
                 itemCache.set(parentId, parent);
 
-                // Se o painel de detalhes estiver mostrando este pai agora, atualiza a view
                 const currentPreviewId = document.getElementById('preview-panel').dataset.currentId;
                 if (currentPreviewId === parentId) {
-                    showItemPreview(parent, null); // null pois não precisamos do li para refresh
+                    showItemPreview(parent, null);
                 }
             }
         }
@@ -1024,7 +1216,7 @@
         // =========================================================
         function toggleSuggestionMenu() {
             const menu = document.getElementById('suggestion-menu');
-            menu.classList.toggle('show');
+            if (menu) menu.classList.toggle('show');
         }
 
         function applySuggestion(type) {
@@ -1038,8 +1230,10 @@
             else if (type === 'clean') finalName = base;
             else if (type === 'random') finalName = `${base}_${Math.random().toString(36).substring(7)}`;
 
-            document.getElementById('zip_name').value = finalName;
-            document.getElementById('suggestion-menu').classList.remove('show');
+            const zipInput = document.getElementById('zip_name');
+            if (zipInput) zipInput.value = finalName;
+            const menu = document.getElementById('suggestion-menu');
+            if (menu) menu.classList.remove('show');
         }
 
         // =========================================================
@@ -1062,7 +1256,8 @@
                 })
                 .catch(err => {
                     console.error("Erro ao carregar favoritos:", err);
-                    document.getElementById('favorites-list').textContent = 'Erro ao carregar.';
+                    const list = document.getElementById('favorites-list');
+                    if (list) list.textContent = 'Erro ao carregar.';
                 });
         }
 
@@ -1143,7 +1338,6 @@
             let node = document.querySelector(`.tree-node[data-id="${targetId}"]`);
             if (node) {
                 revealNode(node);
-                // Força update do preview ao focar via favorito
                 const item = {
                     id: node.dataset.id,
                     name: node.dataset.name,
@@ -1376,6 +1570,7 @@
                 });
         }
 
+        // filtros do DOWNLOAD (mantido caso queira reaproveitar)
         function collectCurrentFiltersFromForm() {
             const groups = [];
             if (document.querySelector('input[name="type_pdf"]')?.checked) groups.push('pdf');
@@ -1393,11 +1588,9 @@
             const archiveFormat = document.getElementById('archive_format')?.value || 'zip';
             const compressionLevel = document.getElementById('compression_level')?.value || 'normal';
 
-            // Modo de execução (Immediate/Background)
             const execRadio = document.querySelector('input[name="execution_mode"]:checked');
             const executionMode = execRadio ? execRadio.value : 'immediate';
 
-            // --- NOVO: Captura o modo de processamento (Sequencial/Concorrente) ---
             const procRadio = document.querySelector('input[name="processing_mode"]:checked');
             const processingMode = procRadio ? procRadio.value : 'sequential';
 
@@ -1417,7 +1610,52 @@
                 archive_format: archiveFormat,
                 compression_level: compressionLevel,
                 execution_mode: executionMode,
-                processing_mode: processingMode, // Adicionado ao retorno
+                processing_mode: processingMode,
+            };
+        }
+
+        // filtros do PERFIL (usado ao SALVAR MODELO)
+        function collectProfileFiltersFromForm() {
+            const groups = [];
+            if (document.querySelector('input[name="prof_type_pdf"]')?.checked) groups.push('pdf');
+            if (document.querySelector('input[name="prof_type_docs"]')?.checked) groups.push('docs');
+            if (document.querySelector('input[name="prof_type_sheets"]')?.checked) groups.push('sheets');
+            if (document.querySelector('input[name="prof_type_images"]')?.checked) groups.push('images');
+            if (document.querySelector('input[name="prof_type_videos"]')?.checked) groups.push('videos');
+            if (document.querySelector('input[name="prof_type_others"]')?.checked) groups.push('others');
+
+            const createdAfter = document.getElementById('prof_created_after')?.value || null;
+            const modifiedAfter = document.getElementById('prof_modified_after')?.value || null;
+            const maxSizeStr = document.getElementById('prof_max_size_mb')?.value || '';
+
+            const outputMode = document.getElementById('prof_output_mode')?.value || 'archive';
+            const localPath = document.getElementById('prof_local_mirror_path')?.value || '';
+            const archiveFormat = document.getElementById('prof_archive_format')?.value || 'zip';
+            const compressionLevel = document.getElementById('prof_compression_level')?.value || 'normal';
+
+            const execRadio = document.querySelector('input[name="prof_execution_mode"]:checked');
+            const executionMode = execRadio ? execRadio.value : 'immediate';
+
+            const procRadio = document.querySelector('input[name="prof_processing_mode"]:checked');
+            const processingMode = procRadio ? procRadio.value : 'sequential';
+
+            let maxSizeMb = null;
+            if (maxSizeStr) {
+                const parsed = parseInt(maxSizeStr, 10);
+                if (!Number.isNaN(parsed)) maxSizeMb = parsed;
+            }
+
+            return {
+                groups,
+                created_after: createdAfter,
+                modified_after: modifiedAfter,
+                max_size_mb: maxSizeMb,
+                output_mode: outputMode,
+                local_mirror_path: localPath,
+                archive_format: archiveFormat,
+                compression_level: compressionLevel,
+                execution_mode: executionMode,
+                processing_mode: processingMode,
             };
         }
 
@@ -1430,13 +1668,13 @@
 
             if (!selectedItems.length) {
                 if (feedbackEl) {
-                    feedbackEl.textContent = 'Selecione pelo menos um item para salvar como modelo.';
+                    feedbackEl.textContent = 'Selecione pelo menos um item na árvore para salvar como modelo.';
                     feedbackEl.className = 'form-error';
                 }
                 return;
             }
 
-            const nameInput = document.getElementById('profile_name');
+            const nameInput = document.getElementById('prof_name');
             const name = (nameInput?.value || '').trim();
             if (!name) {
                 if (feedbackEl) {
@@ -1447,18 +1685,17 @@
                 return;
             }
 
-            const zipName = (document.getElementById('zip_name')?.value || '').trim() || 'backup';
-            const zipPatternInput = document.getElementById('zip_pattern');
-            let zipPattern = (zipPatternInput?.value || '').trim();
-
+            const patInput = document.getElementById('prof_zip_pattern');
+            let zipPattern = (patInput?.value || '').trim();
             if (!zipPattern) {
-                zipPattern = zipName;
+                zipPattern = 'backup-{YYYYMMDD}';
+                if (patInput) patInput.value = zipPattern;
             }
 
-            const filters = collectCurrentFiltersFromForm();
+            const filters = collectProfileFiltersFromForm();
             const payload = {
                 name: name,
-                zip_name: zipName,
+                zip_name: applyZipPattern(zipPattern),
                 zip_pattern: zipPattern,
                 items: selectedItems,
                 ...filters
@@ -1501,23 +1738,104 @@
                 if (el) el.checked = !groups.length || groups.includes(g);
             });
 
-            if (profile.created_after) document.querySelector('input[name="created_after"]').value = profile.created_after;
-            if (profile.modified_after) document.querySelector('input[name="modified_after"]').value = profile.modified_after;
-            if (profile.max_size_mb) document.getElementById('max_size_mb').value = profile.max_size_mb;
-
-            if (profile.output_mode) document.getElementById('output_mode').value = profile.output_mode;
-            if (profile.local_mirror_path) document.getElementById('local_mirror_path').value = profile.local_mirror_path;
-            if (profile.archive_format) document.getElementById('archive_format').value = profile.archive_format;
-            if (profile.compression_level) document.getElementById('compression_level').value = profile.compression_level;
-
-            // --- NOVO: Aplica o modo de processamento salvo (Sequencial/Concorrente) ---
-            const procMode = profile.processing_mode || 'sequential';
-            const procRadio = document.querySelector(`input[name="processing_mode"][value="${procMode}"]`);
-            if (procRadio) {
-                procRadio.checked = true;
+            if (profile.created_after) {
+                const el = document.querySelector('input[name="created_after"]');
+                if (el) el.value = profile.created_after;
             }
 
+            if (profile.modified_after) {
+                const el = document.querySelector('input[name="modified_after"]');
+                if (el) el.value = profile.modified_after;
+            }
+
+            if (profile.max_size_mb) {
+                const el = document.getElementById('max_size_mb');
+                if (el) el.value = profile.max_size_mb;
+            }
+
+            if (profile.output_mode) {
+                const el = document.getElementById('output_mode');
+                if (el) el.value = profile.output_mode;
+            }
+
+            if (profile.local_mirror_path) {
+                const el = document.getElementById('local_mirror_path');
+                if (el) el.value = profile.local_mirror_path;
+            }
+
+            if (profile.archive_format) {
+                const el = document.getElementById('archive_format');
+                if (el) el.value = profile.archive_format;
+            }
+
+            if (profile.compression_level) {
+                const el = document.getElementById('compression_level');
+                if (el) el.value = profile.compression_level;
+            }
+
+            const procMode = profile.processing_mode || 'sequential';
+            const procRadio = document.querySelector(`input[name="processing_mode"][value="${procMode}"]`);
+            if (procRadio) procRadio.checked = true;
+
+            const execMode = profile.execution_mode || 'immediate';
+            const execRadio = document.querySelector(`input[name="execution_mode"][value="${execMode}"]`);
+            if (execRadio) execRadio.checked = true;
+
             updateOutputModeUI();
+        }
+
+        function applyFiltersToProfileForm(profile) {
+            const allTypes = ['pdf', 'docs', 'sheets', 'images', 'videos', 'others'];
+            const groups = profile.groups || [];
+            allTypes.forEach(g => {
+                const el = document.querySelector(`input[name="prof_type_${g}"]`);
+                if (el) el.checked = !groups.length || groups.includes(g);
+            });
+
+            if (profile.created_after) {
+                const el = document.getElementById('prof_created_after');
+                if (el) el.value = profile.created_after;
+            }
+
+            if (profile.modified_after) {
+                const el = document.getElementById('prof_modified_after');
+                if (el) el.value = profile.modified_after;
+            }
+
+            if (profile.max_size_mb) {
+                const el = document.getElementById('prof_max_size_mb');
+                if (el) el.value = profile.max_size_mb;
+            }
+
+            if (profile.output_mode) {
+                const el = document.getElementById('prof_output_mode');
+                if (el) el.value = profile.output_mode;
+            }
+
+            if (profile.local_mirror_path) {
+                const el = document.getElementById('prof_local_mirror_path');
+                if (el) el.value = profile.local_mirror_path;
+            }
+
+            if (profile.archive_format) {
+                const el = document.getElementById('prof_archive_format');
+                if (el) el.value = profile.archive_format;
+            }
+
+            if (profile.compression_level) {
+                const el = document.getElementById('prof_compression_level');
+                if (el) el.value = profile.compression_level;
+            }
+
+            const procMode = profile.processing_mode || 'sequential';
+            const procRadio = document.querySelector(`input[name="prof_processing_mode"][value="${procMode}"]`);
+            if (procRadio) procRadio.checked = true;
+
+            const execMode = profile.execution_mode || 'immediate';
+            const execRadio = document.querySelector(`input[name="prof_execution_mode"][value="${execMode}"]`);
+            if (execRadio) execRadio.checked = true;
+
+            updateProfileOutputUI();
         }
 
         function runBackupProfile(profileId, autoRun) {
@@ -1529,27 +1847,19 @@
             selectedItems.forEach(it => selectedNodeIds.add(`${it.type}:${it.id}`));
             updateSelectionInfo();
 
-            document.getElementById('items_json').value = JSON.stringify(selectedItems);
+            const itemsField = document.getElementById('items_json');
+            if (itemsField) itemsField.value = JSON.stringify(selectedItems);
 
             const pat = profile.zip_pattern || 'backup-{YYYYMMDD}';
             const zipInput = document.getElementById('zip_name');
-            const patternInput = document.getElementById('zip_pattern');
-            const profileNameInput = document.getElementById('profile_name');
-
             if (zipInput) zipInput.value = profile.zip_name || applyZipPattern(pat);
-            if (patternInput) patternInput.value = pat || '';
-            if (profileNameInput) profileNameInput.value = profile.name || '';
 
             applyFiltersToFormFromProfile(profile);
-
-            const execMode = profile.execution_mode || 'immediate';
-            const radio = document.querySelector(`input[name="execution_mode"][value="${execMode}"]`);
-            if (radio) radio.checked = true;
 
             if (autoRun) {
                 startDownloadProcess();
             } else {
-                openModalForSelected();
+                openDownloadModal();
             }
         }
 
@@ -1562,34 +1872,27 @@
             selectedItems.forEach(it => selectedNodeIds.add(`${it.type}:${it.id}`));
             updateSelectionInfo();
 
-            document.getElementById('items_json').value = JSON.stringify(selectedItems);
-
-            const pat = profile.zip_pattern || 'backup-{YYYYMMDD}';
-            const zipInput = document.getElementById('zip_name');
-            const patternInput = document.getElementById('zip_pattern');
-            const profileNameInput = document.getElementById('profile_name');
             const feedbackEl = document.getElementById('profile-save-feedback');
-
-            if (zipInput) zipInput.value = profile.zip_name || applyZipPattern(pat);
-            if (patternInput) patternInput.value = pat || '';
-            if (profileNameInput) profileNameInput.value = profile.name || '';
             if (feedbackEl) {
                 feedbackEl.textContent = '';
                 feedbackEl.className = 'form-hint';
             }
 
-            applyFiltersToFormFromProfile(profile);
+            const nameInput = document.getElementById('prof_name');
+            if (nameInput) nameInput.value = profile.name || '';
 
-            const execMode = profile.execution_mode || 'immediate';
-            const radio = document.querySelector(`input[name="execution_mode"][value="${execMode}"]`);
-            if (radio) radio.checked = true;
+            const patInput = document.getElementById('prof_zip_pattern');
+            if (patInput) patInput.value = profile.zip_pattern || 'backup-{YYYYMMDD}';
 
-            document.getElementById('modal-title').innerText = `Modelo: ${profile.name || ''}`;
-            document.getElementById('modal-subtitle').innerText =
-                `${selectedItems.length} item(ns) configurado(s) neste modelo.`;
+            applyFiltersToProfileForm(profile);
 
-            updateOutputModeUI();
-            document.getElementById('modal-backdrop').classList.remove('hidden');
+            const titleEl = document.getElementById('modal-prof-title');
+            const subEl = document.getElementById('modal-prof-subtitle');
+            if (titleEl) titleEl.innerText = `Modelo: ${profile.name || ''}`;
+            if (subEl) subEl.innerText = `${selectedItems.length} item(ns) configurado(s) neste modelo.`;
+
+            const mb = document.getElementById('modal-backdrop-profile');
+            if (mb) mb.classList.remove('hidden');
         }
 
         // =========================================================
@@ -1597,36 +1900,97 @@
         // =========================================================
 
         function updateOutputModeUI() {
-            const mode = document.getElementById('output_mode').value;
+            const modeEl = document.getElementById('output_mode');
+            const mode = modeEl ? modeEl.value : 'archive';
             const archiveFields = document.querySelectorAll('.archive-only');
             const mirrorFields = document.querySelectorAll('.mirror-only');
             archiveFields.forEach(el => el.style.display = mode === 'archive' ? 'block' : 'none');
             mirrorFields.forEach(el => el.style.display = mode === 'mirror' ? 'block' : 'none');
         }
 
-        function openModalForSelected() {
-            if (!selectedItems.length) {
-                alert("Selecione pelo menos um item.");
-                return;
-            }
-            document.getElementById('download-form').reset();
-            document.getElementById('profile-save-feedback').innerText = '';
-            document.getElementById('modal-title').innerText = "Baixar";
-            document.getElementById('items_json').value = JSON.stringify(selectedItems);
-            const subEl = document.getElementById('modal-subtitle');
-            subEl.innerText = `${selectedItems.length} item(ns) selecionado(s).`;
-            applySuggestion('date');
-            updateOutputModeUI();
-            document.getElementById('modal-backdrop').classList.remove('hidden');
+        function updateProfileOutputUI() {
+            const modeEl = document.getElementById('prof_output_mode');
+            const mode = modeEl ? modeEl.value : 'archive';
+            const archiveFields = document.querySelectorAll('.prof-archive-only');
+            const mirrorFields = document.querySelectorAll('.prof-mirror-only');
+            archiveFields.forEach(el => el.style.display = mode === 'archive' ? 'block' : 'none');
+            mirrorFields.forEach(el => el.style.display = mode === 'mirror' ? 'block' : 'none');
         }
 
-        function closeModal() {
-            document.getElementById('modal-backdrop').classList.add('hidden');
-            document.getElementById('suggestion-menu').classList.remove('show');
+        function openDownloadModal() {
+            if (!selectedItems.length) {
+                alert("Selecione pelo menos um item na árvore para baixar.");
+                return;
+            }
+
+            const form = document.getElementById('download-form');
+            if (form) form.reset();
+
+            const itemsField = document.getElementById('items_json');
+            if (itemsField) itemsField.value = JSON.stringify(selectedItems);
+
+            const titleEl = document.getElementById('modal-dl-title');
+            const subEl = document.getElementById('modal-dl-subtitle');
+            if (titleEl) titleEl.innerText = "Baixar Itens";
+            if (subEl) subEl.innerText = `${selectedItems.length} item(ns) selecionado(s).`;
+
+            applySuggestion('date');
+            updateOutputModeUI();
+
+            const mb = document.getElementById('modal-backdrop-download');
+            if (mb) mb.classList.remove('hidden');
+        }
+
+        function openProfileModal() {
+            const feedbackEl = document.getElementById('profile-save-feedback');
+            if (feedbackEl) {
+                feedbackEl.textContent = '';
+                feedbackEl.className = 'form-hint';
+            }
+
+            if (!selectedItems.length) {
+                if (feedbackEl) {
+                    feedbackEl.textContent = 'Selecione pelo menos um item na árvore antes de criar um modelo.';
+                    feedbackEl.className = 'form-error';
+                } else {
+                    alert("Selecione pelo menos um item na árvore antes de criar um modelo.");
+                }
+                return;
+            }
+
+            const form = document.getElementById('profile-form');
+            if (form) form.reset();
+
+            const titleEl = document.getElementById('modal-prof-title');
+            const subEl = document.getElementById('modal-prof-subtitle');
+            if (titleEl) titleEl.innerText = "Criar Modelo de Backup";
+            if (subEl) subEl.innerText = `${selectedItems.length} item(ns) serão incluídos neste modelo.`;
+
+            const patInput = document.getElementById('prof_zip_pattern');
+            if (patInput && !patInput.value) patInput.value = 'backup-{YYYYMMDD}';
+
+            updateProfileOutputUI();
+
+            const mb = document.getElementById('modal-backdrop-profile');
+            if (mb) mb.classList.remove('hidden');
+        }
+
+        function closeModal(which) {
+            if (which === 'download') {
+                const mb = document.getElementById('modal-backdrop-download');
+                if (mb) mb.classList.add('hidden');
+                const menu = document.getElementById('suggestion-menu');
+                if (menu) menu.classList.remove('show');
+            } else if (which === 'profile') {
+                const mb = document.getElementById('modal-backdrop-profile');
+                if (mb) mb.classList.add('hidden');
+            }
         }
 
         function startDownloadProcess() {
             const form = document.getElementById('download-form');
+            if (!form) return;
+
             const formData = new FormData(form);
             const payload = Object.fromEntries(formData.entries());
 
@@ -1636,7 +2000,7 @@
                 else delete payload[k];
             });
 
-            closeModal();
+            closeModal('download');
             const executionMode = payload.execution_mode || 'immediate';
 
             if (executionMode === 'background') {
@@ -1805,19 +2169,16 @@
                 }
 
                 list.innerHTML = tasks.map(t => {
-                    // LÓGICA DE EXIBIÇÃO DO CONTADOR NO TÍTULO
                     let phaseDisplay = t.phase.toUpperCase();
                     let isMapping = false;
 
                     if (t.phase === 'mapeando') {
                         isMapping = true;
-                        // Se estiver mapeando, mostra a contagem
                         if (t.files_found && t.files_found > 0) {
                             phaseDisplay = `MAPEANDO (${t.files_found})`;
                         }
                     }
 
-                    // Classe especial para barra de progresso durante o mapeamento
                     let progressClass = '';
                     if (isMapping) progressClass = 'mapping';
                     else if (t.paused) progressClass = 'paused';
@@ -1856,7 +2217,6 @@
                     pollActiveTasks();
                 });
         }
-
 
         // =========================================================
         // TREE VIEW (ÁRVORE DE PASTAS)
@@ -1900,11 +2260,8 @@
 
             li.append(row, childrenUl);
 
-            // Item reference
             const item = { id: folder.id, name: folder.name, type: 'folder' };
             if (isFavorite(item.id)) favBtn.classList.add('fav-on');
-
-            // --- EVENTOS ---
 
             favBtn.onclick = (e) => {
                 e.stopPropagation();
@@ -1917,9 +2274,7 @@
                 propagateSelectionDown(li, checkbox.checked);
             };
 
-            // Clique na linha mostra PREVIEW (Detalhes/Atividade)
             row.onclick = (e) => {
-                // Se clicar nos botões específicos, não faz preview
                 if ([toggleBtn, checkbox, favBtn].includes(e.target)) return;
                 showItemPreview(item, li);
             };
@@ -1973,7 +2328,6 @@
                 propagateSelectionUp(li);
             };
 
-            // MODIFICAÇÃO: Renomeado de showFilePreview para showItemPreview
             row.onclick = (e) => {
                 if (e.target === checkbox) return;
                 showItemPreview(item, li);
@@ -1996,7 +2350,6 @@
                     containerUl.innerHTML = '';
                     const items = data.items || [];
 
-                    // --- Atualizar Cache Global com os itens carregados ---
                     updateItemCache(items, parentId);
 
                     if (!items.length) {
@@ -2169,7 +2522,7 @@
         }
 
         // =========================================================
-        // PREVIEW E DETALHES (CORRIGIDO E ROBUSTO)
+        // PREVIEW E DETALHES
         // =========================================================
 
         function showItemPreview(item, li) {
@@ -2177,14 +2530,11 @@
             const wrapper = document.getElementById('preview-wrapper');
             const container = document.getElementById('preview-panel');
 
-            // Define ID atual
             container.dataset.currentId = item.id;
 
-            // 1. Reset Visual Imediato (Limpa dados antigos para não piscar informação errada)
             empty.classList.add('hidden');
             wrapper.classList.remove('hidden');
 
-            // Limpa campos antes de preencher
             document.getElementById('preview-type').textContent = '...';
             document.getElementById('preview-size').textContent = '...';
             document.getElementById('preview-modified').textContent = '...';
@@ -2196,7 +2546,6 @@
 
             if (li) updateBreadcrumbFromNode(li);
 
-            // --- LÓGICA DE DETALHES ---
             const detailsInner = document.getElementById('details-content-inner');
             const detailsMsg = document.getElementById('details-folder-message');
 
@@ -2207,34 +2556,25 @@
                 detailsInner.classList.remove('hidden');
                 detailsMsg.classList.add('hidden');
 
-                // Tenta recuperar do cache
                 const cached = itemCache.get(item.id);
-
-                // Verifica se temos dados completos (Size ou Link indicam que já foi feita a busca detalhada)
                 const hasDeepData = cached && (cached.webViewLink || cached.size !== undefined);
 
                 if (hasDeepData) {
                     renderPreviewData(cached, item.type);
                 } else {
-                    // Estado de Carregamento Explícito
                     document.getElementById('preview-type').textContent = "Buscando detalhes...";
 
                     fetch('/api/file/' + encodeURIComponent(item.id))
                         .then(r => r.json())
                         .then(meta => {
-                            // Se der erro na API
                             if (meta.error) {
                                 document.getElementById('preview-type').textContent = "Erro ao carregar info";
                                 return;
                             }
 
-                            // Mescla os dados novos com o que já tínhamos (id, name)
                             const newData = { ...item, ...meta };
-
-                            // Salva no cache
                             itemCache.set(item.id, newData);
 
-                            // Só atualiza a tela se o usuário AINDA estiver com esse item selecionado
                             if (container.dataset.currentId === item.id) {
                                 renderPreviewData(newData, item.type);
                             }
@@ -2248,12 +2588,10 @@
                 }
             }
 
-            // --- LÓGICA DE ATIVIDADE ---
             fetchAndRenderActivity(item.id);
         }
 
         function renderPreviewData(meta, type) {
-            // 2. Tipo
             const typeEl = document.getElementById('preview-type');
             if (typeEl) {
                 if (meta.mimeType === 'application/vnd.google-apps.folder' || type === 'folder') {
@@ -2263,7 +2601,6 @@
                 }
             }
 
-            // 3. Tamanho
             const sizeEl = document.getElementById('preview-size');
             if (sizeEl) {
                 if (meta.mimeType === 'application/vnd.google-apps.folder' || type === 'folder') {
@@ -2281,7 +2618,6 @@
                 }
             }
 
-            // 4. Data
             const modEl = document.getElementById('preview-modified');
             if (modEl) {
                 if (meta.modifiedTime) {
@@ -2293,7 +2629,6 @@
                 }
             }
 
-            // 5. Link
             const link = document.getElementById('preview-open-link');
             if (link) {
                 if (meta.webViewLink) {
@@ -2306,20 +2641,15 @@
                 }
             }
 
-            // 6. Thumbnail (CORRIGIDO)
             const thumbWrapper = document.getElementById('preview-thumbnail-wrapper');
             const img = document.getElementById('preview-thumbnail');
 
             if (thumbWrapper && img) {
                 if (meta.thumbnailLink) {
-                    // Define comportamento de erro ANTES de carregar
                     img.onerror = function () {
-                        // Se falhar ao carregar a versão grande (s600), tenta a original
                         if (this.src.includes('=s600')) {
-                            console.warn("Falha ao carregar thumbnail HD, tentando original...");
                             this.src = meta.thumbnailLink;
                         } else {
-                            // Se falhar a original também, esconde tudo
                             thumbWrapper.classList.add('hidden');
                         }
                     };
@@ -2328,8 +2658,6 @@
                         thumbWrapper.classList.remove('hidden');
                     };
 
-                    // Usa Regex para substituir qualquer tamanho (=s220, =s100, etc) por =s600
-                    // Se não tiver parametro de tamanho, apenas adiciona.
                     let hdLink = meta.thumbnailLink;
                     if (hdLink.match(/=s\d+/)) {
                         hdLink = hdLink.replace(/=s\d+/, '=s600');
@@ -2338,7 +2666,7 @@
                     }
 
                     img.src = hdLink;
-                    thumbWrapper.classList.remove('hidden'); // Mostra container preventivamente
+                    thumbWrapper.classList.remove('hidden');
                 } else {
                     thumbWrapper.classList.add('hidden');
                 }
@@ -2389,10 +2717,8 @@
             rootLi.append(row, childrenUl);
             ul.appendChild(rootLi);
 
-            // Item reference
             const item = { id: 'root', name: 'Meu Drive', type: 'folder' };
 
-            // Inicializa Cache do Root
             itemCache.set('root', {
                 id: 'root',
                 name: 'Meu Drive',
@@ -2436,6 +2762,10 @@
             initTree();
         }
 
+        // =========================================================
+        // DOMContentLoaded
+        // =========================================================
+
         document.addEventListener('DOMContentLoaded', () => {
             loadFavorites();
             loadProfiles();
@@ -2451,20 +2781,241 @@
 
             const om = document.getElementById('output_mode');
             if (om) om.addEventListener('change', updateOutputModeUI);
+            const pom = document.getElementById('prof_output_mode');
+            if (pom) pom.addEventListener('change', updateProfileOutputUI);
 
-            const bd = document.getElementById('modal-backdrop');
-            if (bd) {
-                bd.addEventListener('click', (e) => {
-                    if (e.target === bd) closeModal();
+            const mbDownload = document.getElementById('modal-backdrop-download');
+            if (mbDownload) {
+                mbDownload.addEventListener('click', (e) => {
+                    if (e.target === mbDownload) closeModal('download');
                 });
             }
+            const mbProfile = document.getElementById('modal-backdrop-profile');
+            if (mbProfile) {
+                mbProfile.addEventListener('click', (e) => {
+                    if (e.target === mbProfile) closeModal('profile');
+                });
+            }
+
             document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') closeModal();
+                if (e.key === 'Escape') {
+                    closeModal('download');
+                    closeModal('profile');
+                }
             });
 
             initTree();
         });
 
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+
+            const toast = document.createElement('div');
+            toast.className = `custom-toast toast-${type}`;
+
+            let icon = 'ℹ️';
+            if (type === 'success') icon = '✅';
+            if (type === 'error') icon = '❌';
+            if (type === 'warning') icon = '⚠️';
+
+            toast.innerHTML = `
+                <div class="toast-icon">${icon}</div>
+                <div class="toast-body">${message}</div>
+                <div class="toast-close" onclick="this.parentElement.remove()">×</div>
+            `;
+
+            container.appendChild(toast);
+
+            // Animação de entrada
+            requestAnimationFrame(() => {
+                toast.classList.add('show');
+            });
+
+            // Auto remover
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 5000);
+        }
+
+        // =========================================================
+        // LÓGICA DO MODAL DE RESUMO
+        // =========================================================
+
+        // Variável temporária para guardar o payload do formulário enquanto o resumo é exibido
+        let pendingDownloadPayload = null;
+
+        function startDownloadProcess() {
+            // 1. Coleta os dados do formulário de Download
+            const form = document.getElementById('download-form');
+            if (!form) return;
+
+            const formData = new FormData(form);
+            const payload = Object.fromEntries(formData.entries());
+
+            // Checkboxes manuais
+            ['type_pdf', 'type_docs', 'type_sheets', 'type_images', 'type_videos', 'type_others'].forEach(k => {
+                const el = form.querySelector(`input[name="${k}"]`);
+                if (el && el.checked) payload[k] = "1";
+                else delete payload[k];
+            });
+
+            // Salva payload para usar depois da confirmação
+            pendingDownloadPayload = payload;
+
+            // Fecha modal de configuração
+            closeModal('download');
+
+            // 2. Abre o Modal de Resumo (Calculando...)
+            openSummaryModal();
+        }
+
+        function openSummaryModal() {
+            const mb = document.getElementById('modal-backdrop-summary');
+            mb.classList.remove('hidden');
+
+            // UI Loading
+            document.getElementById('summary-loading').classList.remove('hidden');
+            document.getElementById('summary-content').classList.add('hidden');
+            document.getElementById('btn-confirm-download').disabled = true;
+
+            // Chama API para calcular
+            fetch('/api/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items: selectedItems })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.ok) {
+                        fillSummaryData(data.stats);
+                    } else {
+                        showToast('Erro ao calcular resumo: ' + data.error, 'error');
+                        closeModal('summary');
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    showToast('Erro de conexão ao calcular.', 'error');
+                    closeModal('summary');
+                });
+        }
+
+        function fillSummaryData(stats) {
+            document.getElementById('summary-loading').classList.add('hidden');
+            document.getElementById('summary-content').classList.remove('hidden');
+            document.getElementById('btn-confirm-download').disabled = false;
+
+            // Lógica Visual para Estimativa
+            const isPartial = stats.is_partial;
+            const suffix = isPartial ? "+" : "";
+            const colorClass = isPartial ? "text-warning" : "text-primary"; // Amarelo se for estimativa, Azul se exato
+            
+            // Atualiza contadores
+            const filesEl = document.getElementById('sum-files');
+            filesEl.innerText = stats.files_count + suffix;
+            filesEl.className = "summary-value " + (isPartial ? "text-orange" : ""); // Ex: classe CSS personalizada ou inline style
+
+            document.getElementById('sum-folders').innerText = stats.folders_count + suffix;
+            
+            // Tamanho
+            const sizeEl = document.getElementById('sum-size');
+            sizeEl.innerText = (stats.size_formatted || "0 B") + suffix;
+            
+            if (isPartial) {
+                // Adiciona um aviso visual
+                sizeEl.style.color = "#f39c12"; // Laranja
+                showToast("Pasta muito grande! Mostrando estimativa parcial.", "warning");
+            } else {
+                sizeEl.style.color = "#2ecc71"; // Verde
+            }
+
+            // Lista de arquivos
+            const listEl = document.getElementById('sum-preview-list');
+            listEl.innerHTML = '';
+            if(stats.preview_files && stats.preview_files.length > 0) {
+                stats.preview_files.forEach(name => {
+                    const div = document.createElement('div');
+                    div.className = 'file-preview-item';
+                    div.innerText = '📄 ' + name;
+                    listEl.appendChild(div);
+                });
+                
+                // Mensagem de rodapé da lista
+                const moreCount = stats.files_count - stats.preview_files.length;
+                if(moreCount > 0) {
+                    const more = document.createElement('div');
+                    more.style.fontStyle = 'italic';
+                    more.style.marginTop = '5px';
+                    // Texto adaptado para parcial
+                    const textMore = isPartial ? `...e muitos outros arquivos (+${moreCount})` : `...e mais ${moreCount} arquivos.`;
+                    more.innerText = textMore;
+                    listEl.appendChild(more);
+                }
+            } else {
+                listEl.innerText = "Nenhum arquivo encontrado diretamente.";
+            }
+        }
+
+        function confirmAndDownload() {
+            if (!pendingDownloadPayload) return;
+
+            closeModal('summary');
+            const executionMode = pendingDownloadPayload.execution_mode || 'immediate';
+
+            if (executionMode === 'background') {
+                showToast("Tarefa enviada para segundo plano! 🚀", 'success');
+            } else {
+                showProgressUI();
+                showToast("Iniciando download... Aguarde.", 'info');
+            }
+
+            // Dispara o download real
+            fetch('/download', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(pendingDownloadPayload)
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.ok) {
+                        if (executionMode === 'immediate') {
+                            currentTaskId = data.task_id;
+                            startPollingForeground();
+                        } else {
+                            pollActiveTasks();
+                        }
+                    } else {
+                        showToast("Erro ao iniciar: " + data.error, 'error');
+                        hideProgressUI();
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    showToast("Erro de conexão.", 'error');
+                    hideProgressUI();
+                });
+        }
+
+        // Atualize também o fechar modal para incluir o novo ID
+        function closeModal(which) {
+            if (which === 'download') {
+                document.getElementById('modal-backdrop-download').classList.add('hidden');
+                document.getElementById('suggestion-menu')?.classList.remove('show');
+            } else if (which === 'profile') {
+                document.getElementById('modal-backdrop-profile').classList.add('hidden');
+            } else if (which === 'summary') {
+                document.getElementById('modal-backdrop-summary').classList.add('hidden');
+            }
+        }
+
+        // Listener para fechar o novo modal clicando fora
+        const mbSummary = document.getElementById('modal-backdrop-summary');
+        if (mbSummary) {
+            mbSummary.addEventListener('click', (e) => {
+                if (e.target === mbSummary) closeModal('summary');
+            });
+        }
     </script>
 </body>
 

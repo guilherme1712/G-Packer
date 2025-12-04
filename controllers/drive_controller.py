@@ -20,6 +20,7 @@ from flask import (
 
 from services.auth_service import get_credentials
 from services.drive_filters import build_filters_from_form
+from services.drive_tree_service import calculate_selection_stats # <--- Importe a nova função
 from services.drive_tree_service import get_children, get_file_metadata, get_ancestors_path
 from services.drive_download_service import download_items_bundle, mirror_items_to_local
 from services.drive_activity_service import fetch_activity_log
@@ -331,3 +332,30 @@ def api_pause_task(task_id):
 def api_resume_task(task_id):
     set_task_pause(task_id, False)
     return jsonify({"ok": True})
+
+@drive_bp.route("/api/analyze", methods=["POST"])
+def analyze_selection():
+    creds = get_credentials()
+    if not creds:
+        return jsonify({"ok": False, "error": "Sessão expirada"}), 401
+    
+    data = request.get_json() or {}
+    items = data.get("items", [])
+    
+    if not items:
+        return jsonify({"ok": False, "error": "Nenhum item"}), 400
+
+    try:
+        stats = calculate_selection_stats(creds, items)
+        
+        # Formata tamanho para humano
+        size_bytes = stats["total_size_bytes"]
+        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+            if size_bytes < 1024:
+                stats["size_formatted"] = f"{size_bytes:.2f} {unit}"
+                break
+            size_bytes /= 1024
+        
+        return jsonify({"ok": True, "stats": stats})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500

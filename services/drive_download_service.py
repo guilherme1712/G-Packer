@@ -21,11 +21,22 @@ from .drive_filters import safe_name, file_passes_filters
 from .progress_service import sync_task_to_db, update_progress
 
 _dl_lock = threading.Lock()
+_archive_lock = threading.Lock() # Novo Lock para compactação
+
+# Armazenamento local da thread para reutilizar conexões HTTP/SSL
+_thread_local = threading.local()
 
 # Configuração de alta performance
-MAX_DOWNLOAD_WORKERS = 40         
-CHUNK_SIZE = 20 * 1024 * 1024     
+MAX_DOWNLOAD_WORKERS = 80         # Número de downloads simultâneos
+MAX_ARCHIVE_WORKERS = os.cpu_count() + 4 # Threads para compactação (CPU + IO overlap)
+CHUNK_SIZE = 50 * 1024 * 1024     # 50MB
 RETRY_LIMIT = 10                  
+MEMORY_BUFFER_LIMIT = 100 * 1024 * 1024 # 100MB - Limite para carregar arquivo em RAM
+
+def get_thread_safe_service(creds):
+    if not hasattr(_thread_local, "service"):
+        _thread_local.service = build("drive", "v3", credentials=creds, cache_discovery=False)
+    return _thread_local.service
 
 def prepare_long_path(path: str) -> str:
     if os.name == "nt":
@@ -41,13 +52,21 @@ def check_status_pause_cancel(progress_dict, task_id):
         info = progress_dict.get(task_id, {})
         if info.get("canceled"):
             raise Exception("Cancelado pelo usuário")
-
         if info.get("paused"):
             time.sleep(1)
             continue
         break
 
+def format_size(size_bytes):
+    if not size_bytes: return "0 B"
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if size_bytes < 1024:
+            return f"{size_bytes:.1f} {unit}"
+        size_bytes /= 1024
+    return f"{size_bytes:.1f} PB"
+
 def get_export_info(mime_type: str, file_name: str):
+    if not mime_type: return (None, None)
     if mime_type == "application/vnd.google-apps.document":
         return ("application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 file_name if file_name.lower().endswith(".docx") else file_name + ".docx")
@@ -62,31 +81,19 @@ def get_export_info(mime_type: str, file_name: str):
                 file_name if file_name.lower().endswith(".png") else file_name + ".png")
     return (None, None)
 
-def _worker_download_one(
-    creds,
-    f_info,
-    dest_root,
-    used_rel_paths,
-    progress_dict,
-    task_id,
-    filters,
-):
-    service = build("drive", "v3", credentials=creds, cache_discovery=False)
-
+def _worker_download_one(creds, f_info, dest_root, used_rel_paths, progress_dict, task_id, filters):
+    service = get_thread_safe_service(creds)
     file_id = f_info["id"]
-    
-    # --- CORREÇÃO DO BUG NoneType ---
-    # Garante que mime seja sempre uma string, mesmo que venha None
     mime = f_info.get("mimeType") or "" 
-    
     original_name = f_info.get("name") or "arquivo"
+    file_size_bytes = f_info.get("size_bytes", 0)
+    
     raw_rel_path = f_info.get("rel_path") or safe_name(original_name)
     rel_dir = os.path.dirname(raw_rel_path)
     download_name = original_name
 
     check_status_pause_cancel(progress_dict, task_id)
 
-    # Tratamento de Atalhos
     if mime == "application/vnd.google-apps.shortcut":
         try:
             sc_meta = service.files().get(fileId=file_id, fields="shortcutDetails").execute()
@@ -94,8 +101,9 @@ def _worker_download_one(
             if target:
                 meta = service.files().get(fileId=target, fields="id,name,mimeType,size").execute()
                 file_id = meta["id"]
-                mime = meta["mimeType"] or "" # Proteção extra aqui também
+                mime = meta["mimeType"] or ""
                 download_name = meta["name"]
+                file_size_bytes = int(meta.get("size", 0))
                 if filters and not file_passes_filters(meta, filters):
                     return
             else:
@@ -107,19 +115,15 @@ def _worker_download_one(
     export_mime = None
 
     try:
-        # Agora 'mime' é garantido ser string, então startswith não quebra
         if mime.startswith("application/vnd.google-apps."):
             export_mime, new_name = get_export_info(mime, download_name)
             if export_mime:
                 download_name = new_name
                 request_dl = service.files().export_media(fileId=file_id, mimeType=export_mime)
             else:
-                # Se for um Google App não suportado para exportação (ex: Mapas, Scripts), ignora ou tenta binário
                 return
         else:
-            # Arquivos normais (MP4, PDF, JPG, etc) caem aqui
             request_dl = service.files().get_media(fileId=file_id)
-            
     except Exception as e:
         with _dl_lock:
              if progress_dict and task_id:
@@ -129,25 +133,25 @@ def _worker_download_one(
                 info["history"] = hist
         return
 
-    # Define caminhos locais
     with _dl_lock:
         base_name_safe = safe_name(download_name)
         candidate_rel = os.path.join(rel_dir, base_name_safe) if rel_dir else base_name_safe
-
         root, ext = os.path.splitext(candidate_rel)
         counter = 1
         while candidate_rel in used_rel_paths:
             candidate_rel = f"{root} ({counter}){ext}"
             counter += 1
-
         used_rel_paths.add(candidate_rel)
         final_rel_path = candidate_rel
-        raw_local_path = os.path.join(dest_root, final_rel_path)
-        local_path = prepare_long_path(raw_local_path)
-        dir_name = os.path.dirname(local_path)
+    
+    raw_local_path = os.path.join(dest_root, final_rel_path)
+    local_path = prepare_long_path(raw_local_path)
+    dir_name = os.path.dirname(local_path)
+    try:
         os.makedirs(dir_name, exist_ok=True)
+    except:
+        pass
 
-    # Executa Download
     fh = io.FileIO(local_path, "wb")
     try:
         downloader = MediaIoBaseDownload(fh, request_dl, chunksize=CHUNK_SIZE)
@@ -199,31 +203,24 @@ def _worker_download_one(
             info = progress_dict[task_id]
             dl_now = info.get("files_downloaded", 0) + 1
             info["files_downloaded"] = dl_now
-            # No modo concorrente, files_total cresce dinamicamente
+            info["bytes_downloaded"] = info.get("bytes_downloaded", 0) + file_size_bytes
             total_seen = info.get("files_total", 0)
-            
-            info["message"] = f"Baixando: {dl_now}/{total_seen} itens..."
-            
-            # Não floodar o histórico
+            size_str = format_size(file_size_bytes)
+            info["message"] = f"Baixando ({dl_now}/{total_seen})"
             if dl_now % 5 == 0:
                 hist = info.get("history", [])
-                hist.append(f"Baixado: {download_name}")
+                hist.append(f"Baixado: {download_name} ({size_str})")
                 info["history"] = hist
-            
             progress_dict[task_id] = info
-            
+
 # =================================================================================
-# LÓGICA DO MODO CONCORRENTE (PRODUTOR-CONSUMIDOR)
+# LÓGICA DO MODO CONCORRENTE (MAPPER/WORKER)
 # =================================================================================
 
 def _concurrent_mapper(creds, items, q, progress_dict, task_id, filters):
-    """
-    PRODUTOR: Navega nas pastas e coloca arquivos na fila (q) IMEDIATAMENTE.
-    """
     try:
-        service = build("drive", "v3", credentials=creds, cache_discovery=False)
+        service = get_thread_safe_service(creds)
         stack = []
-
         for item in items:
             safe = safe_name(item["name"])
             stack.append({
@@ -238,11 +235,19 @@ def _concurrent_mapper(creds, items, q, progress_dict, task_id, filters):
             current = stack.pop(0)
 
             if current["type"] == "file":
+                try:
+                    meta = service.files().get(fileId=current["id"], fields="id,name,mimeType,size").execute()
+                    current["size_bytes"] = int(meta.get("size", 0))
+                    current["mimeType"] = meta.get("mimeType")
+                except:
+                    current["size_bytes"] = 0
+
                 q.put(current)
                 with _dl_lock:
                     if progress_dict and task_id:
                         info = progress_dict[task_id]
                         info["files_total"] = info.get("files_total", 0) + 1
+                        info["bytes_found"] = info.get("bytes_found", 0) + current.get("size_bytes", 0)
                         info["message"] = f"Mapeando... ({info['files_total']} encontrados)"
                         progress_dict[task_id] = info
 
@@ -251,7 +256,6 @@ def _concurrent_mapper(creds, items, q, progress_dict, task_id, filters):
                 for child in children:
                     check_status_pause_cancel(progress_dict, task_id)
                     child_rel = os.path.join(current["rel_path"], safe_name(child["name"]))
-
                     if child["type"] == "folder":
                         stack.append({
                             "id": child["id"],
@@ -262,25 +266,23 @@ def _concurrent_mapper(creds, items, q, progress_dict, task_id, filters):
                     else:
                         if filters and not file_passes_filters(child, filters):
                             continue
-
                         file_obj = {
                             "id": child["id"],
                             "name": child["name"],
                             "mimeType": child.get("mimeType"),
                             "rel_path": child_rel,
-                            "type": "file"
+                            "type": "file",
+                            "size_bytes": child.get("size_bytes", 0)
                         }
                         q.put(file_obj)
-
                         with _dl_lock:
                             if progress_dict and task_id:
                                 info = progress_dict[task_id]
                                 info["files_total"] = info.get("files_total", 0) + 1
+                                info["bytes_found"] = info.get("bytes_found", 0) + file_obj["size_bytes"]
                                 info["message"] = f"Mapeando... ({info['files_total']} encontrados)"
                                 progress_dict[task_id] = info
-
     except Exception as e:
-        print(f"Erro no Mapper: {e}")
         with _dl_lock:
              if progress_dict and task_id:
                 hist = progress_dict[task_id].get("history", [])
@@ -288,43 +290,34 @@ def _concurrent_mapper(creds, items, q, progress_dict, task_id, filters):
                 progress_dict[task_id]["history"] = hist
 
 def _concurrent_worker(creds, q, dest_root, used_rel_paths, progress_dict, task_id, filters, results_list):
-    """
-    CONSUMIDOR: Pega itens da fila e baixa.
-    """
+    get_thread_safe_service(creds)
     while True:
         try:
             item = q.get(timeout=2)
         except queue.Empty:
             return 
-
-        if item is None: # Poison pill
+        if item is None:
             break
-
         try:
             _worker_download_one(creds, item, dest_root, used_rel_paths, progress_dict, task_id, filters)
             with _dl_lock:
                 results_list.append(item)
         except Exception as e:
-            print(f"Erro worker: {e}")
+            pass
         finally:
             q.task_done()
 
 def execute_concurrent_download(creds, items, dest_root, progress_dict, task_id, filters):
-    """
-    Orquestra as threads de mapeamento e download simultâneos.
-    """
     file_queue = queue.Queue()
     results_list = []
     used_rel_paths = set()
 
-    # 1. Inicia Produtor (Mapper)
     mapper_thread = threading.Thread(
         target=_concurrent_mapper,
         args=(creds, items, file_queue, progress_dict, task_id, filters)
     )
     mapper_thread.start()
 
-    # 2. Inicia Consumidores (Workers)
     workers = []
     for _ in range(MAX_DOWNLOAD_WORKERS):
         t = threading.Thread(
@@ -334,24 +327,63 @@ def execute_concurrent_download(creds, items, dest_root, progress_dict, task_id,
         t.start()
         workers.append(t)
 
-    # 3. Espera o mapeamento terminar
     mapper_thread.join()
-    
-    # 4. Espera a fila ser processada totalmente
     file_queue.join()
-
-    # 5. Encerra workers
     for _ in range(MAX_DOWNLOAD_WORKERS):
         file_queue.put(None)
-
     for t in workers:
         t.join()
 
     return results_list
 
+# =================================================================================
+# NOVO WORKER DE COMPACTAÇÃO MULTI-THREAD
+# =================================================================================
+
+def _worker_archive_one(f_info, tmp_root, archive_obj, archive_format, progress_dict, task_id):
+    """
+    Lê o arquivo do disco (Paralelo) e escreve no arquivo compactado (Serializado com Lock).
+    Para arquivos pequenos/médios, lê para RAM antes de bloquear a escrita para maximizar IO.
+    """
+    rel = f_info.get("local_rel_path")
+    if not rel: return
+
+    src = os.path.join(tmp_root, rel)
+    src_long = prepare_long_path(src)
+    
+    if not os.path.exists(src_long):
+        return
+
+    check_status_pause_cancel(progress_dict, task_id)
+
+    try:
+        file_size = os.path.getsize(src_long)
+        
+        # OTIMIZAÇÃO: Se o arquivo for menor que o limite, lemos para a RAM fora do Lock.
+        # Isso permite que várias threads leiam do disco simultaneamente.
+        file_content = None
+        if file_size < MEMORY_BUFFER_LIMIT:
+            with open(src_long, "rb") as f:
+                file_content = f.read()
+        
+        # Bloqueio apenas para a operação de escrita no arquivo final
+        with _archive_lock:
+            if archive_format == "zip":
+                if file_content is not None:
+                    # Escreve buffer da RAM (rápido, já leu do disco)
+                    archive_obj.writestr(rel, file_content)
+                else:
+                    # Arquivo gigante: lê e escreve stream (bloqueia mais tempo, mas evita OOM)
+                    archive_obj.write(src_long, arcname=rel)
+            else:
+                # Tarfile
+                archive_obj.add(src_long, arcname=rel)
+
+    except Exception as e:
+        print(f"Erro ao compactar {rel}: {e}")
 
 # =================================================================================
-# FUNÇÕES PRINCIPAIS (INTERFACES)
+# FUNÇÕES PRINCIPAIS
 # =================================================================================
 
 def download_files_to_folder(
@@ -363,7 +395,6 @@ def download_files_to_folder(
     filters: dict | None = None,
     processing_mode: str = "sequential",
 ) -> None:
-    # Usado pelo MODO SEQUENCIAL (lista já vem completa)
     if not files_list:
         return
 
@@ -372,6 +403,7 @@ def download_files_to_folder(
         "phase": "baixando",
         "files_downloaded": 0,
         "files_total": total,
+        "bytes_downloaded": 0,
         "message": f"Iniciando download de {total} itens (Sequencial)...",
         "history": ["Iniciando downloads paralelos..."]
     })
@@ -426,20 +458,20 @@ def download_items_bundle(
     try:
         check_status_pause_cancel(progress_dict, task_id)
 
-        # === DECISÃO DE FLUXO (TURBO vs SEQUENCIAL) ===
+        # 1. Download
         if processing_mode == "concurrent":
-            # Modo Turbo: Mapper e Worker rodam juntos
             update_progress(task_id, {
                 "phase": "mapeando", 
                 "message": "MODO TURBO: Mapeando e Baixando simultaneamente...",
                 "files_total": 0,
+                "bytes_found": 0,
+                "bytes_downloaded": 0,
                 "history": ["Iniciando Modo Concorrente (Turbo)..."]
             })
             files_list_result = execute_concurrent_download(
                 creds, items, tmp_root, progress_dict, task_id, filters
             )
         else:
-            # Modo Sequencial (Padrão): Mapeia tudo -> Baixa tudo
             service_main = build("drive", "v3", credentials=creds)
             files_list_result = build_files_list_for_items(
                 service_main, items, creds=creds, filters=filters, progress_dict=progress_dict, task_id=task_id
@@ -454,43 +486,62 @@ def download_items_bundle(
 
         check_status_pause_cancel(progress_dict, task_id)
 
-        # 3. Compactação
+        # 2. Compactação Otimizada (Multi-thread)
         update_progress(task_id, {
             "phase": "compactando",
-            "message": "Compactando arquivos (Isso pode levar um tempo)...",
-            "history": ["Iniciando compactação..."]
+            "message": "Compactando arquivos (Multi-thread)...",
+            "history": ["Iniciando compactação paralela..."]
         })
         sync_task_to_db(task_id)
 
         out_dir = tempfile.mkdtemp(prefix="out_", dir=local_temp_base)
         if not base_name: base_name = "backup_drive"
         base_name = safe_name(base_name)
+        
+        archive_obj = None
+        archive_path = ""
 
+        # Prepara objeto de arquivo e nível de compressão
         if archive_format == "zip":
             archive_path = os.path.join(out_dir, f"{base_name}.zip")
             comp = zipfile.ZIP_DEFLATED
             level = 1 if compression_level == "fast" else (9 if compression_level == "max" else 6)
-
-            with zipfile.ZipFile(archive_path, "w", compression=comp, compresslevel=level, allowZip64=True) as zf:
-                for f_info in files_list_result:
-                    check_status_pause_cancel(progress_dict, task_id)
-                    rel = f_info.get("local_rel_path")
-                    if not rel: continue
-                    src = os.path.join(tmp_root, rel)
-                    src_long = prepare_long_path(src)
-                    if os.path.exists(src_long):
-                        zf.write(src_long, arcname=rel)
+            # Abre o ZIP
+            archive_obj = zipfile.ZipFile(archive_path, "w", compression=comp, compresslevel=level, allowZip64=True)
         else:
             archive_path = os.path.join(out_dir, f"{base_name}.tar.gz")
-            with tarfile.open(archive_path, "w:gz") as tf:
+            archive_obj = tarfile.open(archive_path, "w:gz")
+
+        try:
+            # USA EXECUTOR PARA PARALELIZAR LEITURA DE DISCO
+            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_ARCHIVE_WORKERS) as executor:
+                futures = []
                 for f_info in files_list_result:
-                    check_status_pause_cancel(progress_dict, task_id)
-                    rel = f_info.get("local_rel_path")
-                    if not rel: continue
-                    src = os.path.join(tmp_root, rel)
-                    src_long = prepare_long_path(src)
-                    if os.path.exists(src_long):
-                        tf.add(src_long, arcname=rel)
+                    fut = executor.submit(
+                        _worker_archive_one, 
+                        f_info, 
+                        tmp_root, 
+                        archive_obj, 
+                        archive_format, 
+                        progress_dict, 
+                        task_id
+                    )
+                    futures.append(fut)
+                
+                # Aguarda conclusão
+                count_done = 0
+                total_zip = len(files_list_result)
+                for future in concurrent.futures.as_completed(futures):
+                    future.result() # Propaga exceções se houver
+                    count_done += 1
+                    if count_done % 10 == 0:
+                         check_status_pause_cancel(progress_dict, task_id)
+                         # Atualização leve de progresso visual
+                         # (Opcional: atualizar BD com frequência menor para performance)
+        
+        finally:
+            if archive_obj:
+                archive_obj.close()
 
     except Exception as e:
         shutil.rmtree(prepare_long_path(tmp_root), ignore_errors=True)
@@ -508,7 +559,6 @@ def download_items_bundle(
     sync_task_to_db(task_id)
 
     return archive_path
-
 
 def mirror_items_to_local(
     creds: Credentials,
@@ -529,13 +579,14 @@ def mirror_items_to_local(
          update_progress(task_id, {
             "phase": "mapeando",
             "message": "Modo Espelho Turbo (Concorrente)...",
-            "files_total": 0
+            "files_total": 0,
+            "bytes_found": 0,
+            "bytes_downloaded": 0,
         })
          execute_concurrent_download(
             creds, items, dest_root, progress_dict, task_id, filters
         )
     else:
-        # Modo Sequencial
         service_main = build("drive", "v3", credentials=creds)
         files_list = build_files_list_for_items(
             service_main, items, creds=creds, filters=filters, progress_dict=progress_dict, task_id=task_id
