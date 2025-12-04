@@ -14,7 +14,7 @@ from .progress_service import sync_task_to_db, update_progress
 _lock = threading.Lock()
 
 # Configuração de alta performance
-MAX_MAPPING_WORKERS = 20  # Threads de mapeamento
+MAX_MAPPING_WORKERS = 40  # Threads de mapeamento
 RETRY_LIMIT = 5           # Tentativas em caso de erro 403/500
 
 

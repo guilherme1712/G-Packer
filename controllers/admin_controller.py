@@ -25,7 +25,6 @@ def _run_auto_migrations():
     """
     Verifica se o esquema do banco SQLite está atualizado com as novas colunas.
     Se não estiver, aplica os comandos ALTER TABLE necessários.
-    Isso evita o erro 'no such column' sem precisar deletar o banco.
     """
     try:
         inspector = inspect(db.engine)
@@ -34,31 +33,33 @@ def _run_auto_migrations():
         # --- Migração Tabela TASKS ---
         if 'tasks' in existing_tables:
             columns = [c['name'] for c in inspector.get_columns('tasks')]
-            
+
             with db.engine.connect() as conn:
                 if 'paused' not in columns:
-                    print("AUTOF IX: Adicionando coluna 'paused' em 'tasks'...")
                     conn.execute(text("ALTER TABLE tasks ADD COLUMN paused BOOLEAN DEFAULT 0"))
                     conn.commit()
-                
+
                 if 'canceled' not in columns:
-                    print("AUTOFIX: Adicionando coluna 'canceled' em 'tasks'...")
                     conn.execute(text("ALTER TABLE tasks ADD COLUMN canceled BOOLEAN DEFAULT 0"))
                     conn.commit()
 
         # --- Migração Tabela BACKUP_PROFILES ---
         if 'backup_profiles' in existing_tables:
             columns = [c['name'] for c in inspector.get_columns('backup_profiles')]
-            
+
             with db.engine.connect() as conn:
                 if 'zip_name' not in columns:
-                    print("AUTOFIX: Adicionando coluna 'zip_name' em 'backup_profiles'...")
                     conn.execute(text("ALTER TABLE backup_profiles ADD COLUMN zip_name VARCHAR(150)"))
                     conn.commit()
-                
+
                 if 'execution_mode' not in columns:
-                    print("AUTOFIX: Adicionando coluna 'execution_mode' em 'backup_profiles'...")
                     conn.execute(text("ALTER TABLE backup_profiles ADD COLUMN execution_mode VARCHAR(20) DEFAULT 'immediate'"))
+                    conn.commit()
+
+                if 'processing_mode' not in columns:
+                    # Default sequential para garantir comportamento estável
+                    print("AUTOFIX: Adicionando coluna 'processing_mode' em 'backup_profiles'...")
+                    conn.execute(text("ALTER TABLE backup_profiles ADD COLUMN processing_mode VARCHAR(20) DEFAULT 'sequential'"))
                     conn.commit()
 
     except Exception as e:
@@ -71,7 +72,6 @@ def view_db():
     if not creds:
         return "Acesso negado. Faça login primeiro.", 403
 
-    # Tenta corrigir o banco antes de consultar
     _run_auto_migrations()
 
     tasks = TaskModel.query.order_by(TaskModel.updated_at.desc()).limit(50).all()
@@ -86,7 +86,6 @@ def api_tasks():
     if not creds:
         return jsonify({"error": "Unauthorized"}), 403
 
-    # Tenta corrigir o banco antes de consultar
     _run_auto_migrations()
 
     tasks = TaskModel.query.order_by(TaskModel.updated_at.desc()).all()
@@ -94,10 +93,6 @@ def api_tasks():
 
 
 def _sync_backups_from_disk():
-    """
-    Garante que todo .zip / .tar.gz existente na pasta de backups
-    tenha um registro correspondente na tabela backup_files.
-    """
     folder_path = os.path.join(current_app.root_path, BACKUP_FOLDER_NAME)
     os.makedirs(folder_path, exist_ok=True)
 

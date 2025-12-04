@@ -1,5 +1,5 @@
+# models/backup_profile.py
 from .db_instance import db
-import time
 
 class BackupProfile(db.Model):
     __tablename__ = 'backup_profiles'
@@ -11,7 +11,7 @@ class BackupProfile(db.Model):
 
     # Nome/padrão do arquivo gerado
     zip_pattern = db.Column(db.String(150), default="backup-{YYYYMMDD}")
-    zip_name = db.Column(db.String(150), nullable=True)  # NOVO: nome base exibido no modal
+    zip_name = db.Column(db.String(150), nullable=True)
 
     # Armazena a lista de itens e grupos como JSON
     items = db.Column(db.JSON, default=list)
@@ -27,8 +27,13 @@ class BackupProfile(db.Model):
     output_mode = db.Column(db.String(20), default="archive")
     local_mirror_path = db.Column(db.String(500), nullable=True)
 
-    # NOVO: modo de execução padrão do modelo (immediate/background)
+    # modo de execução (immediate/background)
     execution_mode = db.Column(db.String(20), default="immediate")
+
+    # NOVO: modo de processamento (sequential/concurrent)
+    # sequential: Mapeia tudo antes, depois baixa (Visualização melhor do total)
+    # concurrent: Mapeia e baixa ao mesmo tempo (Mais rápido/Turbo)
+    processing_mode = db.Column(db.String(20), default="sequential")
 
     def to_dict(self):
         """Converte o objeto do banco para um dicionário (usado nas APIs)."""
@@ -47,4 +52,5 @@ class BackupProfile(db.Model):
             "output_mode": self.output_mode,
             "local_mirror_path": self.local_mirror_path,
             "execution_mode": self.execution_mode,
+            "processing_mode": self.processing_mode,
         }

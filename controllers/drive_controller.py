@@ -210,6 +210,7 @@ def add_favorite():
         new_fav = FavoriteModel(id=item_id, name=name, path=path, type=item_type)
         db.session.add(new_fav)
 
+
     try:
         db.session.commit()
         return jsonify({"ok": True})
@@ -257,7 +258,9 @@ def download():
     local_mirror_path = (data.get("local_mirror_path") or "").strip()
 
     execution_mode = data.get("execution_mode") or "immediate"
-    processing_mode = data.get("processing_mode") or "parallel"  # Default agora é parallel para ser mais rápido
+    
+    # Aqui pegamos o modo (concurrent/sequential) com fallback para sequential
+    processing_mode = data.get("processing_mode") or "sequential"
 
     task_id = data.get("task_id") or f"task-{int(time.time())}"
     filters = build_filters_from_form(data)

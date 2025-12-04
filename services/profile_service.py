@@ -1,7 +1,6 @@
+# services/profile_service.py
 from typing import Tuple, Optional
-
 from models import db, BackupProfile
-
 
 def load_backup_profiles() -> list[dict]:
     """
@@ -34,10 +33,7 @@ def create_profile(data: dict) -> Tuple[Optional[dict], Optional[str]]:
     if not isinstance(items, list) or not items:
         return None, "Nenhum item selecionado para o modelo."
 
-    # Nome base do arquivo exibido no modal
     zip_name = (data.get("zip_name") or "").strip() or None
-
-    # Padrão (pode ser igual ao nome ou conter {YYYYMMDD} etc.)
     zip_pattern = (data.get("zip_pattern") or "").strip() or "backup-{YYYYMMDD}"
 
     groups = data.get("groups") or []
@@ -55,6 +51,9 @@ def create_profile(data: dict) -> Tuple[Optional[dict], Optional[str]]:
     local_mirror_path = (data.get("local_mirror_path") or "").strip() or None
 
     execution_mode = (data.get("execution_mode") or "immediate").strip()
+    
+    # Define o padrão como sequential se não vier nada
+    processing_mode = (data.get("processing_mode") or "sequential").strip()
 
     try:
         profile = BackupProfile(
@@ -71,6 +70,7 @@ def create_profile(data: dict) -> Tuple[Optional[dict], Optional[str]]:
             output_mode=output_mode,
             local_mirror_path=local_mirror_path,
             execution_mode=execution_mode,
+            processing_mode=processing_mode,
         )
         db.session.add(profile)
         db.session.commit()
@@ -81,9 +81,6 @@ def create_profile(data: dict) -> Tuple[Optional[dict], Optional[str]]:
 
 
 def get_profile(profile_id: str) -> Optional[dict]:
-    """
-    Retorna um perfil específico em formato dict, ou None se não existir.
-    """
     try:
         pid = int(profile_id)
     except (TypeError, ValueError):
@@ -96,9 +93,6 @@ def get_profile(profile_id: str) -> Optional[dict]:
 
 
 def delete_profile(profile_id: str) -> bool:
-    """
-    Remove um perfil do banco. Retorna True se algo foi removido.
-    """
     try:
         pid = int(profile_id)
     except (TypeError, ValueError):

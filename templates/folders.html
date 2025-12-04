@@ -407,54 +407,59 @@
         }
 
         /* Remove o estilo padrão feio do navegador */
-input[type="checkbox"] {
-    -webkit-appearance: none;
-    appearance: none;
-    background-color: #fff;
-    margin: 0;
-    font: inherit;
-    color: currentColor;
-    width: 1.15em;
-    height: 1.15em;
-    border: 2px solid #757575; /* Borda cinza suave */
-    border-radius: 4px; /* Cantos levemente arredondados */
-    display: grid;
-    place-content: center;
-    cursor: pointer;
-    transition: all 0.2s ease-in-out;
-}
+        input[type="checkbox"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background-color: #fff;
+            margin: 0;
+            font: inherit;
+            color: currentColor;
+            width: 1.15em;
+            height: 1.15em;
+            border: 2px solid #757575;
+            /* Borda cinza suave */
+            border-radius: 4px;
+            /* Cantos levemente arredondados */
+            display: grid;
+            place-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
 
-/* Estado Marcado (Checked) */
-input[type="checkbox"]:checked {
-    background-color: #1a73e8; /* Azul Google */
-    border-color: #1a73e8;
-}
+        /* Estado Marcado (Checked) */
+        input[type="checkbox"]:checked {
+            background-color: #1a73e8;
+            /* Azul Google */
+            border-color: #1a73e8;
+        }
 
-/* O "V" (Checkmark) */
-input[type="checkbox"]::before {
-    content: "";
-    width: 0.65em;
-    height: 0.65em;
-    transform: scale(0);
-    transition: 120ms transform ease-in-out;
-    box-shadow: inset 1em 1em white; /* Cor do checkmark */
-    transform-origin: center;
-    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
-}
+        /* O "V" (Checkmark) */
+        input[type="checkbox"]::before {
+            content: "";
+            width: 0.65em;
+            height: 0.65em;
+            transform: scale(0);
+            transition: 120ms transform ease-in-out;
+            box-shadow: inset 1em 1em white;
+            /* Cor do checkmark */
+            transform-origin: center;
+            clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+        }
 
-input[type="checkbox"]:checked::before {
-    transform: scale(1);
-}
+        input[type="checkbox"]:checked::before {
+            transform: scale(1);
+        }
 
-/* Estado Hover (Ao passar o mouse) */
-input[type="checkbox"]:hover {
-    border-color: #1a73e8;
-    background-color: #f0f7ff;
-}
+        /* Estado Hover (Ao passar o mouse) */
+        input[type="checkbox"]:hover {
+            border-color: #1a73e8;
+            background-color: #f0f7ff;
+        }
 
-input[type="checkbox"]:checked:hover {
-    background-color: #1557b0; /* Azul um pouco mais escuro */
-}
+        input[type="checkbox"]:checked:hover {
+            background-color: #1557b0;
+            /* Azul um pouco mais escuro */
+        }
     </style>
 </head>
 
@@ -697,6 +702,30 @@ input[type="checkbox"]:checked:hover {
                                 </div>
                             </div>
                             <small>A extensão será adicionada automaticamente.</small>
+                        </div>
+
+                        <div class="form-group box-highlight"
+                            style="margin-top: 10px; border-color: #ffe0b2; background-color: #fff8e1;">
+                            <label style="margin-bottom:8px; display:block; font-weight:600; color: #f57c00;">Estratégia
+                                de Fluxo</label>
+                            <div class="radio-group-vertical">
+                                <label class="radio-option">
+                                    <input type="radio" name="processing_mode" value="sequential" checked>
+                                    <div>
+                                        <strong>Sequencial (Padrão)</strong>
+                                        <span>Mapeia tudo primeiro, calcula total, depois baixa. (Barra de progresso
+                                            mais precisa).</span>
+                                    </div>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="processing_mode" value="concurrent">
+                                    <div>
+                                        <strong>Concorrente (Turbo)</strong>
+                                        <span>Envia arquivos para download assim que são encontrados. (Inicia mais
+                                            rápido).</span>
+                                    </div>
+                                </label>
+                            </div>
                         </div>
 
                         <div class="form-group box-highlight">
@@ -981,11 +1010,11 @@ input[type="checkbox"]:checked:hover {
                 else if (msg.includes('concluído')) icon = '✅';
 
                 html += `
-                    <li class="log-item">
-                        <div class="log-icon">${icon}</div>
-                        <div>${msg}</div>
-                    </li>
-                `;
+                <li class="log-item">
+                    <div class="log-icon">${icon}</div>
+                    <div>${msg}</div>
+                </li>
+            `;
             });
             listEl.innerHTML = html;
         }
@@ -1363,8 +1392,14 @@ input[type="checkbox"]:checked:hover {
             const localPath = document.getElementById('local_mirror_path')?.value || '';
             const archiveFormat = document.getElementById('archive_format')?.value || 'zip';
             const compressionLevel = document.getElementById('compression_level')?.value || 'normal';
+
+            // Modo de execução (Immediate/Background)
             const execRadio = document.querySelector('input[name="execution_mode"]:checked');
             const executionMode = execRadio ? execRadio.value : 'immediate';
+
+            // --- NOVO: Captura o modo de processamento (Sequencial/Concorrente) ---
+            const procRadio = document.querySelector('input[name="processing_mode"]:checked');
+            const processingMode = procRadio ? procRadio.value : 'sequential';
 
             let maxSizeMb = null;
             if (maxSizeStr) {
@@ -1382,6 +1417,7 @@ input[type="checkbox"]:checked:hover {
                 archive_format: archiveFormat,
                 compression_level: compressionLevel,
                 execution_mode: executionMode,
+                processing_mode: processingMode, // Adicionado ao retorno
             };
         }
 
@@ -1473,6 +1509,13 @@ input[type="checkbox"]:checked:hover {
             if (profile.local_mirror_path) document.getElementById('local_mirror_path').value = profile.local_mirror_path;
             if (profile.archive_format) document.getElementById('archive_format').value = profile.archive_format;
             if (profile.compression_level) document.getElementById('compression_level').value = profile.compression_level;
+
+            // --- NOVO: Aplica o modo de processamento salvo (Sequencial/Concorrente) ---
+            const procMode = profile.processing_mode || 'sequential';
+            const procRadio = document.querySelector(`input[name="processing_mode"][value="${procMode}"]`);
+            if (procRadio) {
+                procRadio.checked = true;
+            }
 
             updateOutputModeUI();
         }
@@ -1780,24 +1823,24 @@ input[type="checkbox"]:checked:hover {
                     else if (t.paused) progressClass = 'paused';
 
                     return `
-                    <div class="task-item">
-                        <div class="task-info">
-                            <span>${phaseDisplay}</span>
-                            <span style="font-weight:normal; font-size:11px; color:#999;">${t.id.split('-').pop()}</span>
-                        </div>
-                        <div class="task-meta">${t.message}</div>
-                        <div class="task-progress-bg">
-                            <div class="task-progress-fill ${progressClass}" style="width: ${t.percent}%"></div>
-                        </div>
-                        <div class="task-controls">
-                            ${!t.paused ?
+                <div class="task-item">
+                    <div class="task-info">
+                        <span>${phaseDisplay}</span>
+                        <span style="font-weight:normal; font-size:11px; color:#999;">${t.id.split('-').pop()}</span>
+                    </div>
+                    <div class="task-meta">${t.message}</div>
+                    <div class="task-progress-bg">
+                        <div class="task-progress-fill ${progressClass}" style="width: ${t.percent}%"></div>
+                    </div>
+                    <div class="task-controls">
+                        ${!t.paused ?
                             `<button class="btn-mini pause" onclick="apiTaskAction('${t.id}', 'pause')">PAUSAR</button>` :
                             `<button class="btn-mini resume" onclick="apiTaskAction('${t.id}', 'resume')">RESUMIR</button>`
                         }
-                            <button class="btn-mini cancel" onclick="apiTaskAction('${t.id}', 'cancel')">CANCELAR</button>
-                        </div>
+                        <button class="btn-mini cancel" onclick="apiTaskAction('${t.id}', 'cancel')">CANCELAR</button>
                     </div>
-                `}).join('');
+                </div>
+            `}).join('');
             });
         }
 
@@ -2107,14 +2150,14 @@ input[type="checkbox"]:checked:hover {
                         if (act.action === 'EDITAR') icon = '✏️';
 
                         html += `
-                        <li class="activity-item">
-                            <div class="act-icon">${icon}</div>
-                            <div class="act-details">
-                                <div class="act-action">${act.action}</div>
-                                <div class="act-meta">por ${act.actor}</div>
-                            </div>
-                            <div class="act-date">${act.date}</div>
-                        </li>`;
+                    <li class="activity-item">
+                        <div class="act-icon">${icon}</div>
+                        <div class="act-details">
+                            <div class="act-action">${act.action}</div>
+                            <div class="act-meta">por ${act.actor}</div>
+                        </div>
+                        <div class="act-date">${act.date}</div>
+                    </li>`;
                     });
                     listEl.innerHTML = html;
                 })
