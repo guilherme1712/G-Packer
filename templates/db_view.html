@@ -109,7 +109,7 @@
             <p style="color:#9ca3af; font-size:0.9rem;">Exibindo as últimas 50 tarefas.</p>
 
             {% if tasks %}
-            <table>
+            <table id="tasks-table">
                 <thead>
                     <tr>
                         <th>ID</th>
@@ -122,7 +122,7 @@
                         <th>Logs Detalhados</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="tasks-tbody">
                     {% for t in tasks %}
                     <tr>
                         <td style="font-family:monospace; font-size:0.8em;">{{ t.id }}</td>
@@ -170,7 +170,7 @@
         <div class="db-section">
             <h2 style="margin-top:0;">⚙️ Perfis de Backup Salvos</h2>
             {% if profiles %}
-            <table>
+            <table id="profiles-table">
                 <thead>
                     <tr>
                         <th>ID</th>
@@ -181,7 +181,7 @@
                         <th>Modo</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="profiles-tbody">
                     {% for p in profiles %}
                     <tr>
                         <td>{{ p.id }}</td>
@@ -201,6 +201,7 @@
             {% endif %}
         </div>
 
+        <!-- SEÇÃO 3: AGENDAMENTOS -->
         <div class="db-section">
             <h2 style="margin-top:0;">⏱️ Agendamentos (Scheduler)</h2>
             <p style="color:#9ca3af; font-size:0.9rem;">
@@ -209,7 +210,7 @@
             </p>
 
             {% if sched_tasks %}
-            <table>
+            <table id="sched-table">
                 <thead>
                     <tr>
                         <th>ID</th>
@@ -221,30 +222,31 @@
                         <th>Última Execução</th>
                         <th>Status da Última Exec.</th>
                         <th>Itens</th>
+                        <th>Ações</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="sched-tbody">
                     {% for s in sched_tasks %}
                     <tr>
                         <td style="font-family:monospace; font-size:0.8em;">{{ s.id }}</td>
                         <td><strong>{{ s.name }}</strong></td>
 
                         <!-- Situação: pendente / já executado / desativado -->
-                        <td>
+                        <td data-col="situacao">
                             {% if s.active %}
-                            {% if s.last_run_at %}
-                            <span class="status-badge status-concluido">
-                                ATIVO · JÁ EXECUTOU
-                            </span>
+                                {% if s.last_run_at %}
+                                    <span class="status-badge status-concluido">
+                                        ATIVO · JÁ EXECUTOU
+                                    </span>
+                                {% else %}
+                                    <span class="status-badge status-iniciando">
+                                        PENDENTE
+                                    </span>
+                                {% endif %}
                             {% else %}
-                            <span class="status-badge status-iniciando">
-                                PENDENTE
-                            </span>
-                            {% endif %}
-                            {% else %}
-                            <span class="status-badge status-cancelado">
-                                DESATIVADO
-                            </span>
+                                <span class="status-badge status-cancelado">
+                                    DESATIVADO
+                                </span>
                             {% endif %}
                         </td>
 
@@ -275,6 +277,17 @@
                             {{ s.items_count }}
                         </td>
 
+                        <td>
+                            <!-- Alternar ativo/desativado -->
+                            <button type="button" class="btn-ghost btn-xs" onclick="toggleSchedule({{ s.id }}, this)">
+                                {% if s.active %}Desativar{% else %}Ativar{% endif %}
+                            </button>
+
+                            <!-- Excluir agendamento -->
+                            <button type="button" class="btn-danger btn-xs" onclick="deleteSchedule({{ s.id }}, this)">
+                                Excluir
+                            </button>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -284,6 +297,164 @@
             {% endif %}
         </div>
     </div>
+
+    <script>
+        // ===========================
+        // POLLING DAS TASKS (1s)
+        // ===========================
+        function renderTasksTable(tasks) {
+            const tbody = document.getElementById('tasks-tbody');
+            if (!tbody) return;
+
+            tbody.innerHTML = '';
+
+            tasks.forEach(t => {
+                const tr = document.createElement('tr');
+
+                const pct = t.files_total > 0
+                    ? Math.floor((t.files_downloaded / t.files_total) * 100) + '%'
+                    : '-';
+
+                // monta badges de estado
+                let estadoHtml = '';
+                if (t.paused) {
+                    estadoHtml += '<span class="status-badge status-paused">PAUSADO</span>';
+                }
+                if (t.canceled) {
+                    estadoHtml += '<span class="status-badge status-cancelado">CANCELADO</span>';
+                }
+                estadoHtml += `<span class="status-badge status-${t.phase}">${t.phase}</span>`;
+
+                // history
+                let historyHtml = '<span style="color:#666">-</span>';
+                if (Array.isArray(t.history) && t.history.length > 0) {
+                    historyHtml = `<pre>${t.history.join('\n')}</pre>`;
+                } else if (typeof t.history === 'string' && t.history.trim() !== '') {
+                    historyHtml = `<pre>${t.history}</pre>`;
+                }
+
+                const errorsStyle = t.errors_count > 0
+                    ? 'color:#ef4444; font-weight:bold;'
+                    : '';
+
+                tr.innerHTML = `
+                    <td style="font-family:monospace; font-size:0.8em;">${t.id}</td>
+                    <td>${estadoHtml}</td>
+                    <td>${t.message || ''}</td>
+                    <td>${pct}</td>
+                    <td>${t.files_downloaded} / ${t.files_total}</td>
+                    <td style="${errorsStyle}">${t.errors_count}</td>
+                    <td>${t.updated_at || '-'}</td>
+                    <td style="width:350px;">${historyHtml}</td>
+                `;
+
+                tbody.appendChild(tr);
+            });
+        }
+
+        function pollTasks() {
+            fetch('/admin/api/tasks')
+                .then(r => r.json())
+                .then(data => {
+                    if (!Array.isArray(data)) return;
+                    renderTasksTable(data);
+                })
+                .catch(err => {
+                    console.error('Erro ao buscar tasks:', err);
+                });
+        }
+
+        // inicia polling a cada 1 segundo
+        setInterval(pollTasks, 700);
+        // chama uma vez ao carregar
+        pollTasks();
+
+        // ===========================
+        // AÇÕES EM AGENDAMENTOS
+        // ===========================
+        function toggleSchedule(id, btn) {
+            if (!id) return;
+
+            btn.disabled = true;
+
+            fetch(`/scheduler/toggle/${id}`, {
+                method: 'POST'
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.ok) {
+                        alert(data.error || 'Erro ao alterar agendamento.');
+                        return;
+                    }
+
+                    const row = btn.closest('tr');
+                    if (!row) return;
+
+                    const situacaoCell = row.querySelector('[data-col="situacao"]');
+                    if (!situacaoCell) return;
+
+                    // Limpa conteúdo atual
+                    situacaoCell.innerHTML = '';
+
+                    if (data.active) {
+                        // Ativou
+                        const span = document.createElement('span');
+                        span.className = 'status-badge status-iniciando';
+                        span.textContent = 'PENDENTE';
+                        situacaoCell.appendChild(span);
+                        btn.textContent = 'Desativar';
+                    } else {
+                        // Desativou
+                        const span = document.createElement('span');
+                        span.className = 'status-badge status-cancelado';
+                        span.textContent = 'DESATIVADO';
+                        situacaoCell.appendChild(span);
+                        btn.textContent = 'Ativar';
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert('Erro de comunicação com o servidor.');
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                });
+        }
+
+        function deleteSchedule(id, btn) {
+            if (!id) return;
+
+            if (!confirm('Tem certeza que deseja excluir este agendamento?')) {
+                return;
+            }
+
+            btn.disabled = true;
+
+            fetch(`/scheduler/delete/${id}`, {
+                method: 'POST'
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.ok) {
+                        alert(data.error || 'Erro ao excluir agendamento.');
+                        return;
+                    }
+
+                    const row = btn.closest('tr');
+                    if (row) {
+                        row.remove();
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert('Erro de comunicação com o servidor.');
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                });
+        }
+    </script>
+
 </body>
 
 </html>

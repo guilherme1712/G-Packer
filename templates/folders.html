@@ -636,6 +636,241 @@
             margin-bottom: 10px;
             border: 1px solid #e5e7eb;
         }
+
+        /* ===================== */
+        /* MODAIS – LAYOUT NOVO  */
+        /* ===================== */
+
+        .modal {
+            max-width: 860px;
+            width: 100%;
+            background: #020617;
+            border-radius: 18px;
+            padding: 20px 22px 18px;
+            box-shadow:
+                0 20px 35px rgba(15, 23, 42, 0.65),
+                0 0 0 1px rgba(148, 163, 184, 0.35);
+            border: none;
+            color: #e5e7eb;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .modal-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .modal-title span.icon {
+            font-size: 1.3rem;
+        }
+
+        .modal-subtitle {
+            margin: 4px 0 0;
+            font-size: 0.85rem;
+            color: #9ca3af;
+        }
+
+        .modal-badge {
+            padding: 4px 10px;
+            font-size: 0.7rem;
+            border-radius: 999px;
+            background: rgba(37, 99, 235, 0.12);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            color: #bfdbfe;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .modal-body {
+            margin-bottom: 18px;
+        }
+
+        .modal-footer,
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 6px;
+        }
+
+        .modal-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.7fr) minmax(0, 1.1fr);
+            gap: 14px;
+            margin-top: 8px;
+        }
+
+        /* Seções internas em “cards” */
+        .form-section {
+            background: rgba(15, 23, 42, 0.92);
+            border-radius: 14px;
+            padding: 14px 14px 12px;
+            border: 1px solid rgba(148, 163, 184, 0.28);
+        }
+
+        .modal-section-wide {
+            grid-column: 1 / span 1;
+        }
+
+        .form-section-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 700;
+            color: #9ca3af;
+            margin-bottom: 10px;
+        }
+
+        /* Campos */
+        .form-group {
+            margin-bottom: 10px;
+        }
+
+        .form-group label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #e5e7eb;
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="time"],
+        .form-group input[type="number"],
+        .form-group input[type="date"],
+        .form-group select {
+            width: 100%;
+            border-radius: 8px;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            padding: 7px 9px;
+            font-size: 0.85rem;
+            background: #020617;
+            color: #e5e7eb;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.5);
+        }
+
+        /* Radios em coluna – visual cartão */
+        .radio-group-vertical {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 4px;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            cursor: pointer;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            padding: 7px 9px;
+            border-radius: 9px;
+            transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+            background: rgba(15, 23, 42, 0.95);
+        }
+
+        .radio-option:hover {
+            background-color: rgba(15, 23, 42, 0.98);
+            border-color: rgba(96, 165, 250, 0.6);
+        }
+
+        .radio-option input {
+            margin-top: 2px;
+        }
+
+        .radio-option strong {
+            display: block;
+            font-size: 0.82rem;
+            color: #e5e7eb;
+        }
+
+        .radio-option span {
+            display: block;
+            font-size: 0.75rem;
+            color: #9ca3af;
+        }
+
+        /* Destaque quando checked */
+        .radio-option input:checked+div {
+            border-left: 3px solid #60a5fa;
+            margin-left: -3px;
+            padding-left: 6px;
+        }
+
+        .radio-option input:checked+div strong {
+            color: #bfdbfe;
+        }
+
+        /* Blocos de aviso / destaque */
+        .box-warning {
+            background: rgba(251, 146, 60, 0.05);
+            border: 1px solid rgba(251, 146, 60, 0.4);
+            border-radius: 10px;
+            padding: 10px 10px 8px;
+        }
+
+        .box-highlight {
+            background: rgba(37, 99, 235, 0.03);
+            border: 1px solid rgba(59, 130, 246, 0.35);
+            border-radius: 10px;
+            padding: 10px 10px 8px;
+        }
+
+        /* Preview de arquivos/itens */
+        .file-preview-list,
+        .sched-preview-list {
+            background: #020617;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            border-radius: 8px;
+            padding: 8px;
+            font-size: 0.8rem;
+            color: #9ca3af;
+            max-height: 140px;
+            overflow-y: auto;
+        }
+
+        .file-preview-item {
+            padding: 3px 0;
+            border-bottom: 1px solid rgba(55, 65, 81, 0.6);
+        }
+
+        .file-preview-item:last-child {
+            border-bottom: none;
+        }
+
+        /* Responsivo */
+        @media (max-width: 900px) {
+            .modal {
+                max-width: 100%;
+                margin: 10px;
+                padding: 16px;
+            }
+
+            .modal-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .modal-section-wide {
+                grid-column: auto;
+            }
+        }
     </style>
 </head>
 
@@ -812,125 +1047,161 @@
     <!-- MODAL DE DOWNLOAD -->
     <div id="modal-backdrop-download" class="modal-backdrop hidden">
         <div class="modal">
-            <h2 id="modal-dl-title">Baixar Itens</h2>
-            <p class="subtitle" id="modal-dl-subtitle"></p>
+            <div class="modal-header">
+                <div>
+                    <h2 id="modal-dl-title" class="modal-title">
+                        <span class="icon">⬇️</span> Baixar Itens
+                    </h2>
+                    <p class="modal-subtitle" id="modal-dl-subtitle">
+                        Configure o nome do arquivo, estratégia de fluxo e filtros antes de iniciar.
+                    </p>
+                </div>
+                <div class="modal-badge">Download</div>
+            </div>
 
             <form id="download-form" onsubmit="return false;">
                 <input type="hidden" name="items_json" id="items_json">
                 <input type="hidden" name="task_id" id="task_id">
 
-                <div class="modal-grid">
-                    <div class="form-section modal-section-wide">
-                        <div class="form-section-title">Configurações de Download</div>
+                <div class="modal-body">
+                    <div class="modal-grid">
+                        <!-- Configurações principais -->
+                        <div class="form-section modal-section-wide">
+                            <div class="form-section-title">Configurações de Download</div>
 
-                        <div class="form-group">
-                            <label for="zip_name">Nome do Arquivo</label>
-                            <div style="display:flex; gap:8px;" class="suggestion-wrapper">
-                                <input type="text" id="zip_name" name="zip_name" placeholder="Ex: backup_drive"
-                                    style="flex:1;">
-                                <button type="button" class="btn-ghost btn-xs" onclick="toggleSuggestionMenu()">Sugestão
-                                    ▼</button>
-                                <div id="suggestion-menu" class="suggestion-menu">
-                                    <div class="suggestion-item" onclick="applySuggestion('date')">Nome + Data</div>
-                                    <div class="suggestion-item" onclick="applySuggestion('clean')">Apenas Nome</div>
-                                    <div class="suggestion-item" onclick="applySuggestion('random')">Aleatório</div>
+                            <div class="form-group">
+                                <label for="zip_name">Nome do Arquivo</label>
+                                <div style="display:flex; gap:8px;" class="suggestion-wrapper">
+                                    <input type="text" id="zip_name" name="zip_name" placeholder="Ex: backup_drive"
+                                        style="flex:1;">
+                                    <button type="button" class="btn-ghost btn-xs" onclick="toggleSuggestionMenu()">
+                                        Sugestão ▼
+                                    </button>
+                                    <div id="suggestion-menu" class="suggestion-menu">
+                                        <div class="suggestion-item" onclick="applySuggestion('date')">Nome + Data</div>
+                                        <div class="suggestion-item" onclick="applySuggestion('clean')">Apenas Nome
+                                        </div>
+                                        <div class="suggestion-item" onclick="applySuggestion('random')">Aleatório</div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <div class="form-group box-warning">
-                            <label style="margin-bottom:8px; display:block; font-weight:600; color: #f57c00;">Estratégia
-                                de Fluxo</label>
-                            <div class="radio-group-vertical">
-                                <label class="radio-option">
-                                    <input type="radio" name="processing_mode" value="sequential" checked>
-                                    <div><strong>Sequencial (Padrão)</strong><span>Mapeia tudo primeiro, calcula total,
-                                            depois baixa.</span></div>
+                            <div class="form-group box-warning">
+                                <label style="margin-bottom:8px; display:block; font-weight:600; color:#fed7aa;">
+                                    Estratégia de Fluxo
                                 </label>
-                                <label class="radio-option">
-                                    <input type="radio" name="processing_mode" value="concurrent">
-                                    <div><strong>Concorrente (Turbo)</strong><span>Inicia o download imediatamente
-                                            (Mapeamento simultâneo).</span></div>
+                                <div class="radio-group-vertical">
+                                    <label class="radio-option">
+                                        <input type="radio" name="processing_mode" value="sequential" checked>
+                                        <div>
+                                            <strong>Sequencial (Padrão)</strong>
+                                            <span>Mapeia tudo primeiro, calcula total, depois baixa.</span>
+                                        </div>
+                                    </label>
+                                    <label class="radio-option">
+                                        <input type="radio" name="processing_mode" value="concurrent">
+                                        <div>
+                                            <strong>Concorrente (Turbo)</strong>
+                                            <span>Inicia o download imediatamente (Mapeamento simultâneo).</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="form-group box-highlight">
+                                <label style="margin-bottom:8px; display:block; font-weight:600;">
+                                    Modo de Execução
                                 </label>
+                                <div class="radio-group-vertical">
+                                    <label class="radio-option">
+                                        <input type="radio" name="execution_mode" value="immediate" checked>
+                                        <div>
+                                            <strong>Baixar Agora</strong>
+                                            <span>Aguarda e baixa direto.</span>
+                                        </div>
+                                    </label>
+                                    <label class="radio-option">
+                                        <input type="radio" name="execution_mode" value="background">
+                                        <div>
+                                            <strong>Segundo Plano</strong>
+                                            <span>Processa no servidor e salva em "Meus Backups".</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="output_mode">Formato de Saída</label>
+                                <select id="output_mode" name="output_mode" onchange="updateOutputModeUI()">
+                                    <option value="archive" selected>Arquivo Compactado (ZIP/Tar)</option>
+                                    <option value="mirror">Espelho Local (Sync)</option>
+                                </select>
+                            </div>
+
+                            <div class="archive-only">
+                                <div class="form-group">
+                                    <label for="archive_format">Formato</label>
+                                    <select id="archive_format" name="archive_format">
+                                        <option value="zip">ZIP (.zip)</option>
+                                        <option value="tar.gz">Tar GZip (.tar.gz)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="compression_level">Compressão</label>
+                                    <select id="compression_level" name="compression_level">
+                                        <option value="fast">Rápida</option>
+                                        <option value="normal" selected>Normal</option>
+                                        <option value="max">Máxima</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group mirror-only" style="display:none;">
+                                <label for="local_mirror_path">Caminho Local</label>
+                                <input type="text" id="local_mirror_path" name="local_mirror_path"
+                                    placeholder="/home/user/Backups">
                             </div>
                         </div>
 
-                        <div class="form-group box-highlight">
-                            <label style="margin-bottom:8px; display:block; font-weight:600;">Modo de Execução</label>
-                            <div class="radio-group-vertical">
-                                <label class="radio-option">
-                                    <input type="radio" name="execution_mode" value="immediate" checked>
-                                    <div><strong>Baixar Agora</strong><span>Aguarda e baixa direto.</span></div>
-                                </label>
-                                <label class="radio-option">
-                                    <input type="radio" name="execution_mode" value="background">
-                                    <div><strong>Segundo Plano</strong><span>Processa no servidor e salva em "Meus
-                                            Backups".</span></div>
-                                </label>
-                            </div>
-                        </div>
+                        <!-- Filtros -->
+                        <div class="form-section">
+                            <div class="form-section-title">Filtros de Conteúdo</div>
 
-                        <div class="form-group">
-                            <label for="output_mode">Formato de Saída</label>
-                            <select id="output_mode" name="output_mode" onchange="updateOutputModeUI()">
-                                <option value="archive" selected>Arquivo Compactado (ZIP/Tar)</option>
-                                <option value="mirror">Espelho Local (Sync)</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group archive-only">
-                            <label for="archive_format">Formato</label>
-                            <select id="archive_format" name="archive_format">
-                                <option value="zip">ZIP (.zip)</option>
-                                <option value="tar.gz">Tar GZip (.tar.gz)</option>
-                            </select>
-                        </div>
-                        <div class="form-group archive-only">
-                            <label for="compression_level">Compressão</label>
-                            <select id="compression_level" name="compression_level">
-                                <option value="fast">Rápida</option>
-                                <option value="normal" selected>Normal</option>
-                                <option value="max">Máxima</option>
-                            </select>
-                        </div>
-                        <div class="form-group mirror-only" style="display:none;">
-                            <label for="local_mirror_path">Caminho Local</label>
-                            <input type="text" id="local_mirror_path" name="local_mirror_path"
-                                placeholder="/home/user/Backups">
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <div class="form-section-title">Filtros</div>
-                        <div class="form-group">
-                            <label>Tipos</label>
-                            <div class="filter-types">
-                                <label><input type="checkbox" name="type_pdf" value="1" checked> PDF</label>
-                                <label><input type="checkbox" name="type_docs" value="1" checked> Docs</label>
-                                <label><input type="checkbox" name="type_sheets" value="1" checked> Planilhas</label>
-                                <label><input type="checkbox" name="type_images" value="1" checked> Imagens</label>
-                                <label><input type="checkbox" name="type_videos" value="1" checked> Vídeos</label>
-                                <label><input type="checkbox" name="type_others" value="1" checked> Outros</label>
+                            <div class="form-group">
+                                <label>Tipos de Arquivo</label>
+                                <div class="filter-types">
+                                    <label><input type="checkbox" name="type_pdf" value="1" checked> PDF</label>
+                                    <label><input type="checkbox" name="type_docs" value="1" checked> Docs</label>
+                                    <label><input type="checkbox" name="type_sheets" value="1" checked>
+                                        Planilhas</label>
+                                    <label><input type="checkbox" name="type_images" value="1" checked> Imagens</label>
+                                    <label><input type="checkbox" name="type_videos" value="1" checked> Vídeos</label>
+                                    <label><input type="checkbox" name="type_others" value="1" checked> Outros</label>
+                                </div>
                             </div>
-                        </div>
-                        <div class="form-section-title" style="margin-top: 15px;">Filtros Avançados</div>
-                        <div class="form-group">
-                            <label>Data</label>
-                            <div class="filter-dates">
-                                <label>Criado pós: <input type="date" name="created_after"></label>
-                                <label>Editado pós: <input type="date" name="modified_after"></label>
+
+                            <div class="form-section-title" style="margin-top: 10px;">Filtros Avançados</div>
+
+                            <div class="form-group">
+                                <label>Data</label>
+                                <div class="filter-dates">
+                                    <label>Criado pós: <input type="date" name="created_after"></label>
+                                    <label>Editado pós: <input type="date" name="modified_after"></label>
+                                </div>
                             </div>
-                        </div>
-                        <div class="form-group">
-                            <label for="max_size_mb">Tam. Máx (MB)</label>
-                            <input type="number" id="max_size_mb" name="max_size_mb" placeholder="Ignorar > X MB">
+
+                            <div class="form-group">
+                                <label for="max_size_mb">Tam. Máx (MB)</label>
+                                <input type="number" id="max_size_mb" name="max_size_mb"
+                                    placeholder="Ignorar arquivos maiores que X MB">
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div class="modal-footer">
                     <button type="button" class="btn-ghost" onclick="closeModal('download')">Cancelar</button>
-                    <button type="button" class="btn-primary" onclick="startDownloadProcess()">INICIAR DOWNLOAD</button>
+                    <button type="button" class="btn-primary" onclick="startDownloadProcess()">Iniciar Download</button>
                 </div>
             </form>
         </div>
@@ -939,204 +1210,256 @@
     <!-- MODAL DE PERFIL / MODELO -->
     <div id="modal-backdrop-profile" class="modal-backdrop hidden">
         <div class="modal">
-            <h2 id="modal-prof-title">Criar Modelo de Backup</h2>
-            <p class="subtitle" id="modal-prof-subtitle">Salve todas as configurações para uso futuro.</p>
+            <div class="modal-header">
+                <div>
+                    <h2 id="modal-prof-title" class="modal-title">
+                        <span class="icon">🧩</span> Criar Modelo de Backup
+                    </h2>
+                    <p class="modal-subtitle" id="modal-prof-subtitle">
+                        Salve todas as configurações de download para reaplicar com um clique.
+                    </p>
+                </div>
+                <div class="modal-badge">Modelo</div>
+            </div>
 
             <form id="profile-form" onsubmit="return false;">
-                <div class="modal-grid">
-                    <div class="form-section modal-section-wide">
-                        <div class="form-section-title">Dados do Modelo</div>
-                        <div class="form-group">
-                            <label for="prof_name">Nome do Modelo (Obrigatório)</label>
-                            <input type="text" id="prof_name" name="prof_name" placeholder="Ex: Backup Mensal"
-                                style="font-weight:bold;">
-                        </div>
-                        <div class="form-group">
-                            <label for="prof_zip_pattern">Padrão de Nome do Arquivo</label>
-                            <input type="text" id="prof_zip_pattern" name="prof_zip_pattern"
-                                placeholder="Ex: backup-{YYYYMMDD}">
-                            <div class="form-hint">Tags: {YYYYMMDD}, {YYYY}, {MM}, {DD}</div>
-                        </div>
+                <div class="modal-body">
+                    <div class="modal-grid">
+                        <!-- Coluna esquerda -->
+                        <div class="form-section modal-section-wide">
+                            <div class="form-section-title">Dados do Modelo</div>
 
-                        <div class="form-group box-warning">
-                            <label style="margin-bottom:8px; display:block; font-weight:600; color: #f57c00;">Estratégia
-                                de Fluxo</label>
-                            <div class="radio-group-vertical">
-                                <label class="radio-option">
-                                    <input type="radio" name="prof_processing_mode" value="sequential" checked>
-                                    <div><strong>Sequencial</strong><span>Mapeamento preciso antes do download.</span>
-                                    </div>
+                            <div class="form-group">
+                                <label for="prof_name">Nome do Modelo (Obrigatório)</label>
+                                <input type="text" id="prof_name" name="prof_name" placeholder="Ex: Backup Mensal"
+                                    style="font-weight:bold;">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="prof_zip_pattern">Padrão de Nome do Arquivo</label>
+                                <input type="text" id="prof_zip_pattern" name="prof_zip_pattern"
+                                    placeholder="Ex: backup-{YYYYMMDD}">
+                                <div class="form-hint">
+                                    Tags disponíveis: {YYYYMMDD}, {YYYY}, {MM}, {DD}
+                                </div>
+                            </div>
+
+                            <div class="form-group box-warning">
+                                <label style="margin-bottom:8px; display:block; font-weight:600; color:#fed7aa;">
+                                    Estratégia de Fluxo
                                 </label>
-                                <label class="radio-option">
-                                    <input type="radio" name="prof_processing_mode" value="concurrent">
-                                    <div><strong>Concorrente</strong><span>Mapeamento e download simultâneos.</span>
-                                    </div>
+                                <div class="radio-group-vertical">
+                                    <label class="radio-option">
+                                        <input type="radio" name="prof_processing_mode" value="sequential" checked>
+                                        <div>
+                                            <strong>Sequencial</strong>
+                                            <span>Mapeamento preciso antes do download.</span>
+                                        </div>
+                                    </label>
+                                    <label class="radio-option">
+                                        <input type="radio" name="prof_processing_mode" value="concurrent">
+                                        <div>
+                                            <strong>Concorrente</strong>
+                                            <span>Mapeamento e download simultâneos.</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="form-group box-highlight">
+                                <label style="margin-bottom:8px; display:block; font-weight:600;">
+                                    Modo Padrão
                                 </label>
+                                <div class="radio-group-vertical">
+                                    <label class="radio-option">
+                                        <input type="radio" name="prof_execution_mode" value="immediate" checked>
+                                        <div><strong>Baixar Agora</strong></div>
+                                    </label>
+                                    <label class="radio-option">
+                                        <input type="radio" name="prof_execution_mode" value="background">
+                                        <div><strong>Segundo Plano</strong></div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="prof_output_mode">Formato de Saída</label>
+                                <select id="prof_output_mode" name="prof_output_mode"
+                                    onchange="updateProfileOutputUI()">
+                                    <option value="archive" selected>Arquivo Compactado</option>
+                                    <option value="mirror">Espelho Local</option>
+                                </select>
+                            </div>
+
+                            <div class="prof-archive-only">
+                                <div class="form-group">
+                                    <label for="prof_archive_format">Formato</label>
+                                    <select id="prof_archive_format" name="prof_archive_format">
+                                        <option value="zip">ZIP</option>
+                                        <option value="tar.gz">Tar GZip</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="prof_compression_level">Compressão</label>
+                                    <select id="prof_compression_level" name="prof_compression_level">
+                                        <option value="fast">Rápida</option>
+                                        <option value="normal" selected>Normal</option>
+                                        <option value="max">Máxima</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group prof-mirror-only" style="display:none;">
+                                <label for="prof_local_mirror_path">Caminho Local</label>
+                                <input type="text" id="prof_local_mirror_path" name="prof_local_mirror_path"
+                                    placeholder="/home/user/Backups">
                             </div>
                         </div>
 
-                        <div class="form-group box-highlight">
-                            <label style="margin-bottom:8px; display:block; font-weight:600;">Modo Padrão</label>
-                            <div class="radio-group-vertical">
-                                <label class="radio-option">
-                                    <input type="radio" name="prof_execution_mode" value="immediate" checked>
-                                    <div><strong>Baixar Agora</strong></div>
-                                </label>
-                                <label class="radio-option">
-                                    <input type="radio" name="prof_execution_mode" value="background">
-                                    <div><strong>Segundo Plano</strong></div>
-                                </label>
-                            </div>
-                        </div>
+                        <!-- Coluna direita: filtros -->
+                        <div class="form-section">
+                            <div class="form-section-title">Filtros do Modelo</div>
 
-                        <div class="form-group">
-                            <label for="prof_output_mode">Formato de Saída</label>
-                            <select id="prof_output_mode" name="prof_output_mode" onchange="updateProfileOutputUI()">
-                                <option value="archive" selected>Arquivo Compactado</option>
-                                <option value="mirror">Espelho Local</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group prof-archive-only">
-                            <label for="prof_archive_format">Formato</label>
-                            <select id="prof_archive_format" name="prof_archive_format">
-                                <option value="zip">ZIP</option>
-                                <option value="tar.gz">Tar GZip</option>
-                            </select>
-                        </div>
-                        <div class="form-group prof-archive-only">
-                            <label for="prof_compression_level">Compressão</label>
-                            <select id="prof_compression_level" name="prof_compression_level">
-                                <option value="fast">Rápida</option>
-                                <option value="normal" selected>Normal</option>
-                                <option value="max">Máxima</option>
-                            </select>
-                        </div>
-                        <div class="form-group prof-mirror-only" style="display:none;">
-                            <label for="prof_local_mirror_path">Caminho Local</label>
-                            <input type="text" id="prof_local_mirror_path" name="prof_local_mirror_path"
-                                placeholder="/home/user/Backups">
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <div class="form-section-title">Filtros do Modelo</div>
-                        <div class="form-group">
-                            <label>Tipos</label>
-                            <div class="filter-types">
-                                <label><input type="checkbox" name="prof_type_pdf" value="1" checked> PDF</label>
-                                <label><input type="checkbox" name="prof_type_docs" value="1" checked> Docs</label>
-                                <label><input type="checkbox" name="prof_type_sheets" value="1" checked>
-                                    Planilhas</label>
-                                <label><input type="checkbox" name="prof_type_images" value="1" checked> Imagens</label>
-                                <label><input type="checkbox" name="prof_type_videos" value="1" checked> Vídeos</label>
-                                <label><input type="checkbox" name="prof_type_others" value="1" checked> Outros</label>
+                            <div class="form-group">
+                                <label>Tipos</label>
+                                <div class="filter-types">
+                                    <label><input type="checkbox" name="prof_type_pdf" value="1" checked> PDF</label>
+                                    <label><input type="checkbox" name="prof_type_docs" value="1" checked> Docs</label>
+                                    <label><input type="checkbox" name="prof_type_sheets" value="1" checked>
+                                        Planilhas</label>
+                                    <label><input type="checkbox" name="prof_type_images" value="1" checked>
+                                        Imagens</label>
+                                    <label><input type="checkbox" name="prof_type_videos" value="1" checked>
+                                        Vídeos</label>
+                                    <label><input type="checkbox" name="prof_type_others" value="1" checked>
+                                        Outros</label>
+                                </div>
                             </div>
-                        </div>
-                        <div class="form-section-title" style="margin-top: 15px;">Filtros Avançados</div>
-                        <div class="form-group">
-                            <label>Data</label>
-                            <div class="filter-dates">
-                                <label>Criado pós: <input type="date" name="prof_created_after"
-                                        id="prof_created_after"></label>
-                                <label>Editado pós: <input type="date" name="prof_modified_after"
-                                        id="prof_modified_after"></label>
+
+                            <div class="form-section-title" style="margin-top: 10px;">Filtros Avançados</div>
+
+                            <div class="form-group">
+                                <label>Data</label>
+                                <div class="filter-dates">
+                                    <label>Criado pós:
+                                        <input type="date" name="prof_created_after" id="prof_created_after">
+                                    </label>
+                                    <label>Editado pós:
+                                        <input type="date" name="prof_modified_after" id="prof_modified_after">
+                                    </label>
+                                </div>
                             </div>
+
+                            <div class="form-group">
+                                <label for="prof_max_size_mb">Tam. Máx (MB)</label>
+                                <input type="number" id="prof_max_size_mb" name="prof_max_size_mb"
+                                    placeholder="Ignorar > X MB">
+                            </div>
+
+                            <div id="profile-save-feedback" class="form-hint"></div>
                         </div>
-                        <div class="form-group">
-                            <label for="prof_max_size_mb">Tam. Máx (MB)</label>
-                            <input type="number" id="prof_max_size_mb" name="prof_max_size_mb"
-                                placeholder="Ignorar > X MB">
-                        </div>
-                        <div id="profile-save-feedback" class="form-hint"></div>
                     </div>
                 </div>
 
                 <div class="modal-footer">
                     <button type="button" class="btn-ghost" onclick="closeModal('profile')">Cancelar</button>
-                    <button type="button" class="btn-primary" onclick="saveCurrentAsProfile()">SALVAR MODELO</button>
+                    <button type="button" class="btn-primary" onclick="saveCurrentAsProfile()">
+                        Salvar modelo
+                    </button>
                 </div>
             </form>
         </div>
     </div>
 
+
     <div id="modal-backdrop-scheduler" class="modal-backdrop hidden">
         <div class="modal">
-            <h2>Agendar backup automático</h2>
-            <p class="subtitle">
-                Defina a frequência e o horário para gerar backups com os itens selecionados.
-            </p>
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title">
+                        <span class="icon">⏱️</span> Agendar backup automático
+                    </h2>
+                    <p class="modal-subtitle">
+                        Defina a frequência e o horário para gerar backups com os itens selecionados.
+                    </p>
+                </div>
+                <div class="modal-badge">Agendamento</div>
+            </div>
 
             <form id="scheduler-form" onsubmit="return false;">
-                <!-- Itens selecionados (JSON) -->
                 <input type="hidden" id="sched_items_json" name="items">
 
-                <div class="modal-grid">
-                    <!-- Coluna principal -->
-                    <div class="form-section modal-section-wide">
-                        <div class="form-section-title">Configurações do agendamento</div>
+                <div class="modal-body">
+                    <div class="modal-grid">
+                        <!-- Coluna principal -->
+                        <div class="form-section modal-section-wide">
+                            <div class="form-section-title">Configurações do agendamento</div>
 
-                        <div class="form-group">
-                            <label for="sched_name">Nome do agendamento</label>
-                            <input type="text" id="sched_name" placeholder="Ex: Backup semanal do Drive">
-                        </div>
+                            <div class="form-group">
+                                <label for="sched_name">Nome do agendamento</label>
+                                <input type="text" id="sched_name" placeholder="Ex: Backup semanal do Drive">
+                            </div>
 
-                        <div class="form-group">
-                            <label for="sched_zip_name">Nome base do arquivo gerado</label>
-                            <input type="text" id="sched_zip_name" placeholder="Ex: backup_agendado">
-                            <p class="form-hint">
-                                A data será incluída automaticamente no momento da execução.
-                            </p>
-                        </div>
+                            <div class="form-group">
+                                <label for="sched_zip_name">Nome base do arquivo gerado</label>
+                                <input type="text" id="sched_zip_name" placeholder="Ex: backup_agendado">
+                                <p class="form-hint">
+                                    A data será incluída automaticamente no momento da execução.
+                                </p>
+                            </div>
 
-                        <div class="form-group">
-                            <label>Frequência</label>
-                            <div class="radio-group-vertical">
-                                <label class="radio-option">
-                                    <input type="radio" name="sched_frequency" value="daily" checked>
-                                    <div>
-                                        <strong>Diário</strong>
-                                        <span>Executa todos os dias no horário escolhido.</span>
-                                    </div>
-                                </label>
-                                <label class="radio-option">
-                                    <input type="radio" name="sched_frequency" value="weekly">
-                                    <div>
-                                        <strong>Semanal</strong>
-                                        <span>Executa uma vez por semana.</span>
-                                    </div>
-                                </label>
-                                <label class="radio-option">
-                                    <input type="radio" name="sched_frequency" value="monthly">
-                                    <div>
-                                        <strong>Mensal</strong>
-                                        <span>Executa uma vez por mês.</span>
-                                    </div>
-                                </label>
+                            <div class="form-group">
+                                <label>Frequência</label>
+                                <div class="radio-group-vertical">
+                                    <label class="radio-option">
+                                        <input type="radio" name="sched_frequency" value="daily" checked>
+                                        <div>
+                                            <strong>Diária</strong>
+                                            <span>Executa todos os dias no horário escolhido.</span>
+                                        </div>
+                                    </label>
+                                    <label class="radio-option">
+                                        <input type="radio" name="sched_frequency" value="weekly">
+                                        <div>
+                                            <strong>Semanal</strong>
+                                            <span>Executa uma vez por semana.</span>
+                                        </div>
+                                    </label>
+                                    <label class="radio-option">
+                                        <input type="radio" name="sched_frequency" value="monthly">
+                                        <div>
+                                            <strong>Mensal</strong>
+                                            <span>Executa uma vez por mês.</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="sched_run_time">Horário</label>
+                                <input type="time" id="sched_run_time" value="03:00">
+                                <p class="form-hint">
+                                    Use o horário do servidor (máquina onde o app roda).
+                                </p>
                             </div>
                         </div>
 
-                        <div class="form-group">
-                            <label for="sched_run_time">Horário</label>
-                            <input type="time" id="sched_run_time" value="03:00">
-                            <p class="form-hint">
-                                Use o horário do servidor (máquina onde o app roda).
-                            </p>
+                        <!-- Coluna lateral: prévia dos itens -->
+                        <div class="form-section">
+                            <div class="form-section-title">Itens incluídos</div>
+                            <div id="sched-items-count" class="form-hint">
+                                Nenhum item selecionado ainda.
+                            </div>
+                            <div id="sched-items-preview" class="sched-preview-list"></div>
                         </div>
-                    </div>
-
-                    <!-- Coluna lateral: prévia dos itens -->
-                    <div class="form-section">
-                        <div class="form-section-title">Itens incluídos</div>
-                        <div id="sched-items-count" class="form-hint"></div>
-                        <div id="sched-items-preview" class="sched-preview-list"></div>
                     </div>
                 </div>
 
                 <div class="modal-actions">
-                    <button type="button" class="btn-ghost" onclick="closeModal('scheduler')">
+                    <button type="button" class="btn-ghost" onclick="closeSchedulerModal()">
                         Cancelar
                     </button>
+
                     <button type="button" id="sched-submit-btn" class="btn-primary" onclick="submitSchedulerForm()">
                         Salvar agendamento
                     </button>
@@ -1144,6 +1467,7 @@
             </form>
         </div>
     </div>
+
 
     <div id="toast-container"></div>
 
@@ -3306,12 +3630,13 @@
             });
         }
 
-        const mbScheduler = document.getElementById('modal-backdrop-scheduler');
-        if (mbScheduler) {
-            mbScheduler.addEventListener('click', (e) => {
-                if (e.target === mbScheduler) closeModal('scheduler');
-            });
+        function closeSchedulerModal() {
+            const backdrop = document.getElementById('modal-backdrop-scheduler');
+            if (backdrop) {
+                backdrop.classList.add('hidden');
+            }
         }
+
     </script>
 </body>
 
