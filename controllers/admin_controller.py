@@ -1,5 +1,7 @@
 # controllers/admin_controller.py
 import os
+import json
+
 from datetime import datetime
 from sqlalchemy import text, inspect
 
@@ -14,7 +16,7 @@ from flask import (
 )
 
 from services.auth_service import get_credentials
-from models import db, TaskModel, BackupProfile, BackupFileModel
+from models import db, TaskModel, BackupProfile, BackupFileModel, ScheduledTaskModel  # + ScheduledTaskModel
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -77,7 +79,24 @@ def view_db():
     tasks = TaskModel.query.order_by(TaskModel.updated_at.desc()).limit(50).all()
     profiles = BackupProfile.query.all()
 
-    return render_template("db_view.html", tasks=tasks, profiles=profiles)
+    sched_tasks = ScheduledTaskModel.query.order_by(
+        ScheduledTaskModel.active.desc(),
+        ScheduledTaskModel.next_run_at.asc()
+    ).all()
+
+    # >>> calcula a quantidade de itens de cada agendamento
+    for s in sched_tasks:
+        try:
+            s.items_count = len(json.loads(s.items_json)) if s.items_json else 0
+        except Exception:
+            s.items_count = 0
+
+    return render_template(
+        "db_view.html",
+        tasks=tasks,
+        profiles=profiles,
+        sched_tasks=sched_tasks,
+    )
 
 
 @admin_bp.route("/admin/api/tasks")

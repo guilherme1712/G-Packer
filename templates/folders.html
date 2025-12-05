@@ -572,6 +572,70 @@
             padding: 3px 0;
             border-bottom: 1px solid #f0f0f0;
         }
+
+        .radio-group-vertical {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 5px;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            cursor: pointer;
+            border: 1px solid #eee;
+            padding: 8px;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+
+        .radio-option:hover {
+            background-color: #f9f9f9;
+        }
+
+        .radio-option input {
+            margin-top: 4px;
+        }
+
+        .box-highlight {
+            background-color: #f0f7ff;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #cce5ff;
+        }
+
+        .form-hint {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .form-error {
+            font-size: 12px;
+            color: #b00020;
+            margin-top: 4px;
+        }
+
+        .form-success {
+            font-size: 12px;
+            color: #0b7a0b;
+            margin-top: 4px;
+        }
+
+        /* Modal do Agendador (Estilos Específicos) */
+        .sched-preview-list {
+            background: #f3f4f6;
+            padding: 8px;
+            border-radius: 4px;
+            max-height: 100px;
+            overflow-y: auto;
+            font-size: 12px;
+            color: #4b5563;
+            margin-bottom: 10px;
+            border: 1px solid #e5e7eb;
+        }
     </style>
 </head>
 
@@ -600,6 +664,10 @@
 
                     <button type="button" class="btn-primary btn-xs" onclick="openDownloadModal()">
                         Baixar itens selecionados
+                    </button>
+
+                    <button type="button" class="btn-secondary btn-xs" onclick="openSchedulerModal()">
+                        ⏱️ Agendar backup automático
                     </button>
 
                     <div class="notification-wrapper" style="margin-left: 8px;">
@@ -991,6 +1059,92 @@
             </form>
         </div>
     </div>
+
+    <div id="modal-backdrop-scheduler" class="modal-backdrop hidden">
+        <div class="modal">
+            <h2>Agendar backup automático</h2>
+            <p class="subtitle">
+                Defina a frequência e o horário para gerar backups com os itens selecionados.
+            </p>
+
+            <form id="scheduler-form" onsubmit="return false;">
+                <!-- Itens selecionados (JSON) -->
+                <input type="hidden" id="sched_items_json" name="items">
+
+                <div class="modal-grid">
+                    <!-- Coluna principal -->
+                    <div class="form-section modal-section-wide">
+                        <div class="form-section-title">Configurações do agendamento</div>
+
+                        <div class="form-group">
+                            <label for="sched_name">Nome do agendamento</label>
+                            <input type="text" id="sched_name" placeholder="Ex: Backup semanal do Drive">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="sched_zip_name">Nome base do arquivo gerado</label>
+                            <input type="text" id="sched_zip_name" placeholder="Ex: backup_agendado">
+                            <p class="form-hint">
+                                A data será incluída automaticamente no momento da execução.
+                            </p>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Frequência</label>
+                            <div class="radio-group-vertical">
+                                <label class="radio-option">
+                                    <input type="radio" name="sched_frequency" value="daily" checked>
+                                    <div>
+                                        <strong>Diário</strong>
+                                        <span>Executa todos os dias no horário escolhido.</span>
+                                    </div>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="sched_frequency" value="weekly">
+                                    <div>
+                                        <strong>Semanal</strong>
+                                        <span>Executa uma vez por semana.</span>
+                                    </div>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="sched_frequency" value="monthly">
+                                    <div>
+                                        <strong>Mensal</strong>
+                                        <span>Executa uma vez por mês.</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="sched_run_time">Horário</label>
+                            <input type="time" id="sched_run_time" value="03:00">
+                            <p class="form-hint">
+                                Use o horário do servidor (máquina onde o app roda).
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Coluna lateral: prévia dos itens -->
+                    <div class="form-section">
+                        <div class="form-section-title">Itens incluídos</div>
+                        <div id="sched-items-count" class="form-hint"></div>
+                        <div id="sched-items-preview" class="sched-preview-list"></div>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn-ghost" onclick="closeModal('scheduler')">
+                        Cancelar
+                    </button>
+                    <button type="button" id="sched-submit-btn" class="btn-primary" onclick="submitSchedulerForm()">
+                        Salvar agendamento
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div id="toast-container"></div>
 
     <div id="modal-backdrop-summary" class="modal-backdrop hidden">
@@ -1052,6 +1206,137 @@
 
 
     <script>
+        function openSchedulerModal() {
+            if (!selectedItems.length) {
+                alert("Selecione pelo menos um item na árvore para agendar um backup.");
+                return;
+            }
+
+            const form = document.getElementById('scheduler-form');
+            if (form) form.reset();
+
+            // joga os itens selecionados no hidden
+            const itemsField = document.getElementById('sched_items_json');
+            if (itemsField) itemsField.value = JSON.stringify(selectedItems);
+
+            // preenchimento padrão
+            const hoje = new Date();
+            const dataFmt = hoje.toLocaleDateString('pt-BR');
+            const nameInput = document.getElementById('sched_name');
+            if (nameInput) {
+                nameInput.value = `Backup agendado - ${dataFmt}`;
+            }
+
+            const zipInput = document.getElementById('sched_zip_name');
+            if (zipInput) {
+                zipInput.value = 'backup_agendado';
+            }
+
+            // preview dos itens
+            const previewList = document.getElementById('sched-items-preview');
+            const countEl = document.getElementById('sched-items-count');
+
+            if (previewList) {
+                const maxPreview = 20;
+                let html = '';
+                selectedItems.slice(0, maxPreview).forEach(it => {
+                    html += `<div class="file-preview-item">${it.name || '(sem nome)'}</div>`;
+                });
+                if (selectedItems.length > maxPreview) {
+                    html += `<div class="file-preview-item">+ ${selectedItems.length - maxPreview
+                        } item(ns) não exibidos...</div>`;
+                }
+                previewList.innerHTML = html;
+            }
+
+            if (countEl) {
+                countEl.textContent = `${selectedItems.length} item(ns) serão incluídos neste agendamento.`;
+            }
+
+            const mb = document.getElementById('modal-backdrop-scheduler');
+            if (mb) mb.classList.remove('hidden');
+        }
+
+        function submitSchedulerForm() {
+            const nameEl = document.getElementById('sched_name');
+            const zipEl = document.getElementById('sched_zip_name');
+            const timeEl = document.getElementById('sched_run_time');
+            const itemsEl = document.getElementById('sched_items_json');
+
+            if (!nameEl || !zipEl || !timeEl || !itemsEl) return;
+
+            const name = nameEl.value.trim();
+            const zipName = zipEl.value.trim() || 'backup_agendado';
+            const runTime = timeEl.value || '03:00';
+
+            if (!name) {
+                alert("Informe um nome para o agendamento.");
+                return;
+            }
+
+            if (!itemsEl.value) {
+                alert("Nenhum item selecionado para o agendamento.");
+                return;
+            }
+
+            const form = document.getElementById('scheduler-form');
+            if (!form) return;
+
+            const freqInput = form.querySelector('input[name="sched_frequency"]:checked');
+            const frequency = freqInput ? freqInput.value : 'weekly';
+
+            let items;
+            try {
+                items = JSON.parse(itemsEl.value);
+            } catch (e) {
+                alert("Erro ao preparar lista de itens.");
+                return;
+            }
+
+            const payload = {
+                name: name,
+                zip_name: zipName,
+                run_time: runTime,     // "HH:MM"
+                frequency: frequency,  // 'daily' | 'weekly' | 'monthly'
+                items: items           // array de itens selecionados
+            };
+
+            const btn = document.getElementById('sched-submit-btn');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = 'Salvando...';
+            }
+
+            fetch('/scheduler/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.ok) {
+                        // reaproveita seu toast se já existir
+                        if (typeof showToast === 'function') {
+                            showToast("Agendamento criado com sucesso!");
+                        } else {
+                            alert("Agendamento criado com sucesso!");
+                        }
+                        closeModal('scheduler');
+                    } else {
+                        alert(data.error || "Erro ao criar agendamento.");
+                    }
+                })
+                .catch(() => {
+                    alert("Erro na comunicação com o servidor ao criar o agendamento.");
+                })
+                .finally(() => {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerText = 'Salvar agendamento';
+                    }
+                });
+        }
+
         // =========================================================
         // VARIÁVEIS GLOBAIS
         // =========================================================
@@ -1984,8 +2269,12 @@
             } else if (which === 'profile') {
                 const mb = document.getElementById('modal-backdrop-profile');
                 if (mb) mb.classList.add('hidden');
+            } else if (which === 'scheduler') {
+                const mb = document.getElementById('modal-backdrop-scheduler');
+                if (mb) mb.classList.add('hidden');
             }
         }
+
 
         function startDownloadProcess() {
             const form = document.getElementById('download-form');
@@ -2910,18 +3199,18 @@
             const isPartial = stats.is_partial;
             const suffix = isPartial ? "+" : "";
             const colorClass = isPartial ? "text-warning" : "text-primary"; // Amarelo se for estimativa, Azul se exato
-            
+
             // Atualiza contadores
             const filesEl = document.getElementById('sum-files');
             filesEl.innerText = stats.files_count + suffix;
             filesEl.className = "summary-value " + (isPartial ? "text-orange" : ""); // Ex: classe CSS personalizada ou inline style
 
             document.getElementById('sum-folders').innerText = stats.folders_count + suffix;
-            
+
             // Tamanho
             const sizeEl = document.getElementById('sum-size');
             sizeEl.innerText = (stats.size_formatted || "0 B") + suffix;
-            
+
             if (isPartial) {
                 // Adiciona um aviso visual
                 sizeEl.style.color = "#f39c12"; // Laranja
@@ -2933,17 +3222,17 @@
             // Lista de arquivos
             const listEl = document.getElementById('sum-preview-list');
             listEl.innerHTML = '';
-            if(stats.preview_files && stats.preview_files.length > 0) {
+            if (stats.preview_files && stats.preview_files.length > 0) {
                 stats.preview_files.forEach(name => {
                     const div = document.createElement('div');
                     div.className = 'file-preview-item';
                     div.innerText = '📄 ' + name;
                     listEl.appendChild(div);
                 });
-                
+
                 // Mensagem de rodapé da lista
                 const moreCount = stats.files_count - stats.preview_files.length;
-                if(moreCount > 0) {
+                if (moreCount > 0) {
                     const more = document.createElement('div');
                     more.style.fontStyle = 'italic';
                     more.style.marginTop = '5px';
@@ -3014,6 +3303,13 @@
         if (mbSummary) {
             mbSummary.addEventListener('click', (e) => {
                 if (e.target === mbSummary) closeModal('summary');
+            });
+        }
+
+        const mbScheduler = document.getElementById('modal-backdrop-scheduler');
+        if (mbScheduler) {
+            mbScheduler.addEventListener('click', (e) => {
+                if (e.target === mbScheduler) closeModal('scheduler');
             });
         }
     </script>

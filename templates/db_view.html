@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <title>Visualizador do Banco de Dados</title>
@@ -11,6 +12,7 @@
             padding: 20px;
             color: #e5e7eb;
         }
+
         .db-section {
             background: rgba(15, 23, 42, 0.95);
             border-radius: 16px;
@@ -19,24 +21,30 @@
             border: 1px solid rgba(148, 163, 184, 0.2);
             overflow-x: auto;
         }
+
         table {
             width: 100%;
             border-collapse: collapse;
             font-size: 0.85rem;
         }
-        th, td {
+
+        th,
+        td {
             text-align: left;
             padding: 10px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
+
         th {
             background: rgba(0, 0, 0, 0.3);
             font-weight: 600;
             color: #9ca3af;
         }
+
         tr:hover {
             background: rgba(255, 255, 255, 0.05);
         }
+
         .status-badge {
             padding: 2px 8px;
             border-radius: 99px;
@@ -45,14 +53,38 @@
             display: inline-block;
             margin-right: 4px;
         }
-        .status-concluido { background: #059669; color: white; }
-        .status-erro { background: #dc2626; color: white; }
-        .status-cancelado { background: #d97706; color: white; }
-        .status-paused { background: #f59e0b; color: black; border: 1px solid #d97706; }
-        .status-iniciando, .status-baixando, .status-mapeando, .status-compactando { background: #2563eb; color: white; }
+
+        .status-concluido {
+            background: #059669;
+            color: white;
+        }
+
+        .status-erro {
+            background: #dc2626;
+            color: white;
+        }
+
+        .status-cancelado {
+            background: #d97706;
+            color: white;
+        }
+
+        .status-paused {
+            background: #f59e0b;
+            color: black;
+            border: 1px solid #d97706;
+        }
+
+        .status-iniciando,
+        .status-baixando,
+        .status-mapeando,
+        .status-compactando {
+            background: #2563eb;
+            color: white;
+        }
 
         pre {
-            background: rgba(0,0,0,0.5);
+            background: rgba(0, 0, 0, 0.5);
             padding: 5px;
             border-radius: 4px;
             max-height: 100px;
@@ -63,6 +95,7 @@
         }
     </style>
 </head>
+
 <body class="bg-gradient">
     <div class="db-container">
         <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
@@ -95,10 +128,10 @@
                         <td style="font-family:monospace; font-size:0.8em;">{{ t.id }}</td>
                         <td>
                             {% if t.paused %}
-                                <span class="status-badge status-paused">PAUSADO</span>
+                            <span class="status-badge status-paused">PAUSADO</span>
                             {% endif %}
                             {% if t.canceled %}
-                                <span class="status-badge status-cancelado">CANCELADO</span>
+                            <span class="status-badge status-cancelado">CANCELADO</span>
                             {% endif %}
                             <span class="status-badge status-{{ t.phase }}">
                                 {{ t.phase }}
@@ -107,9 +140,9 @@
                         <td>{{ t.message }}</td>
                         <td>
                             {% if t.files_total > 0 %}
-                                {{ ((t.files_downloaded / t.files_total) * 100) | int }}%
+                            {{ ((t.files_downloaded / t.files_total) * 100) | int }}%
                             {% else %}
-                                -
+                            -
                             {% endif %}
                         </td>
                         <td>{{ t.files_downloaded }} / {{ t.files_total }}</td>
@@ -119,9 +152,9 @@
                         <td>{{ t.updated_at.strftime('%d/%m %H:%M:%S') if t.updated_at else '-' }}</td>
                         <td style="width:350px;">
                             {% if t.history %}
-                                <pre>{{ t.history | join('\n') }}</pre>
+                            <pre>{{ t.history | join('\n') }}</pre>
                             {% else %}
-                                <span style="color:#666">-</span>
+                            <span style="color:#666">-</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -129,7 +162,7 @@
                 </tbody>
             </table>
             {% else %}
-                <p>Nenhuma tarefa encontrada.</p>
+            <p>Nenhuma tarefa encontrada.</p>
             {% endif %}
         </div>
 
@@ -164,9 +197,93 @@
                 </tbody>
             </table>
             {% else %}
-                <p>Nenhum perfil salvo.</p>
+            <p>Nenhum perfil salvo.</p>
+            {% endif %}
+        </div>
+
+        <div class="db-section">
+            <h2 style="margin-top:0;">⏱️ Agendamentos (Scheduler)</h2>
+            <p style="color:#9ca3af; font-size:0.9rem;">
+                Lista de todos os agendamentos, mostrando os pendentes (ainda vão rodar)
+                e os que já foram executados pelo menos uma vez.
+            </p>
+
+            {% if sched_tasks %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nome</th>
+                        <th>Situação</th>
+                        <th>Frequência</th>
+                        <th>Horário</th>
+                        <th>Próxima Execução</th>
+                        <th>Última Execução</th>
+                        <th>Status da Última Exec.</th>
+                        <th>Itens</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in sched_tasks %}
+                    <tr>
+                        <td style="font-family:monospace; font-size:0.8em;">{{ s.id }}</td>
+                        <td><strong>{{ s.name }}</strong></td>
+
+                        <!-- Situação: pendente / já executado / desativado -->
+                        <td>
+                            {% if s.active %}
+                            {% if s.last_run_at %}
+                            <span class="status-badge status-concluido">
+                                ATIVO · JÁ EXECUTOU
+                            </span>
+                            {% else %}
+                            <span class="status-badge status-iniciando">
+                                PENDENTE
+                            </span>
+                            {% endif %}
+                            {% else %}
+                            <span class="status-badge status-cancelado">
+                                DESATIVADO
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <td>{{ s.frequency|upper }}</td>
+                        <td>{{ s.run_time }}</td>
+                        <td>
+                            {% if s.next_run_at %}
+                            {{ s.next_run_at.strftime('%d/%m/%Y %H:%M') }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if s.last_run_at %}
+                            {{ s.last_run_at.strftime('%d/%m/%Y %H:%M') }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td style="max-width:260px;">
+                            {% if s.last_status %}
+                            <pre>{{ s.last_status }}</pre>
+                            {% else %}
+                            <span style="color:#666">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ s.items_count }}
+                        </td>
+
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p>Nenhum agendamento encontrado.</p>
             {% endif %}
         </div>
     </div>
 </body>
+
 </html>

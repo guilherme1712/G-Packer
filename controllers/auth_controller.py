@@ -12,7 +12,7 @@ from flask import (
 from services.auth_service import (
     get_credentials,
     build_flow,
-    credentials_to_dict,
+    save_credentials,          # <<< aqui
 )
 
 auth_bp = Blueprint("auth", __name__)
@@ -58,7 +58,10 @@ def oauth2callback():
         flow.fetch_token(authorization_response=request.url)
 
         creds = flow.credentials
-        session["credentials"] = credentials_to_dict(creds)
+
+        # Em vez de mexer diretamente na session, usamos a função que
+        # salva na session + em arquivo (para o scheduler)
+        save_credentials(creds)
 
         return redirect(url_for("drive.folders"))
     except Exception as e:
