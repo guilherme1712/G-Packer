@@ -1408,6 +1408,53 @@
                                 </p>
                             </div>
 
+                            <!-- NOVO: Fonte do agendamento -->
+                            <div class="form-group">
+                                <label>Fonte do backup</label>
+                                <div class="radio-group-vertical">
+                                    <label class="radio-option">
+                                        <input type="radio" name="sched_source" value="items" checked
+                                            onchange="updateSchedulerSourceUI()">
+                                        <div>
+                                            <strong>Usar itens atuais</strong>
+                                            <span>Agenda exatamente os itens selecionados na árvore.</span>
+                                        </div>
+                                    </label>
+                                    <label class="radio-option">
+                                        <input type="radio" name="sched_source" value="profile"
+                                            onchange="updateSchedulerSourceUI()">
+                                        <div>
+                                            <strong>Usar este Perfil de Backup</strong>
+                                            <span>Usa sempre a configuração mais recente do perfil escolhido.</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                            <!-- Coluna lateral: prévia dos itens -->
+                            <div class="form-section" id="sched-items-section">
+                                <div class="form-section-title">Itens incluídos</div>
+                                <div id="sched-items-count" class="form-hint">
+                                    Nenhum item selecionado ainda.
+                                </div>
+                                <div id="sched-items-preview" class="sched-preview-list"></div>
+                            </div>
+                            <div class="form-group" id="sched-profile-group" style="display:none;">
+                                <label for="sched_profile_id">Perfil de backup</label>
+                                <select id="sched_profile_id" onchange="onSchedulerProfileChange()">
+                                    <option value="">Selecione um perfil</option>
+                                </select>
+                                <p class="form-hint">
+                                    Ao atualizar esse perfil depois, todos os agendamentos vinculados a ele herdam a
+                                    nova configuração.
+                                </p>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Frequência</label>
+                                ...
+                            </div>
+
+
                             <div class="form-group">
                                 <label>Frequência</label>
                                 <div class="radio-group-vertical">
@@ -1530,16 +1577,99 @@
 
 
     <script>
-        function openSchedulerModal() {
+        function updateSchedulerItemsPreviewFromSelection() {
+            const previewList = document.getElementById('sched-items-preview');
+            const countEl = document.getElementById('sched-items-count');
+
+            if (!previewList || !countEl) return;
+
             if (!selectedItems.length) {
-                alert("Selecione pelo menos um item na árvore para agendar um backup.");
+                countEl.textContent = "Nenhum item selecionado ainda.";
+                previewList.innerHTML = "";
                 return;
             }
 
+            const maxPreview = 20;
+            let html = '';
+            selectedItems.slice(0, maxPreview).forEach(it => {
+                html += `<div class="file-preview-item">${it.name || '(sem nome)'}</div>`;
+            });
+            if (selectedItems.length > maxPreview) {
+                html += `<div class="file-preview-item">+ ${selectedItems.length - maxPreview} item(ns) não exibidos...</div>`;
+            }
+            previewList.innerHTML = html;
+            countEl.textContent = `${selectedItems.length} item(ns) serão incluídos neste agendamento.`;
+        }
+
+        function updateSchedulerItemsPreviewFromProfile(profile) {
+            const previewList = document.getElementById('sched-items-preview');
+            const countEl = document.getElementById('sched-items-count');
+            if (!previewList || !countEl) return;
+
+            if (!profile) {
+                countEl.textContent = "Selecione um perfil para ver os itens.";
+                previewList.innerHTML = "";
+                return;
+            }
+
+            const items = profile.items || [];
+            const maxPreview = 20;
+            let html = '';
+            items.slice(0, maxPreview).forEach(it => {
+                const icon = it.type === 'folder' ? '📁' : '📄';
+                html += `<div class="file-preview-item">${icon} ${it.name || '(sem nome)'}</div>`;
+            });
+            if (items.length > maxPreview) {
+                html += `<div class="file-preview-item">+ ${items.length - maxPreview} item(ns) não exibidos...</div>`;
+            }
+            previewList.innerHTML = html;
+            countEl.textContent = `${items.length} item(ns) configurado(s) no perfil "${profile.name}".`;
+        }
+
+        function updateSchedulerSourceUI() {
+            const form = document.getElementById('scheduler-form');
+            if (!form) return;
+
+            const srcInput = form.querySelector('input[name="sched_source"]:checked');
+            const source = srcInput ? srcInput.value : 'items';
+
+            const itemsSection = document.getElementById('sched-items-section');
+            const profileGroup = document.getElementById('sched-profile-group');
+
+            if (source === 'profile') {
+                if (profileGroup) profileGroup.style.display = 'block';
+                if (itemsSection) itemsSection.style.display = 'block';
+
+                if (schedSelectedProfile) {
+                    updateSchedulerItemsPreviewFromProfile(schedSelectedProfile);
+                } else {
+                    updateSchedulerItemsPreviewFromProfile(null);
+                }
+            } else {
+                if (profileGroup) profileGroup.style.display = 'none';
+                if (itemsSection) itemsSection.style.display = 'block';
+                updateSchedulerItemsPreviewFromSelection();
+            }
+        }
+
+        function onSchedulerProfileChange() {
+            const profileSelect = document.getElementById('sched_profile_id');
+            if (!profileSelect) return;
+
+            const id = profileSelect.value;
+            if (!id) {
+                schedSelectedProfile = null;
+            } else {
+                schedSelectedProfile = backupProfiles.find(p => String(p.id) === String(id)) || null;
+            }
+            updateSchedulerItemsPreviewFromProfile(schedSelectedProfile);
+        }
+
+        function openSchedulerModal() {
             const form = document.getElementById('scheduler-form');
             if (form) form.reset();
 
-            // joga os itens selecionados no hidden
+            // joga os itens selecionados no hidden (pode ser vazio)
             const itemsField = document.getElementById('sched_items_json');
             if (itemsField) itemsField.value = JSON.stringify(selectedItems);
 
@@ -1556,26 +1686,31 @@
                 zipInput.value = 'backup_agendado';
             }
 
-            // preview dos itens
-            const previewList = document.getElementById('sched-items-preview');
-            const countEl = document.getElementById('sched-items-count');
-
-            if (previewList) {
-                const maxPreview = 20;
-                let html = '';
-                selectedItems.slice(0, maxPreview).forEach(it => {
-                    html += `<div class="file-preview-item">${it.name || '(sem nome)'}</div>`;
+            // popula select de perfis
+            const profileSelect = document.getElementById('sched_profile_id');
+            if (profileSelect) {
+                profileSelect.innerHTML = '<option value="">Selecione um perfil</option>';
+                (backupProfiles || []).forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.name || `(ID ${p.id})`;
+                    profileSelect.appendChild(opt);
                 });
-                if (selectedItems.length > maxPreview) {
-                    html += `<div class="file-preview-item">+ ${selectedItems.length - maxPreview
-                        } item(ns) não exibidos...</div>`;
-                }
-                previewList.innerHTML = html;
+                profileSelect.value = "";
             }
 
-            if (countEl) {
-                countEl.textContent = `${selectedItems.length} item(ns) serão incluídos neste agendamento.`;
+            schedSelectedProfile = null;
+
+            // fonte padrão: itens atuais
+            if (form) {
+                const srcItems = form.querySelector('input[name="sched_source"][value="items"]');
+                if (srcItems) srcItems.checked = true;
             }
+
+            updateSchedulerSourceUI();
+
+            // preview dos itens (modo itens atuais)
+            updateSchedulerItemsPreviewFromSelection();
 
             const mb = document.getElementById('modal-backdrop-scheduler');
             if (mb) mb.classList.remove('hidden');
@@ -1598,32 +1733,52 @@
                 return;
             }
 
-            if (!itemsEl.value) {
-                alert("Nenhum item selecionado para o agendamento.");
-                return;
-            }
-
             const form = document.getElementById('scheduler-form');
             if (!form) return;
 
             const freqInput = form.querySelector('input[name="sched_frequency"]:checked');
             const frequency = freqInput ? freqInput.value : 'weekly';
 
-            let items;
-            try {
-                items = JSON.parse(itemsEl.value);
-            } catch (e) {
-                alert("Erro ao preparar lista de itens.");
-                return;
-            }
+            const srcInput = form.querySelector('input[name="sched_source"]:checked');
+            const source = srcInput ? srcInput.value : 'items';
 
             const payload = {
                 name: name,
                 zip_name: zipName,
                 run_time: runTime,     // "HH:MM"
                 frequency: frequency,  // 'daily' | 'weekly' | 'monthly'
-                items: items           // array de itens selecionados
+                source: source
             };
+
+            if (source === 'profile') {
+                const profileSelect = document.getElementById('sched_profile_id');
+                const profileId = profileSelect ? profileSelect.value : '';
+                if (!profileId) {
+                    alert("Selecione um Perfil de Backup para este agendamento.");
+                    return;
+                }
+                payload.profile_id = profileId;
+            } else {
+                if (!itemsEl.value) {
+                    alert("Selecione pelo menos um item na árvore para agendar um backup.");
+                    return;
+                }
+
+                let items;
+                try {
+                    items = JSON.parse(itemsEl.value);
+                } catch (e) {
+                    alert("Erro ao preparar lista de itens.");
+                    return;
+                }
+
+                if (!items.length) {
+                    alert("Selecione pelo menos um item na árvore para agendar um backup.");
+                    return;
+                }
+
+                payload.items = items;
+            }
 
             const btn = document.getElementById('sched-submit-btn');
             if (btn) {
@@ -1639,13 +1794,12 @@
                 .then(r => r.json())
                 .then(data => {
                     if (data.ok) {
-                        // reaproveita seu toast se já existir
                         if (typeof showToast === 'function') {
                             showToast("Agendamento criado com sucesso!");
                         } else {
                             alert("Agendamento criado com sucesso!");
                         }
-                        closeModal('scheduler');
+                        closeSchedulerModal();
                     } else {
                         alert(data.error || "Erro ao criar agendamento.");
                     }
@@ -1660,6 +1814,7 @@
                     }
                 });
         }
+
 
         // =========================================================
         // VARIÁVEIS GLOBAIS

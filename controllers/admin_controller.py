@@ -16,7 +16,7 @@ from flask import (
 )
 
 from services.auth_service import get_credentials
-from models import db, TaskModel, BackupProfile, BackupFileModel, ScheduledTaskModel  # + ScheduledTaskModel
+from models import db, TaskModel, BackupProfile, BackupFileModel, ScheduledTaskModel, ScheduledRunModel
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -84,18 +84,30 @@ def view_db():
         ScheduledTaskModel.next_run_at.asc()
     ).all()
 
-    # >>> calcula a quantidade de itens de cada agendamento
+    # calcula a quantidade de itens de cada agendamento + histórico
+    runs_by_schedule = {}
+
     for s in sched_tasks:
         try:
             s.items_count = len(json.loads(s.items_json)) if s.items_json else 0
         except Exception:
             s.items_count = 0
 
+        try:
+            runs_by_schedule[s.id] = (
+                s.runs.order_by(ScheduledRunModel.started_at.desc())
+                .limit(10)
+                .all()
+            )
+        except Exception:
+            runs_by_schedule[s.id] = []
+
     return render_template(
         "db_view.html",
         tasks=tasks,
         profiles=profiles,
         sched_tasks=sched_tasks,
+        runs_by_schedule=runs_by_schedule,
     )
 
 

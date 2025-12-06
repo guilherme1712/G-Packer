@@ -234,19 +234,19 @@
                         <!-- Situação: pendente / já executado / desativado -->
                         <td data-col="situacao">
                             {% if s.active %}
-                                {% if s.last_run_at %}
-                                    <span class="status-badge status-concluido">
-                                        ATIVO · JÁ EXECUTOU
-                                    </span>
-                                {% else %}
-                                    <span class="status-badge status-iniciando">
-                                        PENDENTE
-                                    </span>
-                                {% endif %}
+                            {% if s.last_run_at %}
+                            <span class="status-badge status-concluido">
+                                ATIVO · JÁ EXECUTOU
+                            </span>
                             {% else %}
-                                <span class="status-badge status-cancelado">
-                                    DESATIVADO
-                                </span>
+                            <span class="status-badge status-iniciando">
+                                PENDENTE
+                            </span>
+                            {% endif %}
+                            {% else %}
+                            <span class="status-badge status-cancelado">
+                                DESATIVADO
+                            </span>
                             {% endif %}
                         </td>
 
@@ -266,13 +266,54 @@
                             -
                             {% endif %}
                         </td>
-                        <td style="max-width:260px;">
-                            {% if s.last_status %}
-                            <pre>{{ s.last_status }}</pre>
-                            {% else %}
-                            <span style="color:#666">-</span>
-                            {% endif %}
+                        <td>
+                            {{ s.last_status or '-' }}
+
+                            <details class="sched-runs-details">
+                                <summary style="cursor:pointer; font-size: 11px; color:#1d4ed8; margin-top:4px;">
+                                    Histórico
+                                </summary>
+
+                                {% set runs = runs_by_schedule.get(s.id, []) %}
+                                {% if runs %}
+                                <table class="mini-table" style="width:100%; margin-top:6px; font-size:11px;">
+                                    <thead>
+                                        <tr>
+                                            <th>Início</th>
+                                            <th>Fim</th>
+                                            <th>Status</th>
+                                            <th>Tam. (MB)</th>
+                                            <th>Arquivo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for r in runs %}
+                                        <tr>
+                                            <td>{{ r.started_at.strftime("%d/%m/%Y %H:%M") if r.started_at else "-" }}
+                                            </td>
+                                            <td>{{ r.finished_at.strftime("%d/%m/%Y %H:%M") if r.finished_at else "-" }}
+                                            </td>
+                                            <td>{{ r.status or "-" }}</td>
+                                            <td>
+                                                {% if r.size_mb is not none %}
+                                                {{ "%.2f"|format(r.size_mb) }}
+                                                {% else %}
+                                                -
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ r.filename or "-" }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                                {% else %}
+                                <div style="font-size:11px; color:#6b7280; margin-top:4px;">
+                                    Nenhuma execução registrada ainda.
+                                </div>
+                                {% endif %}
+                            </details>
                         </td>
+
                         <td>
                             {{ s.items_count }}
                         </td>

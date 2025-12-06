@@ -2,7 +2,7 @@
 from flask import Blueprint, render_template, request, jsonify, current_app
 import json
 
-from models import db, ScheduledTaskModel
+from models import db, ScheduledTaskModel, BackupProfile
 from services.scheduler_service import reload_jobs
 
 scheduler_bp = Blueprint("scheduler", __name__)
@@ -14,26 +14,58 @@ def index():
 
 @scheduler_bp.route("/scheduler/create", methods=["POST"])
 def create_task():
-    data = request.json
+    data = request.json or {}
+
     name = data.get("name")
     items = data.get("items")
     frequency = data.get("frequency")
     run_time = data.get("run_time", "03:00")
     zip_name = data.get("zip_name", "backup_auto")
 
-    if not name or not items or not frequency:
-        return jsonify({"ok": False, "error": "Dados incompletos"}), 400
+    source = data.get("source", "items")  # 'items' | 'profile'
+    profile_id = data.get("profile_id")
+
+    if not name or not frequency:
+        return jsonify({"ok": False, "error": "Nome e frequência são obrigatórios."}), 400
+
+    # ----------------------------------------------
+    # Validação por modo de origem (itens ou perfil)
+    # ----------------------------------------------
+    profile_id_value = None
+
+    if source == "profile":
+        if not profile_id:
+            return jsonify({"ok": False, "error": "Perfil de backup não informado."}), 400
+
+        try:
+            pid_int = int(profile_id)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Perfil de backup inválido."}), 400
+
+        prof = BackupProfile.query.get(pid_int)
+        if not prof:
+            return jsonify({"ok": False, "error": "Perfil de backup não encontrado."}), 404
+
+        profile_id_value = pid_int
+        # items_json ainda é obrigatório no modelo -> guarda lista vazia
+        items_json = "[]"
+
+    else:
+        # modo padrão: usa itens fixos
+        if not items:
+            return jsonify({"ok": False, "error": "Nenhum item selecionado para o agendamento."}), 400
+        items_json = json.dumps(items)
 
     new_task = ScheduledTaskModel(
         name=name,
-        items_json=json.dumps(items),
+        items_json=items_json,
         zip_name=zip_name,
         frequency=frequency,
         run_time=run_time,
         active=True,
-        last_status="Aguardando..."
+        last_status="Aguardando...",
+        profile_id=profile_id_value,
     )
-
 
     db.session.add(new_task)
     try:

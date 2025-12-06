@@ -3,19 +3,51 @@ import json
 import time
 import shutil
 import os
+import pytz
+
 from datetime import datetime
+from config import TIMEZONE
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from models import db, ScheduledTaskModel, BackupFileModel
+from models import db, ScheduledTaskModel, BackupFileModel, BackupProfile, ScheduledRunModel
 from services.auth_service import get_credentials
 from services.drive_download_service import download_items_bundle
 from services.progress_service import PROGRESS, init_download_task
 
 # Scheduler global
-scheduler = BackgroundScheduler()
+scheduler = BackgroundScheduler(
+    timezone=pytz.timezone(TIMEZONE)
+)
 STORAGE_ROOT = os.path.join(os.getcwd(), "storage", "backups")
+
+def _render_zip_pattern(pattern: str | None) -> str:
+    """
+    Renderiza o padrão de nome de arquivo do perfil (ex: backup-{YYYYMMDD})
+    para um nome base de arquivo.
+    """
+    if not pattern:
+        pattern = "backup-{YYYYMMDD}"
+
+    now = datetime.now()
+    replacements = {
+        "{YYYYMMDD}": now.strftime("%Y%m%d"),
+        "{YYYYMM}": now.strftime("%Y%m"),
+        "{YYYY}": now.strftime("%Y"),
+        "{YY}": now.strftime("%y"),
+        "{MM}": now.strftime("%m"),
+        "{DD}": now.strftime("%d"),
+    }
+
+    for token, value in replacements.items():
+        pattern = pattern.replace(token, value)
+
+    # sanitizer para nome de arquivo
+    for ch in '\\/:*?"<>|':
+        pattern = pattern.replace(ch, "_")
+
+    return pattern
 
 
 def log_upcoming_jobs():
@@ -64,6 +96,45 @@ def job_executor(app_app_context, task_id_db):
             print(f"[{datetime.now()}] Tarefa {task_id_db} não encontrada ou inativa. Abortando.")
             return
 
+        # ---------------------------------------------------------
+        # Origem da configuração: itens fixos x perfil de backup
+        # ---------------------------------------------------------
+        profile = None
+        items = []
+        base_zip_name = task.zip_name or "backup_agendado"
+
+        if getattr(task, "profile_id", None):
+            profile = BackupProfile.query.get(task.profile_id)
+            if profile:
+                # usa sempre a LISTA ATUAL de itens do perfil
+                items = profile.items or []
+
+                # se o perfil tiver nome específico, prioriza
+                if profile.zip_name:
+                    base_zip_name = profile.zip_name
+                else:
+                    # usa o padrão com data (backup-{YYYYMMDD}, etc)
+                    base_zip_name = _render_zip_pattern(profile.zip_pattern)
+            else:
+                # perfil não encontrado -> fallback para items_json
+                try:
+                    items = json.loads(task.items_json)
+                except Exception:
+                    items = []
+        else:
+            try:
+                items = json.loads(task.items_json)
+            except Exception:
+                items = []
+
+        if not items:
+            msg = "Nenhum item configurado para este agendamento."
+            print(f"[{datetime.now()}] {msg}")
+            task.last_status = msg
+            task.last_run_at = datetime.now()
+            db.session.commit()
+            return
+
         print(
             f"[{datetime.now()}] Tarefa '{task.name}' "
             f"(freq={task.frequency}, hora={task.run_time}) iniciada."
@@ -73,24 +144,32 @@ def job_executor(app_app_context, task_id_db):
         if not creds:
             print(f"[{datetime.now()}] ERRO: Credenciais inválidas ou expiradas.")
             task.last_status = "Erro: Credenciais expiradas"
+            task.last_run_at = datetime.now()
             db.session.commit()
             return
 
         run_id = f"sched-{task.id}-{int(time.time())}"
         init_download_task(run_id)
 
+        # Cria registro de histórico desta execução
+        run_record = ScheduledRunModel(
+            schedule_id=task.id,
+            started_at=start_ts,
+            status="Em execução",
+        )
+        db.session.add(run_record)
+        db.session.commit()  # deixa visível enquanto estiver rodando
+
         try:
-            items = json.loads(task.items_json)
             date_str = datetime.now().strftime("%Y%m%d_%H%M")
-            final_zip_name = f"{task.zip_name}_{date_str}"
+            final_zip_name = f"{base_zip_name}_{date_str}"
 
             print(
                 f"[{datetime.now()}] Iniciando mapeamento + download "
                 f"para {len(items)} item(ns). Nome base: {final_zip_name}"
             )
 
-            # IMPORTANTE: modo 'sequential' -> mapeia tudo primeiro, depois baixa,
-            # exatamente como o usuário pediu (mesmo comportamento do modal).
+            # Modo 'sequential' fixo, como antes
             zip_path = download_items_bundle(
                 creds=creds,
                 items=items,
@@ -99,7 +178,7 @@ def job_executor(app_app_context, task_id_db):
                 archive_format="zip",
                 progress_dict=PROGRESS,
                 task_id=run_id,
-                processing_mode="sequential",   # <<< aqui troca de concurrent -> sequential
+                processing_mode="sequential",
             )
 
             print(f"[{datetime.now()}] Download concluído. Zip temporário em: {zip_path}")
@@ -126,6 +205,12 @@ def job_executor(app_app_context, task_id_db):
             task.last_status = f"Sucesso: {filename} ({size_mb} MB)"
             task.last_run_at = datetime.now()
 
+            # Atualiza histórico desta execução
+            run_record.finished_at = datetime.now()
+            run_record.status = "Sucesso"
+            run_record.size_mb = size_mb
+            run_record.filename = filename
+
             print(
                 f"[{datetime.now()}] <<< AGENDAMENTO ID {task.id} finalizado com sucesso. "
                 f"Arquivo: {filename} ({size_mb} MB)"
@@ -135,6 +220,10 @@ def job_executor(app_app_context, task_id_db):
             err = str(e)
             print(f"[{datetime.now()}] ERRO no agendamento ID {task.id}: {err}")
             task.last_status = f"Erro: {err[:100]}"
+            task.last_run_at = datetime.now()
+
+            run_record.finished_at = datetime.now()
+            run_record.status = f"Erro: {err[:100]}"
 
         db.session.commit()
 
@@ -172,14 +261,14 @@ def reload_jobs(app):
             trigger = None
 
             if task.frequency == "daily":
-                trigger = CronTrigger(hour=hour, minute=minute)
+                trigger = CronTrigger(hour=hour, minute=minute, timezone=pytz.timezone(TIMEZONE))
 
             elif task.frequency == "weekly":
                 # ex: toda segunda-feira (ajuste se quiser outro dia)
-                trigger = CronTrigger(day_of_week="mon", hour=hour, minute=minute)
+                trigger = CronTrigger(day_of_week="mon", hour=hour, minute=minute, timezone=pytz.timezone(TIMEZONE))
 
             elif task.frequency == "monthly":
-                trigger = CronTrigger(day=1, hour=hour, minute=minute)
+                trigger = CronTrigger(day=1, hour=hour, minute=minute, timezone=pytz.timezone(TIMEZONE))
 
             if trigger:
                 scheduler.add_job(
