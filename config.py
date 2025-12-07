@@ -55,6 +55,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/userinfo.profile",
     "https://www.googleapis.com/auth/drive.readonly",
     "https://www.googleapis.com/auth/drive.activity.readonly",  # Ler histórico de atividades
+    "https://www.googleapis.com/auth/drive.file",  # <<< ler/gravar arquivos criados pela app
 ]
 
 
