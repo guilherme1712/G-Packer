@@ -21,7 +21,8 @@ venv.bak/
 
 # Banco de Dados Local
 *.sqlite3
-*.db
+*.db*
+gpacker.*
 instance/
 migrations/
 
