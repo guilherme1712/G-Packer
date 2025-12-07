@@ -26,7 +26,7 @@ from app.services.auth import get_credentials
 from app.models import (
     db,
     TaskModel,
-    BackupProfile,
+    BackupProfileModel,
     BackupFileModel,
     ScheduledTaskModel,
     ScheduledRunModel,
@@ -141,7 +141,7 @@ def view_db():
     _run_auto_migrations()
 
     tasks = TaskModel.query.order_by(TaskModel.updated_at.desc()).limit(50).all()
-    profiles = BackupProfile.query.all()
+    profiles = BackupProfileModel.query.all()
 
     sched_tasks = ScheduledTaskModel.query.order_by(
         ScheduledTaskModel.active.desc(),

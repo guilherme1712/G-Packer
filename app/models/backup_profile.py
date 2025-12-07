@@ -1,7 +1,7 @@
 # models/backup_profile.py
 from .db_instance import db
 
-class BackupProfile(db.Model):
+class BackupProfileModel(db.Model):
     __tablename__ = 'backup_profiles'
 
     id = db.Column(db.Integer, primary_key=True)

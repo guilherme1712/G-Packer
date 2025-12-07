@@ -8,7 +8,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from .drive import safe_name, file_passes_filters, extract_size_bytes
-from .progress import sync_task_to_db, update_progress
+from app.services.progress import sync_task_to_db, update_progress
 
 # Lock para operações globais (como atualizar progresso compartilhado)
 _lock = threading.Lock()
@@ -87,37 +87,70 @@ def safe_list_execute(request_obj):
 # FUNÇÕES DE SERVIÇO (SINGLE-THREADED USAGE)
 # ---------------------------------------------------------------------------
 
-def list_children(service, parent_id: str, include_files: bool):
-    items = []
+# app/services/Google/drive_tree.py
+
+def list_children(service, folder_id, include_files: bool = False) -> list[dict]:
+    """
+    Lista filhos diretos de uma pasta no Drive.
+
+    Agora retorna também:
+      - mimeType
+      - modified_time (string ISO)
+    """
+    query = f"'{folder_id}' in parents and trashed = false"
+    fields = "files(id, name, mimeType, size, modifiedTime), nextPageToken"
+
+    items: list[dict] = []
     page_token = None
+
     while True:
-        try:
-            req = service.files().list(
-                q=f"'{parent_id}' in parents and trashed = false",
-                fields="nextPageToken, files(id, name, mimeType, size)",
+        resp = (
+            service.files()
+            .list(
+                q=query,
+                fields=fields,
                 pageToken=page_token,
                 pageSize=1000,
-                spaces="drive",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
             )
-            results = safe_list_execute(req)
-        except Exception as e:
-            print(f"Erro ao listar filhos de {parent_id}: {e}")
-            break
+            .execute()
+        )
 
-        for f in results.get("files", []):
+        for f in resp.get("files", []):
             mime = f.get("mimeType")
-            if mime == "application/vnd.google-apps.folder":
-                items.append({"id": f["id"], "name": f["name"], "type": "folder"})
-            else:
-                if include_files:
-                    size = int(f.get("size", 0))
-                    items.append({"id": f["id"], "name": f["name"], "type": "file", "size_bytes": size})
+            modified = f.get("modifiedTime")
+            is_folder = mime == "application/vnd.google-apps.folder"
 
-        page_token = results.get("nextPageToken")
+            if is_folder:
+                items.append(
+                    {
+                        "id": f["id"],
+                        "name": f["name"],
+                        "type": "folder",
+                        "mimeType": mime,
+                        "modified_time": modified,
+                    }
+                )
+            elif include_files:
+                size = int(f.get("size") or 0)
+                items.append(
+                    {
+                        "id": f["id"],
+                        "name": f["name"],
+                        "type": "file",
+                        "size_bytes": size,
+                        "mimeType": mime,
+                        "modified_time": modified,
+                    }
+                )
+
+        page_token = resp.get("nextPageToken")
         if not page_token:
             break
 
-    items.sort(key=lambda x: x["name"].lower())
+    # Pastas primeiro, depois arquivos, em ordem alfabética
+    items.sort(key=lambda x: (x["type"] != "folder", x["name"].lower()))
     return items
 
 
@@ -176,7 +209,7 @@ def _worker_process_folder(
     Usa 'get_thread_safe_service' para não recriar conexão SSL a cada chamada.
     """
     service = get_thread_safe_service(creds)
-    
+
     local_files = []
     subfolders_to_scan = []
     page_token = None
@@ -201,7 +234,7 @@ def _worker_process_folder(
             return local_files, subfolders_to_scan
 
         files = results.get("files", [])
-        
+
         # Processamento em memória é rápido, o gargalo é a API
         for f in files:
             file_id = f["id"]
@@ -250,7 +283,7 @@ def build_files_list_for_items(
         raise ValueError("Credenciais não fornecidas.")
 
     all_files_list: list[dict] = []
-    
+
     # Inicializa thread_local para a thread principal também, se necessário
     if not hasattr(_thread_local, "service"):
         _thread_local.service = service_main
@@ -346,7 +379,7 @@ def build_files_list_for_items(
 
             for future in done:
                 fpath_orig = future_to_folder.pop(future)
-                
+
                 try:
                     found_files, found_subfolders = future.result()
 
@@ -354,16 +387,16 @@ def build_files_list_for_items(
                     if found_files:
                         with _lock:
                             all_files_list.extend(found_files)
-                            
+
                             if progress_dict and task_id:
                                 info = progress_dict[task_id]
                                 count_now = info.get("files_found", 0) + len(found_files)
                                 info["files_found"] = count_now
-                                
+
                                 total_bytes = sum(x["size_bytes"] for x in found_files)
                                 info["bytes_found"] = info.get("bytes_found", 0) + total_bytes
                                 info["message"] = f"Mapeando: {count_now} itens encontrados..."
-                                
+
                                 # Log inteligente (não logar tudo para não travar UI)
                                 hist = info.get("history", [])
                                 if len(found_files) < 3:
@@ -372,7 +405,7 @@ def build_files_list_for_items(
                                 else:
                                     hist.append(f"Mapeados +{len(found_files)} arquivos em {fpath_orig}")
                                 info["history"] = hist
-                                
+
                                 progress_dict[task_id] = info
                                 changes_since_sync += 1
 
@@ -394,7 +427,7 @@ def build_files_list_for_items(
                         for pending in future_to_folder:
                             pending.cancel()
                         raise exc
-                    
+
                     print(f"Erro no worker de mapeamento para {fpath_orig}: {exc}")
                     update_progress(task_id, {"history": [f"ERRO pasta {fpath_orig}: {exc}"]})
 
@@ -418,13 +451,13 @@ def calculate_selection_stats(creds, items):
     Se demorar muito ou tiver muitos itens, retorna uma estimativa parcial.
     """
     service = get_thread_safe_service(creds)
-    
+
     # LIMITES DE SEGURANÇA (Para não travar o modal)
     MAX_SCAN_TIME = 3.0    # Máximo 3 segundos escaneando
     MAX_SCAN_ITEMS = 3000  # Máximo 3000 itens para contar
-    
+
     start_time = time.time()
-    
+
     stats = {
         "files_count": 0,
         "folders_count": 0,
@@ -432,9 +465,9 @@ def calculate_selection_stats(creds, items):
         "preview_files": [],
         "is_partial": False  # Flag para avisar o front que parou no meio
     }
-    
+
     stack = []
-    
+
     # 1. Processa seleção inicial
     for item in items:
         if item.get("type") == "folder":
@@ -442,7 +475,7 @@ def calculate_selection_stats(creds, items):
             stack.append(item["id"])
         else:
             stats["files_count"] += 1
-            s = int(item.get("size_bytes", 0)) 
+            s = int(item.get("size_bytes", 0))
             if s == 0 and item.get("size"): s = int(item["size"])
             stats["total_size_bytes"] += s
             if len(stats["preview_files"]) < 5:
@@ -453,14 +486,14 @@ def calculate_selection_stats(creds, items):
         # VERIFICAÇÃO DE SEGURANÇA (SAÍDA RÁPIDA)
         elapsed = time.time() - start_time
         count_total = stats["files_count"] + stats["folders_count"]
-        
+
         if elapsed > MAX_SCAN_TIME or count_total > MAX_SCAN_ITEMS:
             stats["is_partial"] = True
             break  # <--- PARA O LOOP AQUI
-            
+
         parent_id = stack.pop(0)
         page_token = None
-        
+
         while True:
             # Verifica limites dentro da paginação também
             if (time.time() - start_time) > MAX_SCAN_TIME:
@@ -473,11 +506,11 @@ def calculate_selection_stats(creds, items):
                     q=f"'{parent_id}' in parents and trashed = false",
                     fields="nextPageToken, files(id, name, mimeType, size)",
                     pageToken=page_token,
-                    pageSize=1000 
+                    pageSize=1000
                 ).execute()
-                
+
                 files = results.get("files", [])
-                
+
                 for f in files:
                     if f["mimeType"] == "application/vnd.google-apps.folder":
                         stats["folders_count"] += 1
@@ -485,7 +518,7 @@ def calculate_selection_stats(creds, items):
                     else:
                         stats["files_count"] += 1
                         stats["total_size_bytes"] += int(f.get("size", 0))
-                        
+
                         if len(stats["preview_files"]) < 5:
                             stats["preview_files"].append(f["name"])
 
@@ -495,27 +528,27 @@ def calculate_selection_stats(creds, items):
             except Exception as e:
                 print(f"Erro scan leve: {e}")
                 break
-        
+
         if stats["is_partial"]:
             break
-                
+
     return stats
     """
     Calcula estatísticas (tamanho, contagem) dos itens selecionados
     sem iniciar o download. Retorna JSON para o modal.
     """
     service = get_thread_safe_service(creds)
-    
+
     stats = {
         "files_count": 0,
         "folders_count": 0,
         "total_size_bytes": 0,
         "preview_files": [] # Lista com nomes dos primeiros 5 arquivos
     }
-    
+
     # Fila para processar pastas
     stack = []
-    
+
     # 1. Processa a seleção inicial
     for item in items:
         if item.get("type") == "folder":
@@ -524,10 +557,10 @@ def calculate_selection_stats(creds, items):
         else:
             stats["files_count"] += 1
             # Se já veio da árvore com tamanho, usa. Se não, assume 0 ou busca depois (aqui simplificado)
-            s = int(item.get("size_bytes", 0)) 
+            s = int(item.get("size_bytes", 0))
             if s == 0 and item.get("size"): s = int(item["size"]) # Fallback
             stats["total_size_bytes"] += s
-            
+
             if len(stats["preview_files"]) < 5:
                 stats["preview_files"].append(item["name"])
 
@@ -535,7 +568,7 @@ def calculate_selection_stats(creds, items):
     while stack:
         parent_id = stack.pop(0)
         page_token = None
-        
+
         while True:
             try:
                 # Pede apenas campos leves
@@ -545,9 +578,9 @@ def calculate_selection_stats(creds, items):
                     pageToken=page_token,
                     pageSize=1000
                 ).execute()
-                
+
                 files = results.get("files", [])
-                
+
                 for f in files:
                     if f["mimeType"] == "application/vnd.google-apps.folder":
                         stats["folders_count"] += 1
@@ -555,7 +588,7 @@ def calculate_selection_stats(creds, items):
                     else:
                         stats["files_count"] += 1
                         stats["total_size_bytes"] += int(f.get("size", 0))
-                        
+
                         if len(stats["preview_files"]) < 5:
                             stats["preview_files"].append(f["name"])
 
@@ -565,5 +598,5 @@ def calculate_selection_stats(creds, items):
             except Exception as e:
                 print(f"Erro ao calcular stats da pasta {parent_id}: {e}")
                 break
-                
+
     return stats

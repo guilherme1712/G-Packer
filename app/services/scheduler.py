@@ -11,9 +11,9 @@ from config import TIMEZONE
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from app.models import db, ScheduledTaskModel, BackupFileModel, BackupProfile, ScheduledRunModel
+from app.models import db, ScheduledTaskModel, BackupFileModel, BackupProfileModel, ScheduledRunModel
 from .auth import get_credentials
-from .drive_download import download_items_bundle
+from app.services.Google.drive_download import download_items_bundle
 from .progress import PROGRESS, init_download_task
 
 # Scheduler global
@@ -104,7 +104,7 @@ def job_executor(app_app_context, task_id_db):
         base_zip_name = task.zip_name or "backup_agendado"
 
         if getattr(task, "profile_id", None):
-            profile = BackupProfile.query.get(task.profile_id)
+            profile = BackupProfileModel.query.get(task.profile_id)
             if profile:
                 # usa sempre a LISTA ATUAL de itens do perfil
                 items = profile.items or []

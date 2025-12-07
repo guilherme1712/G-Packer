@@ -7,7 +7,7 @@ from config import (
     SQLALCHEMY_TRACK_MODIFICATIONS,
     TIMEZONE,
     BACKUP_RETENTION_MAX_FILES,
-    BACKUP_RETENTION_MAX_DAYS,
+    BACKUP_RETENTION_MAX_DAYS, BACKUP_STORAGE_DIR, AUTH_TOKEN_FILE,
 )
 from app.models import db
 
@@ -43,6 +43,8 @@ def create_app() -> Flask:
         # >>> NOVO: Configs globais de retenção de backups
     app.config["BACKUP_RETENTION_MAX_FILES"] = BACKUP_RETENTION_MAX_FILES
     app.config["BACKUP_RETENTION_MAX_DAYS"] = BACKUP_RETENTION_MAX_DAYS
+    app.config["BACKUP_STORAGE_DIR"] = BACKUP_STORAGE_DIR
+    app.config["AUTH_TOKEN_FILE"] = AUTH_TOKEN_FILE
     
 
     # Inicializa o Banco com a App

@@ -2,7 +2,7 @@
 from flask import Blueprint, render_template, request, jsonify, current_app
 import json
 
-from app.models import db, ScheduledTaskModel, BackupProfile
+from app.models import db, ScheduledTaskModel, BackupProfileModel
 from app.services.scheduler import reload_jobs
 
 scheduler_bp = Blueprint("scheduler", __name__)
@@ -42,7 +42,7 @@ def create_task():
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "Perfil de backup inválido."}), 400
 
-        prof = BackupProfile.query.get(pid_int)
+        prof = BackupProfileModel.query.get(pid_int)
         if not prof:
             return jsonify({"ok": False, "error": "Perfil de backup não encontrado."}), 404
 

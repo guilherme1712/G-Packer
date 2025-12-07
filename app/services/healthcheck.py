@@ -1,275 +1,265 @@
 import os
 import shutil
 import time
+import json
+import requests
+from datetime import datetime
 from typing import Dict, Any
 
 from flask import current_app
 from sqlalchemy import text
 
-from app.models import db  # ajuste o caminho se for diferente
-from app.utils.structured_logging import log_event
+# Tenta importar psutil para métricas de servidor (CPU/RAM)
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
-# Google Auth
+from app.models import db
+from app.models.google_auth import GoogleAuthModel
+from app.models.backup_file import BackupFileModel
+from app.models.task import TaskModel
+
 try:
     from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
-except ImportError:  # se a lib não estiver instalada
+except ImportError:
     Credentials = None
     Request = None
 
 
-def _status_level_from_free_ratio(free_ratio: float) -> str:
-    """
-    Converte % livre em status:
-    > 20%  -> ok
-    10-20% -> warning
-    < 10%  -> error
-    """
-    if free_ratio <= 0.10:
-        return "error"
-    if free_ratio <= 0.20:
-        return "warning"
-    return "ok"
-
-
-def check_database() -> Dict[str, Any]:
-    started = time.perf_counter()
-    try:
-        # simple health query
-        db.session.execute(text("SELECT 1"))
-        db.session.commit()
-        duration_ms = (time.perf_counter() - started) * 1000
-        status = "ok"
-        message = "Conexão com banco OK."
-        log_event(
-            "health.database",
-            "INFO",
-            status=status,
-            duration_ms=round(duration_ms, 2),
-        )
-        return {
-            "name": "Banco de Dados",
-            "status": status,
-            "message": message,
-            "duration_ms": round(duration_ms, 2),
-        }
-    except Exception as exc:  # noqa: BLE001
-        duration_ms = (time.perf_counter() - started) * 1000
-        status = "error"
-        message = f"Erro ao conectar no banco: {exc!r}"
-        log_event(
-            "health.database",
-            "ERROR",
-            status=status,
-            duration_ms=round(duration_ms, 2),
-            error=str(exc),
-        )
-        return {
-            "name": "Banco de Dados",
-            "status": status,
-            "message": message,
-            "duration_ms": round(duration_ms, 2),
-        }
-
-
-def check_google_credentials() -> Dict[str, Any]:
+# ==========================================
+# 1. MONITORAMENTO DE SISTEMA (CPU/RAM)
+# ==========================================
+def check_system_resources() -> Dict[str, Any]:
+    """Monitora uso de CPU e Memória do servidor."""
     started = time.perf_counter()
 
-    if Credentials is None or Request is None:
-        duration_ms = (time.perf_counter() - started) * 1000
-        status = "warning"
-        message = "Bibliotecas google-auth não instaladas; não foi possível validar o token."
-        log_event(
-            "health.google",
-            "WARNING",
-            status=status,
-            duration_ms=round(duration_ms, 2),
-        )
-        return {
-            "name": "Credenciais Google",
-            "status": status,
-            "message": message,
-            "duration_ms": round(duration_ms, 2),
-        }
-
-    token_path = current_app.config.get("GOOGLE_TOKEN_FILE", "token.json")
-
-    if not os.path.exists(token_path):
-        duration_ms = (time.perf_counter() - started) * 1000
-        status = "error"
-        message = f"Arquivo de token Google não encontrado: {token_path}"
-        log_event(
-            "health.google",
-            "ERROR",
-            status=status,
-            duration_ms=round(duration_ms, 2),
-            token_path=token_path,
-        )
-        return {
-            "name": "Credenciais Google",
-            "status": status,
-            "message": message,
-            "duration_ms": round(duration_ms, 2),
-        }
+    if not psutil:
+        return {"status": "warning", "message": "Lib 'psutil' não instalada."}
 
     try:
-        creds = Credentials.from_authorized_user_file(token_path)
-        # credenciais OK e não expiram logo
-        if creds.valid:
-            duration_ms = (time.perf_counter() - started) * 1000
-            status = "ok"
-            message = "Token Google válido."
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+        mem = psutil.virtual_memory()
+
+        # Regras de Alerta
+        if cpu_percent > 90 or mem.percent > 90:
+            status = "error"
+            msg = f"SOBRECARGA: CPU {cpu_percent}% / RAM {mem.percent}%"
+        elif cpu_percent > 70 or mem.percent > 80:
+            status = "warning"
+            msg = f"Carga Alta: CPU {cpu_percent}% / RAM {mem.percent}%"
         else:
-            # Tenta refresh se possível
-            if creds.expired and creds.refresh_token:
-                request = Request()
-                creds.refresh(request)
-                duration_ms = (time.perf_counter() - started) * 1000
-                if creds.valid:
-                    status = "warning"
-                    message = "Token Google estava expirado, mas foi renovado com sucesso."
-                else:
-                    status = "error"
-                    message = "Token Google inválido mesmo após tentar renovar."
-            else:
-                duration_ms = (time.perf_counter() - started) * 1000
-                status = "error"
-                message = "Token Google inválido ou expirado e sem refresh_token."
-
-        log_event(
-            "health.google",
-            "INFO" if status == "ok" else "WARNING" if status == "warning" else "ERROR",
-            status=status,
-            duration_ms=round(duration_ms, 2),
-        )
+            status = "ok"
+            msg = f"Estável. CPU: {cpu_percent}% | RAM: {mem.percent}%"
 
         return {
-            "name": "Credenciais Google",
             "status": status,
-            "message": message,
-            "duration_ms": round(duration_ms, 2),
-        }
-
-    except Exception as exc:  # noqa: BLE001
-        duration_ms = (time.perf_counter() - started) * 1000
-        status = "error"
-        message = f"Erro ao validar credenciais Google: {exc!r}"
-        log_event(
-            "health.google",
-            "ERROR",
-            status=status,
-            duration_ms=round(duration_ms, 2),
-            error=str(exc),
-        )
-        return {
-            "name": "Credenciais Google",
-            "status": status,
-            "message": message,
-            "duration_ms": round(duration_ms, 2),
-        }
-
-
-def check_backup_disk() -> Dict[str, Any]:
-    started = time.perf_counter()
-    backup_root = current_app.config.get("BACKUP_ROOT")
-
-    if not backup_root:
-        duration_ms = (time.perf_counter() - started) * 1000
-        status = "error"
-        message = "Config BACKUP_ROOT não definida."
-        log_event(
-            "health.backup_disk",
-            "ERROR",
-            status=status,
-            duration_ms=round(duration_ms, 2),
-        )
-        return {
-            "name": "Espaço em disco (backups)",
-            "status": status,
-            "message": message,
-            "duration_ms": round(duration_ms, 2),
-        }
-
-    if not os.path.exists(backup_root):
-        duration_ms = (time.perf_counter() - started) * 1000
-        status = "warning"
-        message = f"Pasta de backups ainda não existe: {backup_root}"
-        log_event(
-            "health.backup_disk",
-            "WARNING",
-            status=status,
-            duration_ms=round(duration_ms, 2),
-            path=backup_root,
-        )
-        return {
-            "name": "Espaço em disco (backups)",
-            "status": status,
-            "message": message,
-            "duration_ms": round(duration_ms, 2),
+            "message": msg,
             "details": {
-                "path": backup_root,
+                "cpu_usage": f"{cpu_percent}%",
+                "ram_usage": f"{mem.percent}%",
+                "ram_available": f"{mem.available / (1024 ** 3):.1f} GB"
             },
+            "duration_ms": round((time.perf_counter() - started) * 1000, 2)
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Erro ao ler sistema: {e}"}
+
+
+# ==========================================
+# 2. CONECTIVIDADE EXTERNA (INTERNET)
+# ==========================================
+def check_internet_connectivity() -> Dict[str, Any]:
+    """Verifica se o servidor tem saída para a internet (Ping Google)."""
+    started = time.perf_counter()
+    try:
+        # Timeout curto de 3s
+        response = requests.get("https://www.google.com", timeout=3)
+        duration_ms = (time.perf_counter() - started) * 1000
+
+        if response.status_code == 200:
+            status = "ok"
+            msg = "Conexão Internet OK."
+            if duration_ms > 1000:
+                status = "warning"
+                msg = "Internet lenta (>1s)."
+        else:
+            status = "warning"
+            msg = f"Status inesperado: {response.status_code}"
+
+        return {
+            "status": status,
+            "message": msg,
+            "duration_ms": round(duration_ms, 2)
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": "Sem conexão com Internet.",
+            "duration_ms": 0.0,
+            "details": {"error": str(e)}
         }
 
-    usage = shutil.disk_usage(backup_root)
-    total = usage.total
-    free = usage.free
-    used = usage.used
-    free_ratio = free / total if total else 0
 
-    status = _status_level_from_free_ratio(free_ratio)
+# ==========================================
+# 3. BANCO DE DADOS (Conexão e Tamanho)
+# ==========================================
+def check_database_extended() -> Dict[str, Any]:
+    started = time.perf_counter()
+    try:
+        # Teste de conexão
+        db.session.execute(text("SELECT 1"))
 
-    if status == "ok":
-        message = "Espaço em disco adequado."
-    elif status == "warning":
-        message = "Pouco espaço em disco – atente para limpeza."
-    else:
-        message = "Espaço em disco crítico – risco de falha de backups."
+        # Teste de Tamanho do Arquivo (SQLite)
+        db_uri = current_app.config.get("SQLALCHEMY_DATABASE_URI", "")
+        db_size_mb = 0
+        msg_extra = ""
 
-    duration_ms = (time.perf_counter() - started) * 1000
-    log_event(
-        "health.backup_disk",
-        "INFO" if status == "ok" else "WARNING" if status == "warning" else "ERROR",
-        status=status,
-        duration_ms=round(duration_ms, 2),
-        total_bytes=total,
-        used_bytes=used,
-        free_bytes=free,
-        free_ratio=round(free_ratio, 4),
-        path=backup_root,
-    )
+        if db_uri.startswith("sqlite:///"):
+            path = db_uri.replace("sqlite:///", "")
+            if os.path.exists(path):
+                size = os.path.getsize(path)
+                db_size_mb = size / (1024 * 1024)
+                msg_extra = f" | Tamanho: {db_size_mb:.1f} MB"
 
-    return {
-        "name": "Espaço em disco (backups)",
-        "status": status,
-        "message": message,
-        "duration_ms": round(duration_ms, 2),
-        "details": {
-            "path": backup_root,
-            "total_bytes": total,
-            "used_bytes": used,
-            "free_bytes": free,
-            "free_ratio": free_ratio,
-        },
-    }
+        duration_ms = (time.perf_counter() - started) * 1000
+
+        # Alerta se o banco estiver gigante (> 500MB para SQLite é alerta)
+        if db_size_mb > 500:
+            return {
+                "status": "warning",
+                "message": f"Banco muito grande ({db_size_mb:.1f} MB).",
+                "duration_ms": round(duration_ms, 2)
+            }
+
+        return {
+            "status": "ok",
+            "message": f"Operacional{msg_extra}",
+            "duration_ms": round(duration_ms, 2)
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": f"Falha no BD: {str(exc)}",
+            "duration_ms": 0.0
+        }
 
 
+# ==========================================
+# 4. CREDENCIAIS GOOGLE (Via Banco)
+# ==========================================
+def check_google_auth_db() -> Dict[str, Any]:
+    started = time.perf_counter()
+    if not Credentials:
+        return {"status": "warning", "message": "Libs Google ausentes."}
+
+    try:
+        auth = GoogleAuthModel.query.filter_by(active=True).order_by(GoogleAuthModel.updated_at.desc()).first()
+        if not auth:
+            return {"status": "error", "message": "Não conectado ao Google Drive."}
+
+        data = json.loads(auth.token_json)
+        creds = Credentials.from_authorized_user_info(data, data.get("scopes"))
+
+        if creds.valid:
+            status = "ok"
+            msg = f"Conectado: {auth.email}"
+        elif creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(Request())
+                status = "ok"
+                msg = f"Token renovado: {auth.email}"
+            except:
+                status = "error"
+                msg = "Falha ao renovar token."
+        else:
+            status = "error"
+            msg = "Token inválido/revogado."
+
+        return {
+            "status": status,
+            "message": msg,
+            "duration_ms": round((time.perf_counter() - started) * 1000, 2)
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ==========================================
+# 5. DISCO DE BACKUP
+# ==========================================
+def check_disk_space() -> Dict[str, Any]:
+    started = time.perf_counter()
+    backup_dir = current_app.config.get("BACKUP_STORAGE_DIR", ".")
+    target = backup_dir if os.path.exists(backup_dir) else "."
+
+    try:
+        usage = shutil.disk_usage(target)
+        free_gb = usage.free / (1024 ** 3)
+        ratio = usage.free / usage.total
+
+        if ratio < 0.10:
+            status, msg = "error", f"CRÍTICO: {free_gb:.1f}GB livres."
+        elif ratio < 0.20:
+            status, msg = "warning", f"Baixo: {free_gb:.1f}GB livres."
+        else:
+            status, msg = "ok", f"Saudável: {free_gb:.1f}GB livres."
+
+        return {
+            "status": status,
+            "message": msg,
+            "details": {"path": target, "percent_free": f"{ratio * 100:.1f}%"},
+            "duration_ms": round((time.perf_counter() - started) * 1000, 2)
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ==========================================
+# 6. HISTÓRICO DE TAREFAS (FALHAS)
+# ==========================================
+def check_tasks_health() -> Dict[str, Any]:
+    started = time.perf_counter()
+    try:
+        # Pega as últimas 10 tarefas
+        recent_tasks = TaskModel.query.order_by(TaskModel.created_at.desc()).limit(10).all()
+        if not recent_tasks:
+            return {"status": "ok", "message": "Nenhuma tarefa recente.", "duration_ms": 0}
+
+        fail_count = sum(1 for t in recent_tasks if t.phase == 'erro' or t.errors_count > 0)
+
+        if fail_count >= 3:
+            status, msg = "error", f"Alerta: {fail_count} falhas nas últimas 10 execuções."
+        elif fail_count > 0:
+            status, msg = "warning", f"Atenção: {fail_count} falhas recentes."
+        else:
+            status, msg = "ok", "Últimas 10 execuções sem erros."
+
+        return {
+            "status": status,
+            "message": msg,
+            "duration_ms": round((time.perf_counter() - started) * 1000, 2)
+        }
+    except Exception as e:
+        return {"status": "warning", "message": "Erro ao ler histórico tasks."}
+
+
+# ==========================================
+# FUNÇÃO PRINCIPAL
+# ==========================================
 def run_health_checks() -> Dict[str, Any]:
-    """
-    Executa todos os checks e retorna um payload único:
-    {
-        "status": "ok|degraded|error",
-        "checks": { ... }
-    }
-    """
     checks = {
-        "database": check_database(),
-        "google_credentials": check_google_credentials(),
-        "backup_disk": check_backup_disk(),
+        "system": check_system_resources(),  # Novo
+        "internet": check_internet_connectivity(),  # Novo
+        "database": check_database_extended(),  # Melhorado
+        "google_auth": check_google_auth_db(),
+        "disk": check_disk_space(),
+        "tasks": check_tasks_health()  # Novo
     }
 
-    statuses = {c["status"] for c in checks.values()}
-
+    # Status global: Se um for erro = erro. Se um for warning = warning.
+    statuses = [v["status"] for v in checks.values()]
     if "error" in statuses:
         global_status = "error"
     elif "warning" in statuses:
@@ -277,9 +267,4 @@ def run_health_checks() -> Dict[str, Any]:
     else:
         global_status = "ok"
 
-    log_event("health.all", "INFO", global_status=global_status)
-
-    return {
-        "status": global_status,
-        "checks": checks,
-    }
+    return {"status": global_status, "checks": checks, "timestamp": time.time()}

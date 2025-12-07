@@ -19,11 +19,20 @@ from flask import (
 )
 
 from app.services.auth import get_credentials
-from app.services.drive_filters import build_filters_from_form
-from app.services.drive_tree import calculate_selection_stats
-from app.services.drive_tree import get_children, get_file_metadata, get_ancestors_path
-from app.services.drive_download import download_items_bundle, mirror_items_to_local
-from app.services.drive_activity import fetch_activity_log
+from app.services.Google.drive_filters import build_filters_from_form
+from app.services.Google.drive_tree import (
+    get_file_metadata,
+    calculate_selection_stats,
+    get_ancestors_path,
+)
+from app.services.Google.drive_cache import (
+    get_children_cached,
+    rebuild_full_cache,
+    search_cache,
+)
+
+from app.services.Google.drive_download import download_items_bundle, mirror_items_to_local
+from app.services.Google.drive_activity import fetch_activity_log
 from app.services.progress import (
     PROGRESS,
     init_download_task,
@@ -234,19 +243,99 @@ def folders():
 @drive_bp.route("/api/folders/root")
 def api_folders_root():
     creds = get_credentials()
-    if not creds: return jsonify({"error": "unauthorized"}), 401
+    if not creds:
+        return jsonify({"error": "unauthorized"}), 401
+
     include_files = request.args.get("files") == "1"
-    items = get_children(creds, "root", include_files=include_files)
+    force = request.args.get("force") == "1"
+
+    items = get_children_cached(
+        creds,
+        "root",
+        include_files=include_files,
+        force_refresh=force,
+    )
     return jsonify({"items": items})
 
 
 @drive_bp.route("/api/folders/children/<folder_id>")
 def api_folders_children(folder_id):
     creds = get_credentials()
-    if not creds: return jsonify({"error": "unauthorized"}), 401
+    if not creds:
+        return jsonify({"error": "unauthorized"}), 401
+
     include_files = request.args.get("files") == "1"
-    items = get_children(creds, folder_id, include_files=include_files)
+    force = request.args.get("force") == "1"
+
+    items = get_children_cached(
+        creds,
+        folder_id,
+        include_files=include_files,
+        force_refresh=force,
+    )
     return jsonify({"items": items})
+
+@drive_bp.route("/api/cache/rebuild", methods=["POST"])
+def api_drive_cache_rebuild():
+    """
+    Recria o cache local do Drive a partir de 'root'.
+
+    Body (JSON) opcional:
+      {
+        "include_files": true,   # default true
+      }
+    """
+    creds = get_credentials()
+    if not creds:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    include_files = bool(data.get("include_files", True))
+
+    try:
+        total = rebuild_full_cache(creds, include_files=include_files)
+        return jsonify({"ok": True, "total_items": total})
+    except Exception as e:
+        current_app.logger.exception("Erro ao reconstruir cache do Drive")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@drive_bp.route("/api/cache/search")
+def api_drive_cache_search():
+    """
+    Busca em cima do cache local do Drive.
+
+    Query params:
+      q        = texto no nome (opcional)
+      type     = "file" | "folder" (opcional)
+      min_size = mínimo em bytes (opcional)
+      max_size = máximo em bytes (opcional)
+      limit    = máximo de registros (default 200)
+    """
+    # Eu exigiria login, mas não preciso do creds em si
+    creds = get_credentials()
+    if not creds:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    def _parse_int(value):
+        try:
+            return int(value) if value not in (None, "", "null") else None
+        except Exception:
+            return None
+
+    text = request.args.get("q") or None
+    type_filter = request.args.get("type") or None
+    min_size = _parse_int(request.args.get("min_size"))
+    max_size = _parse_int(request.args.get("max_size"))
+    limit = _parse_int(request.args.get("limit")) or 200
+
+    results = search_cache(
+        text=text,
+        type_filter=type_filter,
+        min_size=min_size,
+        max_size=max_size,
+        limit=limit,
+    )
+    return jsonify({"ok": True, "results": results})
 
 
 @drive_bp.route("/api/path/<file_id>")
@@ -430,16 +519,16 @@ def analyze_selection():
     creds = get_credentials()
     if not creds:
         return jsonify({"ok": False, "error": "Sessão expirada"}), 401
-    
+
     data = request.get_json() or {}
     items = data.get("items", [])
-    
+
     if not items:
         return jsonify({"ok": False, "error": "Nenhum item"}), 400
 
     try:
         stats = calculate_selection_stats(creds, items)
-        
+
         # Formata tamanho para humano
         size_bytes = stats["total_size_bytes"]
         for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
@@ -447,7 +536,7 @@ def analyze_selection():
                 stats["size_formatted"] = f"{size_bytes:.2f} {unit}"
                 break
             size_bytes /= 1024
-        
+
         return jsonify({"ok": True, "stats": stats})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500

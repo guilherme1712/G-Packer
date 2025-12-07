@@ -1,13 +1,13 @@
 # services/profile_service.py
 from typing import Tuple, Optional
-from app.models import db, BackupProfile
+from app.models import db, BackupProfileModel
 
 def load_backup_profiles() -> list[dict]:
     """
     Carrega todos os perfis de backup a partir da tabela backup_profiles.
     Retorna lista de dicionários já prontos para o frontend.
     """
-    profiles = BackupProfile.query.order_by(BackupProfile.id.desc()).all()
+    profiles = BackupProfileModel.query.order_by(BackupProfileModel.id.desc()).all()
     return [p.to_dict() for p in profiles]
 
 
@@ -56,7 +56,7 @@ def create_profile(data: dict) -> Tuple[Optional[dict], Optional[str]]:
     processing_mode = (data.get("processing_mode") or "sequential").strip()
 
     try:
-        profile = BackupProfile(
+        profile = BackupProfileModel(
             name=name,
             zip_pattern=zip_pattern,
             zip_name=zip_name,
@@ -86,7 +86,7 @@ def get_profile(profile_id: str) -> Optional[dict]:
     except (TypeError, ValueError):
         return None
 
-    profile = BackupProfile.query.get(pid)
+    profile = BackupProfileModel.query.get(pid)
     if not profile:
         return None
     return profile.to_dict()
@@ -98,7 +98,7 @@ def delete_profile(profile_id: str) -> bool:
     except (TypeError, ValueError):
         return False
 
-    profile = BackupProfile.query.get(pid)
+    profile = BackupProfileModel.query.get(pid)
     if not profile:
         return False
 
