@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}G-Packer{% endblock %}</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    {# CSS principal do projeto #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-gradient">
+
+<div class="app-shell">
+    {# MENU LATERAL GLOBAL #}
+    {% include 'menu.html' %}
+
+    {# CONTEÚDO PRINCIPAL DAS PÁGINAS #}
+    <div class="app-main">
+        {% block content %}{% endblock %}
+    </div>
+</div>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

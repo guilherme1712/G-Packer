@@ -1,0 +1,315 @@
+{# templates/dashboard.html #}
+{% extends "layout.html" %}
+
+{% block title %}Dashboard – G-Packer{% endblock %}
+
+{% block content %}
+
+<header class="topbar">
+    <div class="topbar-left">
+        <div class="breadcrumb">
+            <span class="breadcrumb-item">Home</span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-current">Dashboard</span>
+        </div>
+        <h1 class="topbar-title">Visão geral</h1>
+        <p class="topbar-subtitle">
+            Resumo rápido dos seus backups, agendamentos e tarefas em execução.
+        </p>
+    </div>
+
+    <div class="topbar-right">
+        {% if google_auth %}
+        <div class="user-summary">
+            <div class="user-meta">
+                <span class="user-label">Conectado como</span>
+                <span class="user-email">{{ google_auth.email or '—' }}</span>
+                {% if google_auth.updated_at %}
+                <span class="user-last">
+                    Token atualizado em {{ google_auth.updated_at.strftime('%d/%m/%Y %H:%M') }}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="user-avatar" title="Perfil (em breve)">
+            <span>👤</span>
+        </div>
+    </div>
+</header>
+
+<main class="dashboard-main">
+    <!-- Linha de cards principais -->
+    <section class="dashboard-row dashboard-row-metrics">
+        <div class="card dash-card">
+            <div class="dash-card-header">
+                <span class="dash-card-label">Backups salvos</span>
+                <span class="dash-card-icon">🗄️</span>
+            </div>
+            <div class="dash-metric-main">
+                <span class="dash-metric-value">{{ total_backups }}</span>
+                <span class="dash-metric-suffix">arquivos</span>
+            </div>
+            <div class="dash-metric-extra">
+                <span class="pill pill-soft">
+                    {{ total_size_mb }} MB totais
+                </span>
+                {% if last_backup %}
+                <span class="pill pill-outline">
+                    Último em {{ last_backup.created_at.strftime('%d/%m %H:%M') }}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card dash-card">
+            <div class="dash-card-header">
+                <span class="dash-card-label">Tarefas</span>
+                <span class="dash-card-icon">📋</span>
+            </div>
+            <div class="dash-metric-main">
+                <span class="dash-metric-value">{{ total_tasks }}</span>
+                <span class="dash-metric-suffix">registradas</span>
+            </div>
+            <div class="dash-metric-extra">
+                <span class="pill pill-soft">
+                    {{ tasks_success }} concluídas
+                </span>
+                <span class="pill pill-outline">
+                    {{ tasks_error }} com erro
+                </span>
+            </div>
+        </div>
+
+        <div class="card dash-card">
+            <div class="dash-card-header">
+                <span class="dash-card-label">Agendamentos</span>
+                <span class="dash-card-icon">⏱️</span>
+            </div>
+            <div class="dash-metric-main">
+                <span class="dash-metric-value">{{ active_schedules }}</span>
+                <span class="dash-metric-suffix">ativos</span>
+            </div>
+            <div class="dash-metric-extra">
+                <span class="pill pill-soft">
+                    {{ total_schedules }} no total
+                </span>
+                {% if next_schedule and next_schedule.next_run_at %}
+                <span class="pill pill-outline">
+                    Próximo: {{ next_schedule.next_run_at.strftime('%d/%m %H:%M') }}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card dash-card">
+            <div class="dash-card-header">
+                <span class="dash-card-label">Taxa de sucesso</span>
+                <span class="dash-card-icon">📈</span>
+            </div>
+            <div class="dash-metric-main">
+                <span class="dash-metric-value">{{ success_percent }}%</span>
+                <span class="dash-metric-suffix">concluído</span>
+            </div>
+            <div class="dash-chart-bar">
+                <div class="dash-chart-bar-success" style="width: {{ success_percent }}%;"></div>
+                <div class="dash-chart-bar-error" style="width: {{ error_percent }}%;"></div>
+            </div>
+            <div class="dash-metric-extra small">
+                <span class="pill pill-soft">Sucesso: {{ tasks_success }}</span>
+                <span class="pill pill-outline">Erro: {{ tasks_error }}</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Últimos backups + Próximos agendamentos -->
+    <section class="dashboard-row">
+        <div class="card dash-card dash-card-list">
+            <div class="dash-section-header">
+                <div>
+                    <h2 class="dash-section-title">Últimos backups</h2>
+                    <p class="dash-section-subtitle">Arquivos mais recentes gerados pelo servidor.</p>
+                </div>
+                <a href="{{ url_for('admin.list_backups') }}" class="link-ghost">Ver todos</a>
+            </div>
+
+            <div class="dash-card-body">
+                {% if latest_backups %}
+                <table class="dash-table">
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th>Arquivos</th>
+                            <th>Tamanho</th>
+                            <th>Criado em</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for b in latest_backups %}
+                        <tr>
+                            <td>{{ b.filename }}</td>
+                            <td>{{ b.items_count or 0 }}</td>
+                            <td>
+                                {% if b.size_mb is not none %}
+                                {{ "%.2f"|format(b.size_mb) }} MB
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if b.created_at %}
+                                {{ b.created_at.strftime('%d/%m/%Y %H:%M') }}
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="dash-empty">Nenhum backup encontrado ainda.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card dash-card dash-card-list">
+            <div class="dash-section-header">
+                <div>
+                    <h2 class="dash-section-title">Próximos agendamentos</h2>
+                    <p class="dash-section-subtitle">Execuções automáticas previstas.</p>
+                </div>
+                <a href="{{ url_for('scheduler.index') }}" class="link-ghost">Gerenciar</a>
+            </div>
+
+            <div class="dash-card-body">
+                {% if upcoming_schedules %}
+                <table class="dash-table">
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th>Frequência</th>
+                            <th>Próxima execução</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in upcoming_schedules %}
+                        <tr>
+                            <td>{{ s.name }}</td>
+                            <td>{{ s.frequency|upper }}</td>
+                            <td>
+                                {% if s.next_run_at %}
+                                {{ s.next_run_at.strftime('%d/%m/%Y %H:%M') }}
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if s.active %}
+                                <span class="pill pill-soft">Ativo</span>
+                                {% else %}
+                                <span class="pill pill-outline">Desativado</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="dash-empty">Nenhum agendamento configurado.</p>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <!-- Status das tarefas + Resumo visual -->
+    <section class="dashboard-row">
+        <div class="card dash-card dash-card-list">
+            <div class="dash-section-header">
+                <div>
+                    <h2 class="dash-section-title">Status das tarefas</h2>
+                    <p class="dash-section-subtitle">Últimas execuções do sistema.</p>
+                </div>
+                <a href="{{ url_for('admin.view_db') }}" class="link-ghost">Ver detalhes</a>
+            </div>
+
+            <div class="dash-card-body">
+                {% if latest_tasks %}
+                <table class="dash-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Fase</th>
+                            <th>Mensagem</th>
+                            <th>Arquivos</th>
+                            <th>Atualizado em</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in latest_tasks %}
+                        <tr>
+                            <td style="font-family:monospace; font-size:11px;">{{ t.id }}</td>
+                            <td>
+                                <span class="status-badge status-{{ t.phase or 'desconhecido' }}">
+                                    {{ t.phase or '-' }}
+                                </span>
+                            </td>
+                            <td>{{ t.message }}</td>
+                            <td>{{ t.files_downloaded }}/{{ t.files_total }}</td>
+                            <td>
+                                {% if t.updated_at %}
+                                {{ t.updated_at.strftime('%d/%m/%Y %H:%M') }}
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="dash-empty">Nenhuma tarefa registrada.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card dash-card dash-card-list">
+            <div class="dash-section-header">
+                <div>
+                    <h2 class="dash-section-title">Resumo visual</h2>
+                    <p class="dash-section-subtitle">Distribuição simples das tarefas concluídas x erro.</p>
+                </div>
+            </div>
+
+            <div class="dash-card-body">
+                <div class="dash-chart-legend">
+                    <span>
+                        <span class="dot dot-success"></span> Concluídas
+                    </span>
+                    <span>
+                        <span class="dot dot-error"></span> Com erro
+                    </span>
+                </div>
+
+                <div class="dash-chart-horizontal">
+                    <div class="dash-chart-horizontal-bar dash-chart-horizontal-success"
+                        style="flex: {{ tasks_success or 0 }};">
+                    </div>
+                    <div class="dash-chart-horizontal-bar dash-chart-horizontal-error"
+                        style="flex: {{ tasks_error or 0 }};">
+                    </div>
+                </div>
+
+                <div class="dash-chart-footer">
+                    <span>{{ tasks_success }} concluídas</span>
+                    <span>{{ tasks_error }} com erro</span>
+                    <span>{{ total_tasks }} tarefas no total</span>
+                </div>
+            </div>
+        </div>
+    </section>
+</main>
+
+{% endblock %}

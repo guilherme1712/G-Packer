@@ -6,8 +6,9 @@ import zipfile
 import tarfile
 import mimetypes
 
+
 from datetime import datetime
-from sqlalchemy import text, inspect
+from sqlalchemy import text, inspect, func
 
 from flask import (
     Blueprint,
@@ -792,4 +793,111 @@ def api_backup_restore_drive(backup_id):
             "uploaded": uploaded,
             "restore_root_id": restore_root_id,
         }
+    )
+
+@admin_bp.route("/dashboard")
+def dashboard():
+    """
+    Tela inicial do produto (Home / Dashboard).
+    Mostra:
+      - Últimos backups
+      - Próximos agendamentos
+      - Status atual das tarefas
+      - Resumo de credencial Google
+    """
+    creds = get_credentials()
+    if not creds:
+        flash("Faça login no Google primeiro.")
+        return redirect(url_for("auth.index"))
+
+    # --- Métricas principais ---
+    total_backups = BackupFileModel.query.count()
+    total_tasks = TaskModel.query.count()
+    total_schedules = ScheduledTaskModel.query.count()
+    active_schedules = ScheduledTaskModel.query.filter_by(active=True).count()
+
+    # Soma de tamanho total dos backups (MB)
+    total_size_mb = (
+        db.session.query(func.coalesce(func.sum(BackupFileModel.size_mb), 0.0))
+        .scalar()
+        or 0.0
+    )
+
+    # Último backup salvo
+    last_backup = (
+        BackupFileModel.query
+        .order_by(BackupFileModel.created_at.desc())
+        .first()
+    )
+
+    # Últimos 5 backups para a lista "Últimos backups"
+    latest_backups = (
+        BackupFileModel.query
+        .order_by(BackupFileModel.created_at.desc())
+        .limit(5)
+        .all()
+    )
+
+    # Próximos agendamentos (somente ativos)
+    next_schedule = (
+        ScheduledTaskModel.query
+        .filter(ScheduledTaskModel.active.is_(True))
+        .filter(ScheduledTaskModel.next_run_at.isnot(None))
+        .order_by(ScheduledTaskModel.next_run_at.asc())
+        .first()
+    )
+
+    upcoming_schedules = (
+        ScheduledTaskModel.query
+        .filter(ScheduledTaskModel.active.is_(True))
+        .order_by(ScheduledTaskModel.next_run_at.asc())
+        .limit(5)
+        .all()
+    )
+
+    # Tarefas mais recentes (para o card "Status atual das tarefas")
+    latest_tasks = (
+        TaskModel.query
+        .order_by(TaskModel.updated_at.desc())
+        .limit(6)
+        .all()
+    )
+
+    # Sucesso x Erro para o mini-gráfico
+    tasks_success = TaskModel.query.filter_by(phase="concluido").count()
+    tasks_error = TaskModel.query.filter_by(phase="erro").count()
+    total_finished = tasks_success + tasks_error
+
+    success_percent = 0
+    error_percent = 0
+    if total_finished > 0:
+        success_percent = int((tasks_success / total_finished) * 100)
+        error_percent = 100 - success_percent
+
+    # Status da credencial Google (email, último refresh)
+    from models import GoogleAuthModel  # já é importado no topo em sua versão atual
+    google_auth = (
+        GoogleAuthModel.query
+        .filter_by(active=True)
+        .order_by(GoogleAuthModel.updated_at.desc())
+        .first()
+    )
+
+    return render_template(
+        "dashboard.html",
+        total_backups=total_backups,
+        total_size_mb=round(total_size_mb, 2),
+        total_tasks=total_tasks,
+        total_schedules=total_schedules,
+        active_schedules=active_schedules,
+        last_backup=last_backup,
+        latest_backups=latest_backups,
+        next_schedule=next_schedule,
+        upcoming_schedules=upcoming_schedules,
+        latest_tasks=latest_tasks,
+        tasks_success=tasks_success,
+        tasks_error=tasks_error,
+        success_percent=success_percent,
+        error_percent=error_percent,
+        google_auth=google_auth,
     )

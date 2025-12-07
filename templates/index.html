@@ -3,22 +3,50 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Conectar ao Google Drive</title>
+    <title>G-Packer · Backup do Google Drive</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body class="bg-gradient">
-<div class="page">
+<div class="page page-auth">
     <div class="card center-card">
-        <h1>📂 Backup do Google Drive</h1>
-        <p class="subtitle">
-            Conecte-se à sua conta Google para listar suas pastas
-            e baixar qualquer uma em formato <strong>.zip</strong>.
-        </p>
+
+        <div style="display:flex; flex-direction:column; gap:10px; align-items:flex-start;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span style="
+                    display:inline-flex;
+                    align-items:center;
+                    justify-content:center;
+                    width:36px;
+                    height:36px;
+                    border-radius:999px;
+                    background:radial-gradient(circle at 0 0, #22c55e, #2563eb);
+                    font-size:20px;
+                ">
+                    📦
+                </span>
+                <div>
+                    <h1 style="margin:0; font-size:1.6rem;">G-Packer</h1>
+                    <p class="subtitle" style="margin:0; font-size:0.9rem; color:#9ca3af;">
+                        Console de backups inteligentes para o seu Google Drive.
+                    </p>
+                </div>
+            </div>
+
+            <p class="subtitle" style="margin-top:8px; font-size:0.95rem;">
+                Conecte-se à sua conta Google para:
+            </p>
+
+            <ul style="margin:0 0 4px 0; padding-left:18px; font-size:0.9rem; color:#d1d5db;">
+                <li>Criar backups compactados das suas pastas (ZIP / TAR.GZ);</li>
+                <li>Manter histórico de tarefas e agendamentos automáticos;</li>
+                <li>Explorar e restaurar arquivos diretamente do servidor.</li>
+            </ul>
+        </div>
 
         {% with messages = get_flashed_messages() %}
         {% if messages %}
-            <div class="alert">
+            <div class="alert" style="margin-top:12px; width:100%;">
                 {% for msg in messages %}
                 <p>{{ msg }}</p>
                 {% endfor %}
@@ -26,11 +54,16 @@
         {% endif %}
         {% endwith %}
 
-        <div class="form-footer center">
+        <div class="form-footer center" style="margin-top:18px;">
             <a href="{{ url_for('auth.login') }}" class="btn-primary">
-                🔐 Conectar com Google
+                🔒 Conectar com Google
             </a>
         </div>
+
+        <p style="margin-top:10px; font-size:0.8rem; color:#6b7280; text-align:center; width:100%;">
+            Seu token é armazenado com segurança no servidor e pode ser revogado a qualquer momento
+            pela página de segurança da sua conta Google.
+        </p>
     </div>
 </div>
 </body>

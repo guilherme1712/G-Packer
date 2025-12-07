@@ -5,27 +5,29 @@
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+html,
+body {
+    height: 100%;
+}
+
 body {
     margin: 0;
     min-height: 100vh;
 }
 
 .bg-gradient {
-    /* Fundo ligeiramente mais escuro para aumentar contraste com o texto branco */
     background: radial-gradient(circle at top, #4338ca 0, #020617 70%);
     display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding: 32px 0;
+    align-items: stretch;      /* ocupa toda a altura */
+    justify-content: center;   /* mantém conteúdo centralizado, mas largura 100% */
 }
 
-/* layout principal */
+/* layout principal da tela de pastas / páginas internas */
 .page {
     width: 100%;
-    max-width: 1320px;
+    max-width: none;           /* REMOVE limite fixo para usar toda a largura */
     padding: 24px;
     display: grid;
-    /* AGORA 3 COLUNAS: ESQUERDA (FAVORITOS), CENTRO (ÁRVORE), DIREITA (DETALHES) */
     grid-template-columns: 280px minmax(0, 1fr) 320px;
     gap: 20px;
     align-items: flex-start;
@@ -35,7 +37,6 @@ body {
 /* card genérico */
 .card {
     background: rgba(15, 23, 42, 0.95);
-    /* Texto base agora é quase branco puro para leitura fácil */
     color: #f1f5f9; 
     border-radius: 24px;
     padding: 24px 24px 28px;
@@ -43,12 +44,8 @@ body {
         0 20px 40px rgba(0, 0, 0, 0.6),
         0 0 0 1px rgba(148, 163, 184, 0.25);
     backdrop-filter: blur(16px);
-    /* Removido overflow-y global do card para evitar scroll duplo desnecessário */
 }
 
-/* CORREÇÃO: Removido height: 100% para que o cartão 
-   encolha quando a árvore estiver fechada.
-*/
 .main-card {
     min-height: 200px;
     display: flex;
@@ -65,15 +62,14 @@ body {
     margin-top: 0;
     margin-bottom: 8px;
     font-size: 1.6rem;
-    color: #ffffff; /* Título Branco Puro */
-    text-shadow: 0 2px 4px rgba(0,0,0,0.5); /* Sombra para destaque */
+    color: #ffffff;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
 }
 
 .subtitle {
     margin-top: 0;
     margin-bottom: 16px;
     font-size: 0.95rem;
-    /* Clareado de cinza escuro para cinza claro */
     color: #cbd5e1; 
     font-weight: 500;
 }
@@ -98,7 +94,7 @@ body {
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
-    font-size: 0.86rem; /* Fonte um pouco maior */
+    font-size: 0.86rem;
     padding: 8px 12px;
     border-radius: 999px;
     background: rgba(15, 23, 42, 0.95);
@@ -196,6 +192,7 @@ body {
     font-weight: 500;
 }
 
+/* coluna de favoritos / modelos (lado esquerdo) */
 .side-menu {
     display: flex;
     flex-direction: column;
@@ -206,7 +203,7 @@ body {
     min-width: 0;
 }
 
-/* NOVO: COLUNA DA DIREITA (DETALHES / ATIVIDADE) */
+/* COLUNA DA DIREITA (DETALHES / ATIVIDADE) */
 .details-column {
     min-width: 0;
 }
@@ -654,7 +651,6 @@ small, .form-hint {
     border: 1px solid rgba(255,255,255,0.05);
     display: flex;
     align-items: center;
-    /* CORREÇÃO: Permitir quebra de linha para não forçar barra horizontal */
     flex-wrap: wrap; 
     gap: 4px;
 }
@@ -663,13 +659,11 @@ small, .form-hint {
     color: #93c5fd; 
     font-weight: 600; 
     letter-spacing: 0.01em; 
-    /* Adicional: garantir quebras em palavras muito longas */
     word-break: break-all; 
 }
 
-/* ÁRVORE DE ARQUIVOS - CRÍTICO PARA LEITURA */
+/* ÁRVORE DE ARQUIVOS */
 .tree-wrapper { 
-    /* CORREÇÃO: Altura relativa à viewport e overflow automático */
     max-height: 70vh; 
     overflow-y: auto; 
     padding-right: 6px; 
@@ -691,14 +685,12 @@ small, .form-hint {
     cursor: pointer;
 }
 
-/* Linha guia para subpastas */
 .tree-children { 
     margin-left: 32px; 
     padding-left: 10px; 
     border-left: 2px solid rgba(99, 102, 241, 0.5);
 }
 
-/* Hover na árvore */
 .tree-row:hover { background: rgba(255, 255, 255, 0.1); }
 
 .tree-toggle { 
@@ -716,7 +708,6 @@ small, .form-hint {
 .select-checkbox { accent-color: #6366f1; width: 16px; height: 16px; cursor: pointer; }
 .tree-folder-icon { font-size: 1.1rem; }
 
-/* Nome do Arquivo/Pasta */
 .tree-name { 
     font-size: 0.95rem; 
     color: #f8fafc;
@@ -734,10 +725,498 @@ small, .form-hint {
     box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.5); 
 }
 
-@media (max-width: 900px) {
-    .page { grid-template-columns: 1fr; }
-    .side-menu { order: 2; }
-    .main-column { order: 1; }
-    .details-column { order: 3; margin-top: 16px; }
-    .modal-grid { grid-template-columns: 1fr; }
+/* ===========================
+   LAYOUT: APP SHELL + SIDEBAR
+   =========================== */
+
+.app-shell {
+    width: 100%;
+    max-width: none;         /* sem limite centralizado */
+    margin: 0;
+    padding: 24px 32px;      /* margem confortável nas bordas */
+    display: flex;
+    gap: 24px;
+    box-sizing: border-box;
+    height: 100vh;           /* ocupa a tela inteira */
+}
+
+/* MENU LATERAL MAIS LARGO */
+.app-sidebar {
+    width: 96px;             /* AUMENTADO (era ~72px) */
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(15,23,42,0.95), rgba(15,23,42,0.8));
+    border: 1px solid rgba(148,163,184,0.2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 0;
+    box-shadow: 0 20px 40px rgba(15,23,42,0.7);
+}
+
+.sidebar-logo {
+    width: 48px;
+    height: 48px;
+    border-radius: 999px;
+    background: radial-gradient(circle at 0 0, #22c55e, #0ea5e9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #0f172a;
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 16px;
+}
+
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.sidebar-link {
+    width: 48px;
+    height: 48px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    color: #9ca3af;
+    border: 1px solid transparent;
+    font-size: 24px;
+    cursor: pointer;
+    transition: all 0.18s ease-out;
+}
+
+.sidebar-link:hover {
+    background: rgba(148,163,184,0.15);
+    color: #e5e7eb;
+    border-color: rgba(148,163,184,0.4);
+}
+
+.sidebar-link-active {
+    background: linear-gradient(135deg, #2563eb, #22c55e);
+    color: #0f172a;
+    border-color: rgba(255,255,255,0.3);
+}
+
+/* Conteúdo principal ao lado do menu */
+.app-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow: hidden;      /* conteúdo rola internamente, não vaza para o body */
+}
+
+/* ===========================
+   TOPBAR / BREADCRUMB / USER
+   =========================== */
+
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 20px;
+    border-radius: 20px;
+    background: rgba(15,23,42,0.9);
+    border: 1px solid rgba(148,163,184,0.2);
+    box-shadow: 0 18px 40px rgba(15,23,42,0.8);
+}
+
+.topbar-left {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.breadcrumb {
+    font-size: 12px;
+    color: #9ca3af;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.breadcrumb-item {
+    opacity: 0.8;
+}
+
+.breadcrumb-current {
+    color: #e5e7eb;
+    font-weight: 500;
+}
+
+.breadcrumb-separator {
+    opacity: 0.5;
+}
+
+.topbar-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #f9fafb;
+}
+
+.topbar-subtitle {
+    font-size: 13px;
+    color: #9ca3af;
+}
+
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.user-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: right;
+}
+
+.user-label {
+    font-size: 11px;
+    color: #9ca3af;
+}
+
+.user-email {
+    font-size: 13px;
+    color: #e5e7eb;
+    font-weight: 500;
+}
+
+.user-last {
+    font-size: 11px;
+    color: #6b7280;
+}
+
+.user-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    background: radial-gradient(circle at 0 0, #0ea5e9, #6366f1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #0f172a;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+/* ===========================
+   DASHBOARD GRID / CARDS
+   =========================== */
+
+.dashboard-main {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    flex: 1;
+    min-height: 0;
+}
+
+.dashboard-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.dashboard-row-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    flex: 0 0 auto;
+}
+
+.dashboard-row:not(.dashboard-row-metrics) {
+    flex: 1;
+    min-height: 0;
+}
+
+.dash-card {
+    padding: 16px 18px;
+}
+
+.dash-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.dash-card-label {
+    font-size: 13px;
+    color: #9ca3af;
+}
+
+.dash-card-icon {
+    font-size: 18px;
+}
+
+/* Métricas principais */
+
+.dash-metric-main {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.dash-metric-value {
+    font-size: 26px;
+    font-weight: 700;
+    color: #f9fafb;
+}
+
+.dash-metric-suffix {
+    font-size: 13px;
+    color: #9ca3af;
+}
+
+.dash-metric-extra {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 11px;
+}
+
+.dash-metric-extra.small {
+    font-size: 10px;
+}
+
+/* Pills reutilizáveis */
+
+.pill {
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.pill-soft {
+    background: rgba(34,197,94,0.15);
+    color: #bbf7d0;
+}
+
+.pill-outline {
+    background: transparent;
+    border: 1px solid rgba(148,163,184,0.5);
+    color: #e5e7eb;
+}
+
+/* Barrinha de sucesso x erro */
+
+.dash-chart-bar {
+    margin-top: 4px;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(15,23,42,1);
+    overflow: hidden;
+    display: flex;
+}
+
+.dash-chart-bar-success {
+    background: linear-gradient(90deg, #22c55e, #4ade80);
+}
+
+.dash-chart-bar-error {
+    background: linear-gradient(90deg, #f97316, #ef4444);
+}
+
+/* Tabelas leves do dashboard */
+
+.dash-section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.dash-section-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #e5e7eb;
+}
+
+.dash-section-subtitle {
+    font-size: 12px;
+    color: #9ca3af;
+}
+
+.dash-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.dash-table th,
+.dash-table td {
+    padding: 8px 6px;
+    border-bottom: 1px solid rgba(148,163,184,0.15);
+    text-align: left;
+}
+
+.dash-table th {
+    font-weight: 600;
+    color: #9ca3af;
+    background: rgba(15,23,42,0.7);
+}
+
+.dash-empty {
+    font-size: 13px;
+    color: #6b7280;
+}
+
+/* Links "fantasmas" */
+
+.link-ghost {
+    font-size: 12px;
+    color: #93c5fd;
+    text-decoration: none;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(37,99,235,0.4);
+    background: rgba(15,23,42,0.9);
+    transition: all 0.15s ease-out;
+}
+
+.link-ghost:hover {
+    background: rgba(37,99,235,0.2);
+}
+
+/* Mini gráfico horizontal */
+
+.dash-chart-legend {
+    display: flex;
+    justify-content: flex-start;
+    gap: 16px;
+    font-size: 12px;
+    color: #9ca3af;
+    margin-bottom: 8px;
+}
+
+.dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    display: inline-block;
+    margin-right: 4px;
+}
+
+.dot-success {
+    background: #22c55e;
+}
+
+.dot-error {
+    background: #ef4444;
+}
+
+.dash-chart-horizontal {
+    display: flex;
+    height: 14px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(15,23,42,1);
+    margin-bottom: 8px;
+}
+
+.dash-chart-horizontal-bar {
+    height: 100%;
+}
+
+.dash-chart-horizontal-success {
+    background: linear-gradient(90deg, #22c55e, #4ade80);
+}
+
+.dash-chart-horizontal-error {
+    background: linear-gradient(90deg, #f97316, #ef4444);
+}
+
+.dash-chart-footer {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #9ca3af;
+}
+
+/* Scroll interno nos cards de lista */
+
+.dash-card-list {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.dash-card-body {
+    margin-top: 6px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.dash-card-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.dash-card-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.dash-card-body::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.6);
+    border-radius: 999px;
+}
+
+/* Landing / tela de login: centralizar card */
+.page.page-auth {
+    max-width: 100%;
+    width: 100%;
+    padding: 32px 24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+@media (max-width: 1100px) {
+    .app-shell {
+        flex-direction: column;
+        height: auto;
+    }
+
+    .app-sidebar {
+        flex-direction: row;
+        width: 100%;
+        justify-content: space-between;
+        padding-inline: 16px;
+    }
+
+    .sidebar-nav {
+        flex-direction: row;
+    }
+
+    .dashboard-row {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-row-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .page {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .dashboard-row-metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .page.page-auth {
+        align-items: flex-start;
+        padding-top: 48px;
+    }
 }

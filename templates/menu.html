@@ -1,0 +1,38 @@
+{# templates/menu.html #}
+<aside class="app-sidebar">
+    <div class="sidebar-logo" title="G-Packer">
+        📦
+    </div>
+
+    <nav class="sidebar-nav">
+        <a href="{{ url_for('admin.dashboard') }}"
+           class="sidebar-link {% if active_page == 'dashboard' %}sidebar-link-active{% endif %}"
+           title="Dashboard">
+            🏠
+        </a>
+
+        <a href="{{ url_for('drive.folders') }}"
+           class="sidebar-link {% if active_page == 'drive' %}sidebar-link-active{% endif %}"
+           title="Drive / Pastas">
+            📂
+        </a>
+
+        <a href="{{ url_for('admin.list_backups') }}"
+           class="sidebar-link {% if active_page == 'backups' %}sidebar-link-active{% endif %}"
+           title="Backups salvos">
+            🗄️
+        </a>
+
+        <a href="{{ url_for('admin.view_db') }}"
+           class="sidebar-link {% if active_page == 'admin_db' %}sidebar-link-active{% endif %}"
+           title="Admin / Logs">
+            📊
+        </a>
+
+        <a href="{{ url_for('scheduler.index') }}"
+           class="sidebar-link {% if active_page == 'scheduler' %}sidebar-link-active{% endif %}"
+           title="Agendador">
+            ⏱️
+        </a>
+    </nav>
+</aside>

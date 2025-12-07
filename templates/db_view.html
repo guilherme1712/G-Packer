@@ -1,307 +1,320 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
+{# templates/db_view.html #}
+{% extends "layout.html" %}
 
-<head>
-    <meta charset="UTF-8">
-    <title>Visualizador do Banco de Dados</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <style>
-        .db-container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 20px;
-            color: #e5e7eb;
-        }
+{% block title %}Visualizador do Banco de Dados · G-Packer{% endblock %}
 
-        .db-section {
-            background: rgba(15, 23, 42, 0.95);
-            border-radius: 16px;
-            padding: 20px;
-            margin-bottom: 24px;
-            border: 1px solid rgba(148, 163, 184, 0.2);
-            overflow-x: auto;
-        }
+{% block extra_head %}
+<style>
+    .db-container {
+        padding: 20px;
+        color: #e5e7eb;
+        height: 100%;
+        box-sizing: border-box;
+        overflow-y: auto;
+    }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.85rem;
-        }
+    .db-section {
+        background: rgba(15, 23, 42, 0.95);
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 24px;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        overflow-x: auto;
+    }
 
-        th,
-        td {
-            text-align: left;
-            padding: 10px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
+    .db-section table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+    }
 
-        th {
-            background: rgba(0, 0, 0, 0.3);
-            font-weight: 600;
-            color: #9ca3af;
-        }
+    .db-section th,
+    .db-section td {
+        text-align: left;
+        padding: 10px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
 
-        tr:hover {
-            background: rgba(255, 255, 255, 0.05);
-        }
+    .db-section th {
+        background: rgba(0, 0, 0, 0.3);
+        font-weight: 600;
+        color: #9ca3af;
+    }
 
-        .status-badge {
-            padding: 2px 8px;
-            border-radius: 99px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            display: inline-block;
-            margin-right: 4px;
-        }
+    .db-section tr:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
 
-        .status-concluido {
-            background: #059669;
-            color: white;
-        }
+    .status-badge {
+        padding: 2px 8px;
+        border-radius: 99px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: inline-block;
+        margin-right: 4px;
+    }
 
-        .status-erro {
-            background: #dc2626;
-            color: white;
-        }
+    .status-concluido {
+        background: #059669;
+        color: white;
+    }
 
-        .status-cancelado {
-            background: #d97706;
-            color: white;
-        }
+    .status-erro {
+        background: #dc2626;
+        color: white;
+    }
 
-        .status-paused {
-            background: #f59e0b;
-            color: black;
-            border: 1px solid #d97706;
-        }
+    .status-cancelado {
+        background: #d97706;
+        color: white;
+    }
 
-        .status-iniciando,
-        .status-baixando,
-        .status-mapeando,
-        .status-compactando {
-            background: #2563eb;
-            color: white;
-        }
+    .status-paused {
+        background: #f59e0b;
+        color: black;
+        border: 1px solid #d97706;
+    }
 
-        pre {
-            background: rgba(0, 0, 0, 0.5);
-            padding: 5px;
-            border-radius: 4px;
-            max-height: 100px;
-            overflow-y: auto;
-            margin: 0;
-            font-size: 0.75rem;
-            white-space: pre-wrap;
-        }
-    </style>
-</head>
+    .status-iniciando,
+    .status-baixando,
+    .status-mapeando,
+    .status-compactando {
+        background: #2563eb;
+        color: white;
+    }
 
-<body class="bg-gradient">
-    <div class="db-container">
-        <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-            <h1>🗄️ Dados do SQLite (gpacker.db)</h1>
-            <a href="{{ url_for('drive.folders') }}" class="btn-secondary">← Voltar para Pastas</a>
-        </header>
+    pre {
+        background: rgba(0, 0, 0, 0.5);
+        padding: 5px;
+        border-radius: 4px;
+        max-height: 100px;
+        overflow-y: auto;
+        margin: 0;
+        font-size: 0.75rem;
+        white-space: pre-wrap;
+    }
 
-        <!-- SEÇÃO 0: STATUS GOOGLE AUTH -->
-        <div class="db-section">
-            <h2 style="margin-top:0;">🔐 Status da Autenticação Google</h2>
+    .db-header {
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        margin-bottom:20px;
+    }
+</style>
+{% endblock %}
 
-            {% if google_auth %}
-            <p style="color:#9ca3af; font-size:0.9rem;">
-                Informações do último login Google salvo no banco de dados.
-            </p>
+{% block content %}
 
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>E-mail</th>
-                        <th>Status</th>
-                        <th>Primeiro Login</th>
-                        <th>Última Atualização</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>{{ google_auth.id }}</td>
-                        <td>{{ google_auth.email or '-' }}</td>
-                        <td>
-                            {% if google_auth.active %}
-                            <span class="status-badge status-concluido">ATIVO</span>
-                            {% else %}
-                            <span class="status-badge status-cancelado">INATIVO</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if google_auth.created_at %}
-                            {{ google_auth.created_at.strftime('%d/%m/%Y %H:%M:%S') }}
-                            {% else %}
-                            -
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if google_auth.updated_at %}
-                            {{ google_auth.updated_at.strftime('%d/%m/%Y %H:%M:%S') }}
-                            {% else %}
-                            -
-                            {% endif %}
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <p style="color:#6b7280; font-size:0.8rem; margin-top:6px;">
-                A “Última atualização” corresponde ao último momento em que o token foi salvo/renovado no banco.
-            </p>
-
-            <div style="margin-top:12px;">
-                <a href="{{ url_for('auth.login') }}" class="btn-primary">
-                    Trocar conta Google
-                </a>
+<div class="db-container">
+    <header class="db-header">
+        <div>
+            <div class="breadcrumb">
+                <span class="breadcrumb-item">Admin</span>
+                <span class="breadcrumb-separator">/</span>
+                <span class="breadcrumb-current">Banco de dados</span>
             </div>
+            <h1>🗄️ Dados do SQLite (gpacker.db)</h1>
+        </div>
+    </header>
 
-            {% else %}
-            <p style="color:#9ca3af; font-size:0.9rem;">
-                Nenhum login Google foi salvo ainda.
-            </p>
+    <!-- SEÇÃO 0: STATUS GOOGLE AUTH -->
+    <div class="db-section">
+        <h2 style="margin-top:0;">🔐 Status da Autenticação Google</h2>
+
+        {% if google_auth %}
+        <p style="color:#9ca3af; font-size:0.9rem;">
+            Informações do último login Google salvo no banco de dados.
+        </p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>E-mail</th>
+                    <th>Status</th>
+                    <th>Primeiro Login</th>
+                    <th>Última Atualização</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>{{ google_auth.id }}</td>
+                    <td>{{ google_auth.email or '-' }}</td>
+                    <td>
+                        {% if google_auth.active %}
+                        <span class="status-badge status-concluido">ATIVO</span>
+                        {% else %}
+                        <span class="status-badge status-cancelado">INATIVO</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if google_auth.created_at %}
+                        {{ google_auth.created_at.strftime('%d/%m/%Y %H:%M:%S') }}
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if google_auth.updated_at %}
+                        {{ google_auth.updated_at.strftime('%d/%m/%Y %H:%M:%S') }}
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <p style="color:#6b7280; font-size:0.8rem; margin-top:6px;">
+            A “Última atualização” corresponde ao último momento em que o token foi salvo/renovado no banco.
+        </p>
+
+        <div style="margin-top:12px;">
             <a href="{{ url_for('auth.login') }}" class="btn-primary">
-                Conectar com Google
+                Trocar conta Google
             </a>
-            {% endif %}
         </div>
 
-        <!-- SEÇÃO 1: TASKS / LOGS -->
-        <div class="db-section">
-            <h2 style="margin-top:0;">📜 Histórico de Tarefas (Tasks)</h2>
-            <p style="color:#9ca3af; font-size:0.9rem;">Exibindo as últimas 50 tarefas.</p>
+        {% else %}
+        <p style="color:#9ca3af; font-size:0.9rem;">
+            Nenhum login Google foi salvo ainda.
+        </p>
+        <a href="{{ url_for('auth.login') }}" class="btn-primary">
+            Conectar com Google
+        </a>
+        {% endif %}
+    </div>
 
-            {% if tasks %}
-            <table id="tasks-table">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Estado</th>
-                        <th>Msg</th>
-                        <th>Progresso</th>
-                        <th>Arquivos (F/T)</th>
-                        <th>Erros</th>
-                        <th>Data Atualização</th>
-                        <th>Logs Detalhados</th>
-                    </tr>
-                </thead>
-                <tbody id="tasks-tbody">
-                    {% for t in tasks %}
-                    <tr>
-                        <td style="font-family:monospace; font-size:0.8em;">{{ t.id }}</td>
-                        <td>
-                            {% if t.paused %}
-                            <span class="status-badge status-paused">PAUSADO</span>
-                            {% endif %}
-                            {% if t.canceled %}
-                            <span class="status-badge status-cancelado">CANCELADO</span>
-                            {% endif %}
-                            <span class="status-badge status-{{ t.phase }}">
-                                {{ t.phase }}
-                            </span>
-                        </td>
-                        <td>{{ t.message }}</td>
-                        <td>
-                            {% if t.files_total > 0 %}
-                            {{ ((t.files_downloaded / t.files_total) * 100) | int }}%
-                            {% else %}
-                            -
-                            {% endif %}
-                        </td>
-                        <td>{{ t.files_downloaded }} / {{ t.files_total }}</td>
-                        <td style="{{ 'color:#ef4444; font-weight:bold;' if t.errors_count > 0 else '' }}">
-                            {{ t.errors_count }}
-                        </td>
-                        <td>{{ t.updated_at.strftime('%d/%m %H:%M:%S') if t.updated_at else '-' }}</td>
-                        <td style="width:350px;">
-                            {% if t.history %}
-                            <pre>{{ t.history | join('\n') }}</pre>
-                            {% else %}
-                            <span style="color:#666">-</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <p>Nenhuma tarefa encontrada.</p>
-            {% endif %}
-        </div>
+    <!-- SEÇÃO 1: TASKS / LOGS -->
+    <div class="db-section">
+        <h2 style="margin-top:0;">📜 Histórico de Tarefas (Tasks)</h2>
+        <p style="color:#9ca3af; font-size:0.9rem;">Exibindo as últimas 50 tarefas.</p>
 
-        <!-- SEÇÃO 2: PERFIS -->
-        <div class="db-section">
-            <h2 style="margin-top:0;">⚙️ Perfis de Backup Salvos</h2>
-            {% if profiles %}
-            <table id="profiles-table">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Nome</th>
-                        <th>Padrão ZIP</th>
-                        <th>Execução</th>
-                        <th>Filtros</th>
-                        <th>Modo</th>
-                    </tr>
-                </thead>
-                <tbody id="profiles-tbody">
-                    {% for p in profiles %}
-                    <tr>
-                        <td>{{ p.id }}</td>
-                        <td><strong>{{ p.name }}</strong></td>
-                        <td>{{ p.zip_name or p.zip_pattern }}</td>
-                        <td>
-                            <span class="status-badge" style="background:#4b5563;">{{ p.execution_mode }}</span>
-                        </td>
-                        <td>{{ p.groups }}</td>
-                        <td>{{ p.output_mode }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <p>Nenhum perfil salvo.</p>
-            {% endif %}
-        </div>
+        {% if tasks %}
+        <table id="tasks-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Estado</th>
+                    <th>Msg</th>
+                    <th>Progresso</th>
+                    <th>Arquivos (F/T)</th>
+                    <th>Erros</th>
+                    <th>Data Atualização</th>
+                    <th>Logs Detalhados</th>
+                </tr>
+            </thead>
+            <tbody id="tasks-tbody">
+                {% for t in tasks %}
+                <tr>
+                    <td style="font-family:monospace; font-size:0.8em;">{{ t.id }}</td>
+                    <td>
+                        {% if t.paused %}
+                        <span class="status-badge status-paused">PAUSADO</span>
+                        {% endif %}
+                        {% if t.canceled %}
+                        <span class="status-badge status-cancelado">CANCELADO</span>
+                        {% endif %}
+                        <span class="status-badge status-{{ t.phase }}">
+                            {{ t.phase }}
+                        </span>
+                    </td>
+                    <td>{{ t.message }}</td>
+                    <td>
+                        {% if t.files_total > 0 %}
+                        {{ ((t.files_downloaded / t.files_total) * 100) | int }}%
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>{{ t.files_downloaded }} / {{ t.files_total }}</td>
+                    <td style="{{ 'color:#ef4444; font-weight:bold;' if t.errors_count > 0 else '' }}">
+                        {{ t.errors_count }}
+                    </td>
+                    <td>{{ t.updated_at.strftime('%d/%m %H:%M:%S') if t.updated_at else '-' }}</td>
+                    <td style="width:350px;">
+                        {% if t.history %}
+                        <pre>{{ t.history | join('\n') }}</pre>
+                        {% else %}
+                        <span style="color:#666">-</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>Nenhuma tarefa encontrada.</p>
+        {% endif %}
+    </div>
 
-        <!-- SEÇÃO 3: AGENDAMENTOS -->
-        <div class="db-section">
-            <h2 style="margin-top:0;">⏱️ Agendamentos (Scheduler)</h2>
-            <p style="color:#9ca3af; font-size:0.9rem;">
-                Lista de todos os agendamentos, mostrando os pendentes (ainda vão rodar)
-                e os que já foram executados pelo menos uma vez.
-            </p>
+    <!-- SEÇÃO 2: PERFIS -->
+    <div class="db-section">
+        <h2 style="margin-top:0;">⚙️ Perfis de Backup Salvos</h2>
+        {% if profiles %}
+        <table id="profiles-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nome</th>
+                    <th>Padrão ZIP</th>
+                    <th>Execução</th>
+                    <th>Filtros</th>
+                    <th>Modo</th>
+                </tr>
+            </thead>
+            <tbody id="profiles-tbody">
+                {% for p in profiles %}
+                <tr>
+                    <td>{{ p.id }}</td>
+                    <td><strong>{{ p.name }}</strong></td>
+                    <td>{{ p.zip_name or p.zip_pattern }}</td>
+                    <td>
+                        <span class="status-badge" style="background:#4b5563;">{{ p.execution_mode }}</span>
+                    </td>
+                    <td>{{ p.groups }}</td>
+                    <td>{{ p.output_mode }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>Nenhum perfil salvo.</p>
+        {% endif %}
+    </div>
 
-            {% if sched_tasks %}
-            <table id="sched-table">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Nome</th>
-                        <th>Situação</th>
-                        <th>Frequência</th>
-                        <th>Horário</th>
-                        <th>Próxima Execução</th>
-                        <th>Última Execução</th>
-                        <th>Status da Última Exec.</th>
-                        <th>Itens</th>
-                        <th>Ações</th>
-                    </tr>
-                </thead>
-                <tbody id="sched-tbody">
-                    {% for s in sched_tasks %}
-                    <tr>
-                        <td style="font-family:monospace; font-size:0.8em;">{{ s.id }}</td>
-                        <td><strong>{{ s.name }}</strong></td>
+    <!-- SEÇÃO 3: AGENDAMENTOS -->
+    <div class="db-section">
+        <h2 style="margin-top:0;">⏱️ Agendamentos (Scheduler)</h2>
+        <p style="color:#9ca3af; font-size:0.9rem;">
+            Lista de todos os agendamentos, mostrando os pendentes (ainda vão rodar)
+            e os que já foram executados pelo menos uma vez.
+        </p>
 
-                        <!-- Situação: pendente / já executado / desativado -->
-                        <td data-col="situacao">
-                            {% if s.active %}
+        {% if sched_tasks %}
+        <table id="sched-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nome</th>
+                    <th>Situação</th>
+                    <th>Frequência</th>
+                    <th>Horário</th>
+                    <th>Próxima Execução</th>
+                    <th>Última Execução</th>
+                    <th>Status da Última Exec.</th>
+                    <th>Itens</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody id="sched-tbody">
+                {% for s in sched_tasks %}
+                <tr>
+                    <td style="font-family:monospace; font-size:0.8em;">{{ s.id }}</td>
+                    <td><strong>{{ s.name }}</strong></td>
+
+                    <td data-col="situacao">
+                        {% if s.active %}
                             {% if s.last_run_at %}
                             <span class="status-badge status-concluido">
                                 ATIVO · JÁ EXECUTOU
@@ -311,260 +324,249 @@
                                 PENDENTE
                             </span>
                             {% endif %}
-                            {% else %}
+                        {% else %}
                             <span class="status-badge status-cancelado">
                                 DESATIVADO
                             </span>
-                            {% endif %}
-                        </td>
+                        {% endif %}
+                    </td>
 
-                        <td>{{ s.frequency|upper }}</td>
-                        <td>{{ s.run_time }}</td>
-                        <td>
-                            {% if s.next_run_at %}
-                            {{ s.next_run_at.strftime('%d/%m/%Y %H:%M') }}
+                    <td>{{ s.frequency|upper }}</td>
+                    <td>{{ s.run_time }}</td>
+                    <td>
+                        {% if s.next_run_at %}
+                        {{ s.next_run_at.strftime('%d/%m/%Y %H:%M') }}
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if s.last_run_at %}
+                        {{ s.last_run_at.strftime('%d/%m/%Y %H:%M') }}
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ s.last_status or '-' }}
+
+                        <details class="sched-runs-details">
+                            <summary style="cursor:pointer; font-size: 11px; color:#1d4ed8; margin-top:4px;">
+                                Histórico
+                            </summary>
+
+                            {% set runs = runs_by_schedule.get(s.id, []) %}
+                            {% if runs %}
+                            <table class="mini-table" style="width:100%; margin-top:6px; font-size:11px;">
+                                <thead>
+                                    <tr>
+                                        <th>Início</th>
+                                        <th>Fim</th>
+                                        <th>Status</th>
+                                        <th>Tam. (MB)</th>
+                                        <th>Arquivo</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for r in runs %}
+                                    <tr>
+                                        <td>{{ r.started_at.strftime("%d/%m/%Y %H:%M") if r.started_at else "-" }}</td>
+                                        <td>{{ r.finished_at.strftime("%d/%m/%Y %H:%M") if r.finished_at else "-" }}</td>
+                                        <td>{{ r.status or "-" }}</td>
+                                        <td>
+                                            {% if r.size_mb is not none %}
+                                            {{ "%.2f"|format(r.size_mb) }}
+                                            {% else %}
+                                            -
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ r.filename or "-" }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
                             {% else %}
-                            -
+                            <div style="font-size:11px; color:#6b7280; margin-top:4px;">
+                                Nenhuma execução registrada ainda.
+                            </div>
                             {% endif %}
-                        </td>
-                        <td>
-                            {% if s.last_run_at %}
-                            {{ s.last_run_at.strftime('%d/%m/%Y %H:%M') }}
-                            {% else %}
-                            -
-                            {% endif %}
-                        </td>
-                        <td>
-                            {{ s.last_status or '-' }}
+                        </details>
+                    </td>
 
-                            <details class="sched-runs-details">
-                                <summary style="cursor:pointer; font-size: 11px; color:#1d4ed8; margin-top:4px;">
-                                    Histórico
-                                </summary>
+                    <td>
+                        {{ s.items_count }}
+                    </td>
 
-                                {% set runs = runs_by_schedule.get(s.id, []) %}
-                                {% if runs %}
-                                <table class="mini-table" style="width:100%; margin-top:6px; font-size:11px;">
-                                    <thead>
-                                        <tr>
-                                            <th>Início</th>
-                                            <th>Fim</th>
-                                            <th>Status</th>
-                                            <th>Tam. (MB)</th>
-                                            <th>Arquivo</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for r in runs %}
-                                        <tr>
-                                            <td>{{ r.started_at.strftime("%d/%m/%Y %H:%M") if r.started_at else "-" }}
-                                            </td>
-                                            <td>{{ r.finished_at.strftime("%d/%m/%Y %H:%M") if r.finished_at else "-" }}
-                                            </td>
-                                            <td>{{ r.status or "-" }}</td>
-                                            <td>
-                                                {% if r.size_mb is not none %}
-                                                {{ "%.2f"|format(r.size_mb) }}
-                                                {% else %}
-                                                -
-                                                {% endif %}
-                                            </td>
-                                            <td>{{ r.filename or "-" }}</td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                                {% else %}
-                                <div style="font-size:11px; color:#6b7280; margin-top:4px;">
-                                    Nenhuma execução registrada ainda.
-                                </div>
-                                {% endif %}
-                            </details>
-                        </td>
+                    <td>
+                        <button type="button" class="btn-ghost btn-xs" onclick="toggleSchedule({{ s.id }}, this)">
+                            {% if s.active %}Desativar{% else %}Ativar{% endif %}
+                        </button>
 
-                        <td>
-                            {{ s.items_count }}
-                        </td>
-
-                        <td>
-                            <!-- Alternar ativo/desativado -->
-                            <button type="button" class="btn-ghost btn-xs" onclick="toggleSchedule({{ s.id }}, this)">
-                                {% if s.active %}Desativar{% else %}Ativar{% endif %}
-                            </button>
-
-                            <!-- Excluir agendamento -->
-                            <button type="button" class="btn-danger btn-xs" onclick="deleteSchedule({{ s.id }}, this)">
-                                Excluir
-                            </button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <p>Nenhum agendamento encontrado.</p>
-            {% endif %}
-        </div>
+                        <button type="button" class="btn-danger btn-xs" onclick="deleteSchedule({{ s.id }}, this)">
+                            Excluir
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>Nenhum agendamento encontrado.</p>
+        {% endif %}
     </div>
+</div>
 
-    <script>
-        // ===========================
-        // POLLING DAS TASKS (1s)
-        // ===========================
-        function renderTasksTable(tasks) {
-            console.log(tasks)
-            const tbody = document.getElementById('tasks-tbody');
-            if (!tbody) return;
+{% endblock %}
 
-            tbody.innerHTML = '';
+{% block scripts %}
+<script>
+    // ===========================
+    // POLLING DAS TASKS (1s)
+    // ===========================
+    function renderTasksTable(tasks) {
+        console.log(tasks)
+        const tbody = document.getElementById('tasks-tbody');
+        if (!tbody) return;
 
-            tasks.forEach(t => {
-                const tr = document.createElement('tr');
+        tbody.innerHTML = '';
 
-                const pct = t.files_total > 0
-                    ? Math.floor((t.files_downloaded / t.files_total) * 100) + '%'
-                    : '-';
+        tasks.forEach(t => {
+            const tr = document.createElement('tr');
 
-                // monta badges de estado
-                let estadoHtml = '';
-                if (t.paused) {
-                    estadoHtml += '<span class="status-badge status-paused">PAUSADO</span>';
-                }
-                if (t.canceled) {
-                    estadoHtml += '<span class="status-badge status-cancelado">CANCELADO</span>';
-                }
-                estadoHtml += `<span class="status-badge status-${t.phase}">${t.phase}</span>`;
+            const pct = t.files_total > 0
+                ? Math.floor((t.files_downloaded / t.files_total) * 100) + '%'
+                : '-';
 
-                // history
-                let historyHtml = '<span style="color:#666">-</span>';
-                if (Array.isArray(t.history) && t.history.length > 0) {
-                    historyHtml = `<pre>${t.history.join('\n')}</pre>`;
-                } else if (typeof t.history === 'string' && t.history.trim() !== '') {
-                    historyHtml = `<pre>${t.history}</pre>`;
-                }
+            let estadoHtml = '';
+            if (t.paused) {
+                estadoHtml += '<span class="status-badge status-paused">PAUSADO</span>';
+            }
+            if (t.canceled) {
+                estadoHtml += '<span class="status-badge status-cancelado">CANCELADO</span>';
+            }
+            estadoHtml += `<span class="status-badge status-${t.phase}">${t.phase}</span>`;
 
-                const errorsStyle = t.errors_count > 0
-                    ? 'color:#ef4444; font-weight:bold;'
-                    : '';
-
-                tr.innerHTML = `
-                    <td style="font-family:monospace; font-size:0.8em;">${t.id}</td>
-                    <td>${estadoHtml}</td>
-                    <td>${t.message || ''}</td>
-                    <td>${pct}</td>
-                    <td>${t.files_downloaded} / ${t.files_total}</td>
-                    <td style="${errorsStyle}">${t.errors}</td>
-                    <td>${ t.updated_at ? new Date(t.updated_at).toLocaleString('pt-BR') : '-' }</td>
-                    <td style="width:350px;">${historyHtml}</td>
-                `;
-
-                tbody.appendChild(tr);
-            });
-        }
-
-        function pollTasks() {
-            fetch('/admin/api/tasks')
-                .then(r => r.json())
-                .then(data => {
-                    if (!Array.isArray(data)) return;
-                    renderTasksTable(data);
-                })
-                .catch(err => {
-                    console.error('Erro ao buscar tasks:', err);
-                });
-        }
-
-        // inicia polling a cada 1 segundo
-        setInterval(pollTasks, 700);
-        // chama uma vez ao carregar
-        pollTasks();
-
-        // ===========================
-        // AÇÕES EM AGENDAMENTOS
-        // ===========================
-        function toggleSchedule(id, btn) {
-            if (!id) return;
-
-            btn.disabled = true;
-
-            fetch(`/scheduler/toggle/${id}`, {
-                method: 'POST'
-            })
-                .then(r => r.json())
-                .then(data => {
-                    if (!data.ok) {
-                        alert(data.error || 'Erro ao alterar agendamento.');
-                        return;
-                    }
-
-                    const row = btn.closest('tr');
-                    if (!row) return;
-
-                    const situacaoCell = row.querySelector('[data-col="situacao"]');
-                    if (!situacaoCell) return;
-
-                    // Limpa conteúdo atual
-                    situacaoCell.innerHTML = '';
-
-                    if (data.active) {
-                        // Ativou
-                        const span = document.createElement('span');
-                        span.className = 'status-badge status-iniciando';
-                        span.textContent = 'PENDENTE';
-                        situacaoCell.appendChild(span);
-                        btn.textContent = 'Desativar';
-                    } else {
-                        // Desativou
-                        const span = document.createElement('span');
-                        span.className = 'status-badge status-cancelado';
-                        span.textContent = 'DESATIVADO';
-                        situacaoCell.appendChild(span);
-                        btn.textContent = 'Ativar';
-                    }
-                })
-                .catch(err => {
-                    console.error(err);
-                    alert('Erro de comunicação com o servidor.');
-                })
-                .finally(() => {
-                    btn.disabled = false;
-                });
-        }
-
-        function deleteSchedule(id, btn) {
-            if (!id) return;
-
-            if (!confirm('Tem certeza que deseja excluir este agendamento?')) {
-                return;
+            let historyHtml = '<span style="color:#666">-</span>';
+            if (Array.isArray(t.history) && t.history.length > 0) {
+                historyHtml = `<pre>${t.history.join('\n')}</pre>`;
+            } else if (typeof t.history === 'string' && t.history.trim() !== '') {
+                historyHtml = `<pre>${t.history}</pre>`;
             }
 
-            btn.disabled = true;
+            const errorsStyle = t.errors_count > 0
+                ? 'color:#ef4444; font-weight:bold;'
+                : '';
 
-            fetch(`/scheduler/delete/${id}`, {
-                method: 'POST'
+            tr.innerHTML = `
+                <td style="font-family:monospace; font-size:0.8em;">${t.id}</td>
+                <td>${estadoHtml}</td>
+                <td>${t.message || ''}</td>
+                <td>${pct}</td>
+                <td>${t.files_downloaded} / ${t.files_total}</td>
+                <td style="${errorsStyle}">${t.errors}</td>
+                <td>${ t.updated_at ? new Date(t.updated_at).toLocaleString('pt-BR') : '-' }</td>
+                <td style="width:350px;">${historyHtml}</td>
+            `;
+
+            tbody.appendChild(tr);
+        });
+    }
+
+    function pollTasks() {
+        fetch('/admin/api/tasks')
+            .then(r => r.json())
+            .then(data => {
+                if (!Array.isArray(data)) return;
+                renderTasksTable(data);
             })
-                .then(r => r.json())
-                .then(data => {
-                    if (!data.ok) {
-                        alert(data.error || 'Erro ao excluir agendamento.');
-                        return;
-                    }
+            .catch(err => {
+                console.error('Erro ao buscar tasks:', err);
+            });
+    }
 
-                    const row = btn.closest('tr');
-                    if (row) {
-                        row.remove();
-                    }
-                })
-                .catch(err => {
-                    console.error(err);
-                    alert('Erro de comunicação com o servidor.');
-                })
-                .finally(() => {
-                    btn.disabled = false;
-                });
+    setInterval(pollTasks, 700);
+    pollTasks();
+
+    // ===========================
+    // AÇÕES EM AGENDAMENTOS
+    // ===========================
+    function toggleSchedule(id, btn) {
+        if (!id) return;
+
+        btn.disabled = true;
+
+        fetch(`/scheduler/toggle/${id}`, {
+            method: 'POST'
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.ok) {
+                    alert(data.error || 'Erro ao alterar agendamento.');
+                    return;
+                }
+
+                const row = btn.closest('tr');
+                if (!row) return;
+
+                const situacaoCell = row.querySelector('[data-col="situacao"]');
+                if (!situacaoCell) return;
+
+                situacaoCell.innerHTML = '';
+
+                if (data.active) {
+                    const span = document.createElement('span');
+                    span.className = 'status-badge status-iniciando';
+                    span.textContent = 'PENDENTE';
+                    situacaoCell.appendChild(span);
+                    btn.textContent = 'Desativar';
+                } else {
+                    const span = document.createElement('span');
+                    span.className = 'status-badge status-cancelado';
+                    span.textContent = 'DESATIVADO';
+                    situacaoCell.appendChild(span);
+                    btn.textContent = 'Ativar';
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Erro de comunicação com o servidor.');
+            })
+            .finally(() => {
+                btn.disabled = false;
+            });
+    }
+
+    function deleteSchedule(id, btn) {
+        if (!id) return;
+
+        if (!confirm('Tem certeza que deseja excluir este agendamento?')) {
+            return;
         }
-    </script>
 
-</body>
+        btn.disabled = true;
 
-</html>
+        fetch(`/scheduler/delete/${id}`, {
+            method: 'POST'
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.ok) {
+                    alert(data.error || 'Erro ao excluir agendamento.');
+                    return;
+                }
+
+                const row = btn.closest('tr');
+                if (row) {
+                    row.remove();
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Erro de comunicação com o servidor.');
+            })
+            .finally(() => {
+                btn.disabled = false;
+            });
+    }
+</script>
+{% endblock %}

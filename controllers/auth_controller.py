@@ -26,7 +26,7 @@ def index():
     creds = get_credentials()
     if creds:
         # endpoint 'folders' dentro do blueprint 'drive'
-        return redirect(url_for("drive.folders"))
+        return redirect(url_for("admin.dashboard"))
     return render_template("index.html")
 
 
@@ -69,7 +69,7 @@ def oauth2callback():
         # salva na session + em arquivo (para o scheduler)
         save_credentials(creds)
 
-        return redirect(url_for("drive.folders"))
+        return redirect(url_for("admin.dashboard"))
     except Exception as e:
         flash(f"Erro ao concluir autenticação: {e}")
         return redirect(url_for("auth.index"))
