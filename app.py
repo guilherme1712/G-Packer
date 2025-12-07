@@ -1,6 +1,5 @@
 from flask import Flask
 import os
-import pytz  # se quiser usar em outros lugares
 from datetime import datetime
 
 from config import (
@@ -8,6 +7,8 @@ from config import (
     SQLALCHEMY_DATABASE_URI,
     SQLALCHEMY_TRACK_MODIFICATIONS,
     TIMEZONE,
+    BACKUP_RETENTION_MAX_FILES,
+    BACKUP_RETENTION_MAX_DAYS,
 )
 from models import db
 
@@ -35,7 +36,15 @@ def create_app() -> Flask:
     # Configuração do Banco de Dados
     app.config["SQLALCHEMY_DATABASE_URI"] = SQLALCHEMY_DATABASE_URI
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = SQLALCHEMY_TRACK_MODIFICATIONS
+    app.config["SQLALCHEMY_DATABASE_URI"] = (
+        SQLALCHEMY_DATABASE_URI + "?timeout=30&check_same_thread=False"
+    )
     app.config["TIMEZONE"] = TIMEZONE
+
+        # >>> NOVO: Configs globais de retenção de backups
+    app.config["BACKUP_RETENTION_MAX_FILES"] = BACKUP_RETENTION_MAX_FILES
+    app.config["BACKUP_RETENTION_MAX_DAYS"] = BACKUP_RETENTION_MAX_DAYS
+    
 
     # Inicializa o Banco com a App
     db.init_app(app)

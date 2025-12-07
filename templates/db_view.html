@@ -412,6 +412,7 @@
         // POLLING DAS TASKS (1s)
         // ===========================
         function renderTasksTable(tasks) {
+            console.log(tasks)
             const tbody = document.getElementById('tasks-tbody');
             if (!tbody) return;
 
@@ -452,8 +453,8 @@
                     <td>${t.message || ''}</td>
                     <td>${pct}</td>
                     <td>${t.files_downloaded} / ${t.files_total}</td>
-                    <td style="${errorsStyle}">${t.errors_count}</td>
-                    <td>${t.updated_at || '-'}</td>
+                    <td style="${errorsStyle}">${t.errors}</td>
+                    <td>${ t.updated_at ? new Date(t.updated_at).toLocaleString('pt-BR') : '-' }</td>
                     <td style="width:350px;">${historyHtml}</td>
                 `;
 

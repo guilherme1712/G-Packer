@@ -64,3 +64,9 @@ SCOPES = [
 # =========================================================
 # Arquivo local onde os perfis de backup são salvos (JSON) – se você ainda usa
 PROFILES_FILE = os.path.join(BASE_DIR, "backup_profiles.json")
+
+# Quantidade máxima de backups a manter (0 ou None = ilimitado)
+BACKUP_RETENTION_MAX_FILES = 12  # exemplo: 10
+
+# Quantidade máxima de dias a manter (0 ou None = ilimitado)
+BACKUP_RETENTION_MAX_DAYS = 30   # exemplo: 30

@@ -38,5 +38,6 @@ class TaskModel(db.Model):
             "history": self.history or [],
             "canceled": self.canceled,
             "paused": self.paused,
-            "created_at": self.created_at.isoformat() if self.created_at else None
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

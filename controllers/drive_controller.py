@@ -4,7 +4,7 @@ import time
 import json
 import shutil
 from threading import Thread
-from datetime import datetime
+from datetime import datetime  # não precisamos mais de timedelta aqui
 
 from flask import (
     Blueprint,
@@ -20,7 +20,7 @@ from flask import (
 
 from services.auth_service import get_credentials
 from services.drive_filters import build_filters_from_form
-from services.drive_tree_service import calculate_selection_stats # <--- Importe a nova função
+from services.drive_tree_service import calculate_selection_stats
 from services.drive_tree_service import get_children, get_file_metadata, get_ancestors_path
 from services.drive_download_service import download_items_bundle, mirror_items_to_local
 from services.drive_activity_service import fetch_activity_log
@@ -31,13 +31,88 @@ from services.progress_service import (
     sync_task_to_db,
     get_all_active_tasks,
     set_task_pause,
-    set_task_cancel
+    set_task_cancel,
 )
-from models import db, BackupFileModel, FavoriteModel
+
+from models import db, FavoriteModel
+from models.backup_file import BackupFileModel, apply_global_retention  # <<< AQUI
 
 drive_bp = Blueprint("drive", __name__)
 
 BACKUP_FOLDER_NAME = "storage/backups"
+
+
+def _parse_positive_int(value):
+    """
+    Converte um valor (string/int/None) em inteiro positivo.
+    Retorna None se estiver vazio, inválido ou <= 0.
+    """
+    try:
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        v = int(value)
+        return v if v > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _delete_backup_record_and_file(backup: BackupFileModel, storage_root_path: str):
+    """
+    (ATUALMENTE NÃO USADA NA RETENÇÃO)
+    Remove o arquivo físico do disco e apaga o registro em backup_files.
+    Mantida apenas se você quiser usar em outras telas (excluir manual).
+    """
+    try:
+        file_path = backup.path
+        if not file_path:
+            file_path = os.path.join(storage_root_path, backup.filename)
+
+        if file_path and os.path.exists(file_path):
+            os.remove(file_path)
+    except Exception as e:
+        try:
+            current_app.logger.warning(
+                f"Falha ao remover arquivo de backup {backup.filename}: {e}"
+            )
+        except Exception:
+            print(f"Falha ao remover arquivo de backup {backup.filename}: {e}")
+
+    db.session.delete(backup)
+
+
+def _apply_retention_policy(storage_root_path: str | None = None):
+    """
+    Aplica a política de retenção global usando os valores de config:
+
+        BACKUP_RETENTION_MAX_FILES (quantidade)
+        BACKUP_RETENTION_MAX_DAYS  (idade em dias)
+
+    OBS: o parâmetro storage_root_path é mantido só por compatibilidade,
+    a remoção é feita usando o campo .path de cada BackupFileModel.
+    """
+    max_backups = _parse_positive_int(
+        current_app.config.get("BACKUP_RETENTION_MAX_FILES")
+    )
+    max_days = _parse_positive_int(
+        current_app.config.get("BACKUP_RETENTION_MAX_DAYS")
+    )
+
+    # Se nada estiver configurado, não faz nada
+    if not max_backups and not max_days:
+        return
+
+    try:
+        apply_global_retention(max_backups=max_backups, max_days=max_days)
+    except Exception as e:
+        try:
+            current_app.logger.warning(
+                f"Erro ao aplicar política global de retenção de backups: {e}"
+            )
+        except Exception:
+            print(f"Erro ao aplicar política global de retenção de backups: {e}")
+
 
 
 def _background_backup_task(
@@ -57,6 +132,8 @@ def _background_backup_task(
     with app_context:
         try:
             if output_mode == "mirror":
+                # Modo "espelho" (mirror) - não gera arquivo de backup .zip,
+                # apenas baixa os arquivos para uma pasta local.
                 if not local_mirror_path:
                     raise Exception("Caminho local inválido")
 
@@ -67,9 +144,11 @@ def _background_backup_task(
                     progress_dict=PROGRESS,
                     task_id=task_id,
                     filters=filters,
-                    processing_mode=processing_mode
+                    processing_mode=processing_mode,
                 )
+
             else:
+                # Modo "archive" - gera um pacote (zip / tar.xz / etc.)
                 temp_zip_path = download_items_bundle(
                     creds,
                     items,
@@ -79,17 +158,19 @@ def _background_backup_task(
                     progress_dict=PROGRESS,
                     task_id=task_id,
                     filters=filters,
-                    processing_mode=processing_mode
+                    processing_mode=processing_mode,
                 )
 
                 generated_filename = os.path.basename(temp_zip_path)
                 final_dest_path = os.path.join(storage_root_path, generated_filename)
 
+                # move do tmp para a pasta definitiva de backups
                 shutil.move(temp_zip_path, final_dest_path)
 
                 PROGRESS[task_id]["final_filename"] = generated_filename
                 PROGRESS[task_id]["message"] = "Arquivo gerado e salvo com sucesso."
 
+                # Registra/atualiza o BackupFileModel
                 try:
                     stat = os.stat(final_dest_path)
                     size_mb = round(stat.st_size / (1024 * 1024), 2)
@@ -98,6 +179,7 @@ def _background_backup_task(
                     existing = BackupFileModel.query.filter_by(
                         filename=generated_filename
                     ).first()
+
                     if not existing:
                         bf = BackupFileModel(
                             filename=generated_filename,
@@ -115,20 +197,27 @@ def _background_backup_task(
                         existing.created_at = datetime.utcnow()
 
                     db.session.commit()
+
+                    _apply_retention_policy(storage_root_path)
+
                 except Exception as db_err:
                     db.session.rollback()
-                    print(f"Erro ao salvar BackupFileModel: {db_err}")
+                    PROGRESS[task_id]["phase"] = "erro"
+                    PROGRESS[task_id]["message"] = (
+                        f"Erro ao registrar backup no banco: {db_err}"
+                    )
 
-                sync_task_to_db(task_id)
+            # Sincroniza o estado final com a tabela tasks (TaskModel)
+            sync_task_to_db(task_id)
 
         except Exception as e:
-            print(f"Erro na thread de backup {task_id}: {e}")
-            PROGRESS.setdefault(task_id, {})
-            PROGRESS[task_id]["phase"] = "erro" if "Cancelado" not in str(e) else "cancelado"
-            PROGRESS[task_id]["message"] = str(e)
-            hist = PROGRESS[task_id].get("history", [])
-            hist.append(f"Fim: {str(e)}")
-            PROGRESS[task_id]["history"] = hist
+            # Qualquer erro que escapar da lógica acima cai aqui.
+            PROGRESS[task_id]["phase"] = "erro"
+            PROGRESS[task_id]["message"] = f"Falha no processo de backup: {e}"
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
             sync_task_to_db(task_id)
 
 
@@ -242,8 +331,10 @@ def download():
     data = request.get_json() or {}
     items_raw = data.get("items_json")
     if isinstance(items_raw, str):
-        try: items = json.loads(items_raw)
-        except: items = []
+        try:
+            items = json.loads(items_raw)
+        except Exception:
+            items = []
     else:
         items = items_raw or []
 
@@ -251,7 +342,8 @@ def download():
         return jsonify({"ok": False, "error": "Nenhum item selecionado"}), 400
 
     zip_name = (data.get("zip_name") or "backup").strip()
-    if zip_name.lower().endswith(".zip"): zip_name = zip_name[:-4]
+    if zip_name.lower().endswith(".zip"):
+        zip_name = zip_name[:-4]
 
     archive_format = data.get("archive_format") or "zip"
     compression_level = data.get("compression_level") or "normal"
@@ -259,37 +351,37 @@ def download():
     local_mirror_path = (data.get("local_mirror_path") or "").strip()
 
     execution_mode = data.get("execution_mode") or "immediate"
-    
-    # Aqui pegamos o modo (concurrent/sequential) com fallback para sequential
     processing_mode = data.get("processing_mode") or "sequential"
 
+    # Caminho físico onde os backups são armazenados
+    storage_root_path = os.path.join(current_app.root_path, BACKUP_FOLDER_NAME)
+    os.makedirs(storage_root_path, exist_ok=True)
+
     task_id = data.get("task_id") or f"task-{int(time.time())}"
-    filters = build_filters_from_form(data)
-
-    storage_path = os.path.join(current_app.root_path, BACKUP_FOLDER_NAME)
-    os.makedirs(storage_path, exist_ok=True)
-
     init_download_task(task_id)
-    PROGRESS[task_id]["history"] = []
-    PROGRESS[task_id]["canceled"] = False
-    PROGRESS[task_id]["output_mode"] = output_mode
-    PROGRESS[task_id]["final_filename"] = None
-    sync_task_to_db(task_id)
 
-    app_ctx = current_app.app_context()
-    t = Thread(
+    thread = Thread(
         target=_background_backup_task,
-        args=(app_ctx, task_id, creds, items, output_mode, local_mirror_path,
-              storage_path, zip_name, compression_level, archive_format, filters, processing_mode),
+        args=(
+            current_app.app_context(),
+            task_id,
+            creds,
+            items,
+            output_mode,
+            local_mirror_path,
+            storage_root_path,
+            zip_name,
+            compression_level,
+            archive_format,
+            build_filters_from_form(data),
+            processing_mode,
+        ),
+        daemon=True,
     )
-    t.start()
+    thread.start()
 
-    return jsonify({
-        "ok": True,
-        "task_id": task_id,
-        "message": "Processo iniciado",
-        "mode": execution_mode
-    })
+    return jsonify({"ok": True, "task_id": task_id})
+
 
 
 @drive_bp.route("/progress/<task_id>")
