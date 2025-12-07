@@ -1,11 +1,10 @@
 # services/auth_service.py
-import os
 import json
 
 from flask import session, url_for, has_request_context
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
-from models import db, GoogleAuthModel
+from app.models import db, GoogleAuthModel
 
 from config import CLIENT_SECRETS_FILE, SCOPES
 

@@ -2,8 +2,8 @@
 from flask import Blueprint, render_template, request, jsonify, current_app
 import json
 
-from models import db, ScheduledTaskModel, BackupProfile
-from services.scheduler_service import reload_jobs
+from app.models import db, ScheduledTaskModel, BackupProfile
+from app.services.scheduler import reload_jobs
 
 scheduler_bp = Blueprint("scheduler", __name__)
 

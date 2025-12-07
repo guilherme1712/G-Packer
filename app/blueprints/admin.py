@@ -22,8 +22,8 @@ from flask import (
     send_file,
 )
 
-from services.auth_service import get_credentials
-from models import (
+from app.services.auth import get_credentials
+from app.models import (
     db,
     TaskModel,
     BackupProfile,
@@ -875,7 +875,7 @@ def dashboard():
         error_percent = 100 - success_percent
 
     # Status da credencial Google (email, último refresh)
-    from models import GoogleAuthModel  # já é importado no topo em sua versão atual
+    from app.models import GoogleAuthModel  # já é importado no topo em sua versão atual
     google_auth = (
         GoogleAuthModel.query
         .filter_by(active=True)

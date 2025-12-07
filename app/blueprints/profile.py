@@ -1,8 +1,8 @@
 # controllers/profile_controller.py
 from flask import Blueprint, request, jsonify
 
-from services.auth_service import get_credentials
-from services.profile_service import (
+from app.services.auth import get_credentials
+from app.services.profile import (
     load_backup_profiles,
     create_profile,
     get_profile,

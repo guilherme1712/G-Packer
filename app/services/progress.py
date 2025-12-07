@@ -1,7 +1,6 @@
 import threading
 import copy
-import time
-from models import db, TaskModel
+from app.models import db, TaskModel
 
 # Cache em memória
 PROGRESS: dict[str, dict] = {}

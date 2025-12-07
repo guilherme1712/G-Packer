@@ -1,38 +1,44 @@
-{# templates/menu.html #}
 <aside class="app-sidebar">
     <div class="sidebar-logo" title="G-Packer">
         📦
     </div>
 
+    <div class="sidebar-divider"></div>
+
     <nav class="sidebar-nav">
         <a href="{{ url_for('admin.dashboard') }}"
            class="sidebar-link {% if active_page == 'dashboard' %}sidebar-link-active{% endif %}"
            title="Dashboard">
-            🏠
+            <span class="sidebar-icon">🏠</span>
+            <span class="sidebar-tooltip">Dashboard</span>
         </a>
 
         <a href="{{ url_for('drive.folders') }}"
            class="sidebar-link {% if active_page == 'drive' %}sidebar-link-active{% endif %}"
            title="Drive / Pastas">
-            📂
+            <span class="sidebar-icon">📂</span>
+            <span class="sidebar-tooltip">Pastas / Drive</span>
         </a>
 
         <a href="{{ url_for('admin.list_backups') }}"
            class="sidebar-link {% if active_page == 'backups' %}sidebar-link-active{% endif %}"
            title="Backups salvos">
-            🗄️
+            <span class="sidebar-icon">🗄️</span>
+            <span class="sidebar-tooltip">Meus Backups</span>
         </a>
 
         <a href="{{ url_for('admin.view_db') }}"
            class="sidebar-link {% if active_page == 'admin_db' %}sidebar-link-active{% endif %}"
            title="Admin / Logs">
-            📊
+            <span class="sidebar-icon">📊</span>
+            <span class="sidebar-tooltip">Admin DB / Logs</span>
         </a>
 
         <a href="{{ url_for('scheduler.index') }}"
            class="sidebar-link {% if active_page == 'scheduler' %}sidebar-link-active{% endif %}"
            title="Agendador">
-            ⏱️
+            <span class="sidebar-icon">⏱️</span>
+            <span class="sidebar-tooltip">Agendador</span>
         </a>
     </nav>
 </aside>

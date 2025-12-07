@@ -11,10 +11,10 @@ from config import TIMEZONE
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from models import db, ScheduledTaskModel, BackupFileModel, BackupProfile, ScheduledRunModel
-from services.auth_service import get_credentials
-from services.drive_download_service import download_items_bundle
-from services.progress_service import PROGRESS, init_download_task
+from app.models import db, ScheduledTaskModel, BackupFileModel, BackupProfile, ScheduledRunModel
+from .auth import get_credentials
+from .drive_download import download_items_bundle
+from .progress import PROGRESS, init_download_task
 
 # Scheduler global
 scheduler = BackgroundScheduler(

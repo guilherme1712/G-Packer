@@ -18,13 +18,13 @@ from flask import (
     current_app,
 )
 
-from services.auth_service import get_credentials
-from services.drive_filters import build_filters_from_form
-from services.drive_tree_service import calculate_selection_stats
-from services.drive_tree_service import get_children, get_file_metadata, get_ancestors_path
-from services.drive_download_service import download_items_bundle, mirror_items_to_local
-from services.drive_activity_service import fetch_activity_log
-from services.progress_service import (
+from app.services.auth import get_credentials
+from app.services.drive_filters import build_filters_from_form
+from app.services.drive_tree import calculate_selection_stats
+from app.services.drive_tree import get_children, get_file_metadata, get_ancestors_path
+from app.services.drive_download import download_items_bundle, mirror_items_to_local
+from app.services.drive_activity import fetch_activity_log
+from app.services.progress import (
     PROGRESS,
     init_download_task,
     get_task_progress,
@@ -34,8 +34,8 @@ from services.progress_service import (
     set_task_cancel,
 )
 
-from models import db, FavoriteModel
-from models.backup_file import BackupFileModel, apply_global_retention  # <<< AQUI
+from app.models import db, FavoriteModel
+from app.models.backup_file import BackupFileModel, apply_global_retention  # <<< AQUI
 
 drive_bp = Blueprint("drive", __name__)
 

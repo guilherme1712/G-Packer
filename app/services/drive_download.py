@@ -17,9 +17,9 @@ from googleapiclient.http import MediaIoBaseDownload
 from google.oauth2.credentials import Credentials
 from googleapiclient.errors import HttpError
 
-from .drive_tree_service import build_files_list_for_items, get_children
-from .drive_filters import file_passes_filters
-from .progress_service import sync_task_to_db, update_progress
+from .drive_tree import build_files_list_for_items, get_children
+from .drive import file_passes_filters
+from .progress import sync_task_to_db, update_progress
 
 _dl_lock = threading.Lock()
 _archive_lock = threading.Lock()

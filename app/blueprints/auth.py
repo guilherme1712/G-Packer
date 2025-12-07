@@ -9,7 +9,7 @@ from flask import (
     flash,
 )
 
-from services.auth_service import (
+from app.services.auth import (
     get_credentials,
     build_flow,
     save_credentials,          # <<< aqui

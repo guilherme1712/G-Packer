@@ -7,8 +7,8 @@ import random
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from .drive_filters import safe_name, file_passes_filters, extract_size_bytes
-from .progress_service import sync_task_to_db, update_progress
+from .drive import safe_name, file_passes_filters, extract_size_bytes
+from .progress import sync_task_to_db, update_progress
 
 # Lock para operações globais (como atualizar progresso compartilhado)
 _lock = threading.Lock()

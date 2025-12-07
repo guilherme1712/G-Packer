@@ -1,6 +1,6 @@
 # services/profile_service.py
 from typing import Tuple, Optional
-from models import db, BackupProfile
+from app.models import db, BackupProfile
 
 def load_backup_profiles() -> list[dict]:
     """
