@@ -16,7 +16,7 @@ from flask import (
 )
 
 from services.auth_service import get_credentials
-from models import db, TaskModel, BackupProfile, BackupFileModel, ScheduledTaskModel, ScheduledRunModel
+from models import db, TaskModel, BackupProfile, BackupFileModel, ScheduledTaskModel, ScheduledRunModel, GoogleAuthModel
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -102,12 +102,21 @@ def view_db():
         except Exception:
             runs_by_schedule[s.id] = []
 
+
+    google_auth = (
+        GoogleAuthModel.query
+        .filter_by(active=True)
+        .order_by(GoogleAuthModel.updated_at.desc())
+        .first()
+    )
+
     return render_template(
         "db_view.html",
         tasks=tasks,
         profiles=profiles,
         sched_tasks=sched_tasks,
         runs_by_schedule=runs_by_schedule,
+        google_auth=google_auth,
     )
 
 

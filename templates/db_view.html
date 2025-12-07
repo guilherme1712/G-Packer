@@ -103,6 +103,74 @@
             <a href="{{ url_for('drive.folders') }}" class="btn-secondary">← Voltar para Pastas</a>
         </header>
 
+        <!-- SEÇÃO 0: STATUS GOOGLE AUTH -->
+        <div class="db-section">
+            <h2 style="margin-top:0;">🔐 Status da Autenticação Google</h2>
+
+            {% if google_auth %}
+            <p style="color:#9ca3af; font-size:0.9rem;">
+                Informações do último login Google salvo no banco de dados.
+            </p>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>E-mail</th>
+                        <th>Status</th>
+                        <th>Primeiro Login</th>
+                        <th>Última Atualização</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>{{ google_auth.id }}</td>
+                        <td>{{ google_auth.email or '-' }}</td>
+                        <td>
+                            {% if google_auth.active %}
+                            <span class="status-badge status-concluido">ATIVO</span>
+                            {% else %}
+                            <span class="status-badge status-cancelado">INATIVO</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if google_auth.created_at %}
+                            {{ google_auth.created_at.strftime('%d/%m/%Y %H:%M:%S') }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if google_auth.updated_at %}
+                            {{ google_auth.updated_at.strftime('%d/%m/%Y %H:%M:%S') }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <p style="color:#6b7280; font-size:0.8rem; margin-top:6px;">
+                A “Última atualização” corresponde ao último momento em que o token foi salvo/renovado no banco.
+            </p>
+
+            <div style="margin-top:12px;">
+                <a href="{{ url_for('auth.login') }}" class="btn-primary">
+                    Trocar conta Google
+                </a>
+            </div>
+
+            {% else %}
+            <p style="color:#9ca3af; font-size:0.9rem;">
+                Nenhum login Google foi salvo ainda.
+            </p>
+            <a href="{{ url_for('auth.login') }}" class="btn-primary">
+                Conectar com Google
+            </a>
+            {% endif %}
+        </div>
+
         <!-- SEÇÃO 1: TASKS / LOGS -->
         <div class="db-section">
             <h2 style="margin-top:0;">📜 Histórico de Tarefas (Tasks)</h2>

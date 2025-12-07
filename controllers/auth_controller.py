@@ -45,6 +45,12 @@ def login():
         flash(f"Erro ao iniciar autenticação: {e}")
         return redirect(url_for("auth.index"))
 
+@auth_bp.route("/logout")
+def logout():
+    # remove apenas o id da sessão (tokens continuam no banco)
+    session.pop("google_auth_id", None)
+    flash("Sessão encerrada com sucesso.")
+    return redirect(url_for("auth.index"))
 
 @auth_bp.route("/oauth2callback")
 def oauth2callback():
