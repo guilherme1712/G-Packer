@@ -1,6 +1,8 @@
 # services/drive_download_service.py
+import errno
 import os
 import io
+import stat
 import time
 import shutil
 import tempfile
@@ -26,7 +28,7 @@ _archive_lock = threading.Lock()
 _thread_local = threading.local()
 
 # Configurações
-MAX_DOWNLOAD_WORKERS = 80
+MAX_DOWNLOAD_WORKERS = 150
 MAX_ARCHIVE_WORKERS = os.cpu_count() + 4
 CHUNK_SIZE = 50 * 1024 * 1024
 RETRY_LIMIT = 10
@@ -541,6 +543,20 @@ def download_files_to_folder(
     if progress_dict and task_id:
         sync_task_to_db(task_id)
 
+def handle_remove_readonly(func, path, exc):
+    """
+    Callback para shutil.rmtree que lida com arquivos somente leitura (WinError 5).
+    Se a remoção falhar com 'Access Denied', muda a permissão e tenta de novo.
+    """
+    excvalue = exc[1]
+    if func in (os.rmdir, os.remove, os.unlink) and excvalue.errno == errno.EACCES:
+        # Define o arquivo como Gravável/Legível para o dono (chmod 777)
+        os.chmod(path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+        # Tenta executar a função de remoção novamente
+        func(path)
+    else:
+        # Se for outro erro, deixa estourar (ou ignora se preferir)
+        pass
 
 def download_items_bundle(
     creds: Credentials,
@@ -638,12 +654,12 @@ def download_items_bundle(
                 archive_obj.close()
 
     except Exception as e:
-        shutil.rmtree(prepare_long_path(tmp_root), ignore_errors=True)
+        shutil.rmtree(prepare_long_path(tmp_root), onerror=handle_remove_readonly)
         if progress_dict and task_id:
             sync_task_to_db(task_id)
         raise e
 
-    shutil.rmtree(prepare_long_path(tmp_root), ignore_errors=True)
+    shutil.rmtree(prepare_long_path(tmp_root), onerror=handle_remove_readonly)
 
     update_progress(task_id, {
         "phase": "concluido",

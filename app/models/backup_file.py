@@ -1,5 +1,6 @@
 # models/backup_file.py
 import os
+import stat
 from datetime import datetime, timedelta
 
 from .db_instance import db
@@ -15,6 +16,8 @@ class BackupFileModel(db.Model):
     items_count = db.Column(db.Integer, nullable=True)
     origin_task_id = db.Column(db.String(50), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    structure_cache = db.Column(db.JSON, nullable=True)
 
     def to_dict(self):
         return {
@@ -80,6 +83,7 @@ def apply_global_retention(
         for b in to_delete:
             if b.path and os.path.exists(b.path):
                 try:
+                    os.chmod(b.path, stat.S_IWRITE)
                     os.remove(b.path)
                 except Exception as e:
                     # Log simples em stdout; não queremos quebrar por causa disso

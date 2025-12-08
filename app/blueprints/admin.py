@@ -2,13 +2,18 @@
 import os
 import json
 import io
+import stat
 import zipfile
 import tarfile
 import mimetypes
-
+import uuid
+import threading
+from flask import current_app
+from app.services.progress import update_progress, sync_task_to_db
 
 from datetime import datetime
 from sqlalchemy import text, inspect, func
+from sqlalchemy.orm import defer
 
 from flask import (
     Blueprint,
@@ -126,6 +131,15 @@ def _run_auto_migrations():
                             "ADD COLUMN zip_password VARCHAR(255)"
                         )
                     )
+                    conn.commit()
+
+        if "backup_files" in existing_tables:
+            columns = [c["name"] for c in inspector.get_columns("backup_files")]
+            with db.engine.connect() as conn:
+                if "structure_cache" not in columns:
+                    print("AUTOFIX: Adicionando coluna 'structure_cache' em 'backup_files'...")
+                    # SQLite suporta JSON como tipo, mas armazena como texto internamente
+                    conn.execute(text("ALTER TABLE backup_files ADD COLUMN structure_cache JSON"))
                     conn.commit()
 
     except Exception as e:
@@ -402,26 +416,26 @@ def list_backups():
 
     _sync_backups_from_disk()
 
-    backups = BackupFileModel.query.order_by(
+    # OTIMIZAÇÃO: defer('structure_cache') faz com que o SQLAlchemy NÃO traga
+    # o JSON gigante nesta consulta, apenas quando for explicitamente acessado.
+    backups = BackupFileModel.query.options(
+        defer(BackupFileModel.structure_cache)
+    ).order_by(
         BackupFileModel.created_at.desc()
     ).all()
 
     files = []
     for b in backups:
-        files.append(
-            {
-                "id": b.id,
-                "name": b.filename,
-                "path": b.path,
-                "size_mb": round(b.size_mb or 0.0, 2),
-                "created_at": b.created_at.strftime("%d/%m/%Y %H:%M:%S")
-                if b.created_at
-                else "",
-                "items_count": b.items_count or 0,
-                "origin_task_id": b.origin_task_id,
-                "encrypted": getattr(b, "encrypted", False),
-            }
-        )
+        files.append({
+            "id": b.id,
+            "name": b.filename,
+            "path": b.path,
+            "size_mb": round(b.size_mb or 0.0, 2),
+            "created_at": b.created_at.strftime("%d/%m/%Y %H:%M:%S") if b.created_at else "",
+            "items_count": b.items_count or 0,
+            "origin_task_id": b.origin_task_id,
+            "encrypted": getattr(b, "encrypted", False),
+        })
 
     return render_template("admin_backups.html", files=files)
 
@@ -462,6 +476,7 @@ def delete_backup(backup_id):
     # Tenta apagar o arquivo do disco
     if backup.path and os.path.exists(backup.path):
         try:
+            os.chmod(backup.path, stat.S_IWRITE)
             os.remove(backup.path)
         except Exception as e:
             print(f"Erro ao remover arquivo de backup: {e}")
@@ -493,25 +508,35 @@ def api_backup_tree(backup_id):
     backup = BackupFileModel.query.get_or_404(backup_id)
 
     if not backup.path or not os.path.exists(backup.path):
-        return jsonify(
-            {"ok": False, "error": "Arquivo de backup não encontrado."}
-        ), 404
+        return jsonify({"ok": False, "error": "Arquivo de backup não encontrado."}), 404
 
+    # 1. TENTA USAR O CACHE DO BANCO
+    if backup.structure_cache:
+        # Retorna direto do banco (instantâneo)
+        return jsonify({
+            "ok": True,
+            "tree": backup.structure_cache,
+            "files_count": backup.items_count,
+            "cached": True  # Flag de debug
+        })
+
+    # 2. SE NÃO TIVER CACHE, GERA E SALVA
     try:
         tree, files_count = _build_archive_tree(backup.path)
 
         # Atualiza items_count se estiver desatualizado
-        if backup.items_count != files_count:
-            backup.items_count = files_count
-            db.session.commit()
+        backup.items_count = files_count
 
-        return jsonify(
-            {
-                "ok": True,
-                "tree": tree,
-                "files_count": files_count,
-            }
-        )
+        # SALVA O CACHE NO BANCO
+        backup.structure_cache = tree
+        db.session.commit()
+
+        return jsonify({
+            "ok": True,
+            "tree": tree,
+            "files_count": files_count,
+            "cached": False
+        })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -901,3 +926,153 @@ def dashboard():
         error_percent=error_percent,
         google_auth=google_auth,
     )
+
+# ---------------------------------------------------------------------------
+# WORKER DE EXTRAÇÃO LOCAL (Roda em background)
+# ---------------------------------------------------------------------------
+def _worker_extract_local(app, task_id, backup_id, target_path, selected_paths):
+    """
+    Função executada em thread separada para não travar a UI.
+    """
+    with app.app_context():
+        try:
+            update_progress(task_id, {
+                "phase": "extraindo",
+                "message": "Preparando arquivos...",
+                "files_total": 0,
+                "files_downloaded": 0,  # Usamos esse campo para contar extraídos
+            })
+            sync_task_to_db(task_id)
+
+            backup = BackupFileModel.query.get(backup_id)
+            if not backup or not backup.path or not os.path.exists(backup.path):
+                raise Exception("Arquivo de backup não encontrado no disco durante a execução.")
+
+            extracted_count = 0
+            lower = backup.path.lower()
+
+            # Garante criação da pasta
+            os.makedirs(target_path, exist_ok=True)
+
+            # Lógica ZIP
+            if lower.endswith(".zip"):
+                with zipfile.ZipFile(backup.path, "r") as zf:
+                    all_members = zf.namelist()
+                    # Se selected_paths for vazio, pega tudo
+                    to_extract = set(selected_paths) if selected_paths else set(all_members)
+
+                    total_ops = len(to_extract) if selected_paths else len(all_members)
+                    update_progress(task_id, {"files_total": total_ops})
+
+                    for i, member in enumerate(all_members):
+                        # Filtro de seleção
+                        if selected_paths and member not in to_extract:
+                            continue
+
+                        # Segurança básica
+                        if ".." in member: continue
+
+                        zf.extract(member, path=target_path)
+                        extracted_count += 1
+
+                        # Atualiza progresso a cada 10 arquivos para não sobrecarregar o banco
+                        if extracted_count % 10 == 0:
+                            update_progress(task_id, {
+                                "files_downloaded": extracted_count,
+                                "message": f"Extraindo: {extracted_count} arquivos..."
+                            })
+                            sync_task_to_db(task_id)
+
+            # Lógica TAR/GZ
+            else:
+                mode = "r:gz" if lower.endswith("gz") else "r:"
+                with tarfile.open(backup.path, mode) as tf:
+                    members = tf.getmembers()
+                    to_extract_list = []
+
+                    if selected_paths:
+                        target_set = set(selected_paths)
+                        to_extract_list = [m for m in members if m.name in target_set]
+                    else:
+                        to_extract_list = members
+
+                    total_ops = len(to_extract_list)
+                    update_progress(task_id, {"files_total": total_ops})
+
+                    for m in to_extract_list:
+                        if m.isdir(): continue
+                        tf.extract(m, path=target_path)
+                        extracted_count += 1
+
+                        if extracted_count % 10 == 0:
+                            update_progress(task_id, {
+                                "files_downloaded": extracted_count,
+                                "message": f"Extraindo: {extracted_count} arquivos..."
+                            })
+                            sync_task_to_db(task_id)
+
+            # Finalização com Sucesso
+            update_progress(task_id, {
+                "phase": "concluido",
+                "files_downloaded": extracted_count,
+                "message": f"Sucesso! {extracted_count} arquivos extraídos em {target_path}",
+                "history": [f"Finalizado. Destino: {target_path}"]
+            })
+            sync_task_to_db(task_id)
+
+        except Exception as e:
+            print(f"Erro na extração background: {e}")
+            update_progress(task_id, {
+                "phase": "erro",
+                "message": f"Erro: {str(e)}",
+                "history": [f"Falha fatal: {str(e)}"]
+            })
+            sync_task_to_db(task_id)
+
+
+@admin_bp.route("/admin/api/backups/<int:backup_id>/extract-local", methods=["POST"])
+def api_backup_extract_local(backup_id):
+    """
+    Inicia a extração em BACKGROUND e retorna imediatamente.
+    """
+    creds = get_credentials()
+    if not creds:
+        return jsonify({"ok": False, "error": "Acesso negado."}), 403
+
+    backup = BackupFileModel.query.get_or_404(backup_id)
+    if not backup.path or not os.path.exists(backup.path):
+        return jsonify({"ok": False, "error": "Arquivo de backup não encontrado."}), 404
+
+    data = request.get_json(silent=True) or {}
+    target_path = data.get("target_path")
+    selected_paths = data.get("paths") or []
+
+    if not target_path:
+        return jsonify({"ok": False, "error": "Caminho de destino não informado."}), 400
+
+    # 1. Cria ID da tarefa para monitoramento
+    task_id = f"extract-{uuid.uuid4().hex[:8]}"
+
+    # 2. Registra estado inicial
+    update_progress(task_id, {
+        "phase": "iniciando",
+        "message": "Iniciando processo de extração...",
+        "files_total": 0,
+        "type": "extraction"  # flag opcional para identificar
+    })
+    sync_task_to_db(task_id)
+
+    # 3. Dispara Thread (passando o app real para ter contexto do banco)
+    app = current_app._get_current_object()
+    t = threading.Thread(
+        target=_worker_extract_local,
+        args=(app, task_id, backup_id, target_path, selected_paths)
+    )
+    t.start()
+
+    # 4. Retorna imediatamente
+    return jsonify({
+        "ok": True,
+        "task_id": task_id,
+        "message": "Processo iniciado em segundo plano."
+    })

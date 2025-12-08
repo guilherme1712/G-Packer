@@ -18,8 +18,8 @@ _lock = threading.Lock()
 _thread_local = threading.local()
 
 # Configuração de alta performance
-MAX_MAPPING_WORKERS = 150  # Alto paralelismo
-RETRY_LIMIT = 8            # Aumentado para suportar a carga de 150 threads
+MAX_MAPPING_WORKERS = 150
+RETRY_LIMIT = 8
 
 
 def get_thread_safe_service(creds):

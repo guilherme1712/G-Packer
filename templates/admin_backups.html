@@ -394,6 +394,10 @@
             </span>
 
             <div style="display:flex; gap:8px;">
+                <button type="button" class="btn-ghost" onclick="extractToLocalPath()">
+                    📂 Extrair no PC
+                </button>
+
                 <button type="button" class="btn-secondary" onclick="restoreSelectionToDrive()">
                     ☁️ Restaurar para o Drive
                 </button>
@@ -661,6 +665,65 @@
                 console.error(err);
                 alert(err.message || "Erro ao fazer download parcial.");
             });
+    }
+
+    function extractToLocalPath() {
+        if (!currentBackupId) {
+            alert("Backup inválido.");
+            return;
+        }
+
+        const paths = getSelectedPathsArray();
+        let message = "";
+
+        if (paths.length === 0) {
+            message = "Nenhum arquivo selecionado.\nDeseja extrair o BACKUP INTEIRO?";
+        } else {
+            message = `Deseja extrair ${paths.length} arquivo(s) selecionado(s)?`;
+        }
+
+        if (!confirm(message)) return;
+
+        const targetPath = prompt("Digite o caminho da pasta no computador onde deseja salvar os arquivos:\n(Ex: C:/Meus_Backups/Restaurado)");
+        if (!targetPath) return;
+
+        const btn = event.target;
+        // Feedback visual rápido
+        btn.textContent = "Iniciando...";
+        btn.disabled = true;
+
+        fetch(`/admin/api/backups/${currentBackupId}/extract-local`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                target_path: targetPath,
+                paths: paths
+            }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.ok) {
+                alert("Erro ao iniciar: " + (data.error || "Falha desconhecida."));
+                btn.textContent = "📂 Extrair no PC";
+                btn.disabled = false;
+            } else {
+                // SUCESSO IMEDIATO
+                alert(`✅ Extração iniciada em segundo plano!\n\nOs arquivos estão sendo enviados para:\n${targetPath}\n\nVocê pode fechar esta janela e continuar usando o sistema.`);
+
+                // Opcional: Fechar o modal automaticamente
+                closeBackupExplorer();
+
+                // Restaura o botão caso reabra o modal depois
+                btn.textContent = "📂 Extrair no PC";
+                btn.disabled = false;
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert("Erro de comunicação com o servidor.");
+            btn.textContent = "📂 Extrair no PC";
+            btn.disabled = false;
+        });
     }
 </script>
 {% endblock %}
