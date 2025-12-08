@@ -807,7 +807,6 @@ small, .form-hint {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    overflow: hidden;      /* conteúdo rola internamente, não vaza para o body */
 }
 
 /* ===========================
