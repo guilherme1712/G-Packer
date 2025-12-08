@@ -33,6 +33,7 @@ from app.services.Google.drive_cache import (
 
 from app.services.Google.drive_download import download_items_bundle, mirror_items_to_local
 from app.services.Google.drive_activity import fetch_activity_log
+from app.services.storage import StorageService
 from app.services.progress import (
     PROGRESS,
     init_download_task,
@@ -65,30 +66,6 @@ def _parse_positive_int(value):
         return v if v > 0 else None
     except (TypeError, ValueError):
         return None
-
-
-def _delete_backup_record_and_file(backup: BackupFileModel, storage_root_path: str):
-    """
-    (ATUALMENTE NÃO USADA NA RETENÇÃO)
-    Remove o arquivo físico do disco e apaga o registro em backup_files.
-    Mantida apenas se você quiser usar em outras telas (excluir manual).
-    """
-    try:
-        file_path = backup.path
-        if not file_path:
-            file_path = os.path.join(storage_root_path, backup.filename)
-
-        if file_path and os.path.exists(file_path):
-            os.remove(file_path)
-    except Exception as e:
-        try:
-            current_app.logger.warning(
-                f"Falha ao remover arquivo de backup {backup.filename}: {e}"
-            )
-        except Exception:
-            print(f"Falha ao remover arquivo de backup {backup.filename}: {e}")
-
-    db.session.delete(backup)
 
 
 def _apply_retention_policy(storage_root_path: str | None = None):
@@ -443,8 +420,7 @@ def download():
     processing_mode = data.get("processing_mode") or "sequential"
 
     # Caminho físico onde os backups são armazenados
-    storage_root_path = os.path.join(current_app.root_path, BACKUP_FOLDER_NAME)
-    os.makedirs(storage_root_path, exist_ok=True)
+    storage_root_path = StorageService.backups_dir()
 
     task_id = data.get("task_id") or f"task-{int(time.time())}"
     init_download_task(task_id)
@@ -490,7 +466,7 @@ def get_file(filename):
     if not creds:
         flash("Sessão expirada.")
         return redirect(url_for("auth.index"))
-    storage_path = os.path.join(current_app.root_path, BACKUP_FOLDER_NAME)
+    storage_path = StorageService.backups_dir()
     return send_from_directory(storage_path, filename, as_attachment=True)
 
 

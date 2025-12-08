@@ -10,6 +10,7 @@ from config import TIMEZONE
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from app.services.storage import StorageService
 
 from app.models import db, ScheduledTaskModel, BackupFileModel, BackupProfileModel, ScheduledRunModel
 from .auth import get_credentials
@@ -184,7 +185,7 @@ def job_executor(app_app_context, task_id_db):
             print(f"[{datetime.now()}] Download concluído. Zip temporário em: {zip_path}")
 
             if not os.path.exists(STORAGE_ROOT):
-                os.makedirs(STORAGE_ROOT)
+                StorageService.ensure_dir(STORAGE_ROOT)
 
             filename = os.path.basename(zip_path)
             final_dest = os.path.join(STORAGE_ROOT, filename)

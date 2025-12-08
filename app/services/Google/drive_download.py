@@ -22,6 +22,7 @@ from googleapiclient.errors import HttpError
 from .drive_tree import build_files_list_for_items, get_children
 from .drive import file_passes_filters
 from app.services.progress import sync_task_to_db, update_progress
+from app.services.storage import StorageService
 
 _dl_lock = threading.Lock()
 _archive_lock = threading.Lock()
@@ -64,44 +65,6 @@ def get_thread_safe_service(creds):
     if not hasattr(_thread_local, "service"):
         _thread_local.service = build("drive", "v3", credentials=creds, cache_discovery=False)
     return _thread_local.service
-
-
-def prepare_long_path(path: str) -> str:
-    """Adiciona o prefixo \\?\ para suportar caminhos > 260 chars no Windows"""
-    if os.name == "nt":
-        path = os.path.abspath(path)
-        if not path.startswith("\\\\?\\"):
-            return f"\\\\?\\{path}"
-    return path
-
-
-def ensure_dir_exists(path):
-    """
-    Cria diretórios de forma robusta e thread-safe.
-    Trata condições de corrida onde duas threads tentam criar a mesma pasta.
-    """
-    if not path:
-        return
-
-    long_path = prepare_long_path(path)
-
-    # Tenta criar. Se falhar, verifica se já existe.
-    try:
-        os.makedirs(long_path, exist_ok=True)
-    except OSError:
-        # Em raros casos de concorrência extrema no Windows, makedirs pode falhar
-        # mesmo com exist_ok=True. Damos um pequeno sleep e verificamos.
-        time.sleep(0.05)
-        if not os.path.isdir(long_path):
-            # Última tentativa: recursão manual (fallback)
-            try:
-                head, tail = os.path.split(long_path)
-                if not os.path.isdir(head):
-                    ensure_dir_exists(head)
-                if tail:
-                    os.mkdir(long_path)
-            except OSError:
-                pass # Se falhar aqui, o erro aparecerá na abertura do arquivo
 
 
 def check_status_pause_cancel(progress_dict, task_id):
@@ -239,11 +202,11 @@ def _worker_download_one(creds, f_info, dest_root, used_rel_paths, progress_dict
 
     # Caminho absoluto no disco local
     raw_local_path = os.path.join(dest_root, final_rel_path)
-    local_path = prepare_long_path(raw_local_path)
+    local_path = StorageService.prepare_long_path(raw_local_path)
 
     # Cria a pasta pai (Isso previne o WinError 3)
     dir_name = os.path.dirname(local_path)
-    ensure_dir_exists(dir_name)
+    StorageService.ensure_dir(dir_name)
 
     fh = io.FileIO(local_path, "wb")
     try:
@@ -460,7 +423,7 @@ def _worker_archive_one(f_info, tmp_root, archive_obj, archive_format, progress_
     if not rel: return
 
     src = os.path.join(tmp_root, rel)
-    src_long = prepare_long_path(src)
+    src_long = StorageService.prepare_long_path(src)
 
     if not os.path.exists(src_long):
         return
@@ -570,8 +533,10 @@ def download_items_bundle(
     processing_mode: str = "sequential",
 ) -> str:
 
-    local_temp_base = os.path.join(os.getcwd(), "storage/temp_work")
-    os.makedirs(local_temp_base, exist_ok=True)
+    # Diretório base de trabalho temporário:
+    # antes: os.path.join(os.getcwd(), "storage/temp_work")
+    local_temp_base = StorageService.temp_work_dir()
+
     tmp_root = tempfile.mkdtemp(prefix="dl_", dir=local_temp_base)
 
     files_list_result = []
@@ -595,14 +560,25 @@ def download_items_bundle(
         else:
             service_main = build("drive", "v3", credentials=creds)
             files_list_result = build_files_list_for_items(
-                service_main, items, creds=creds, filters=filters, progress_dict=progress_dict, task_id=task_id
+                service_main,
+                items,
+                creds=creds,
+                filters=filters,
+                progress_dict=progress_dict,
+                task_id=task_id,
             )
 
             if not files_list_result:
                 raise Exception("Nenhum arquivo encontrado.")
 
             download_files_to_folder(
-                creds, files_list_result, dest_root=tmp_root, progress_dict=progress_dict, task_id=task_id, filters=filters, processing_mode=processing_mode
+                creds,
+                files_list_result,
+                dest_root=tmp_root,
+                progress_dict=progress_dict,
+                task_id=task_id,
+                filters=filters,
+                processing_mode=processing_mode,
             )
 
         check_status_pause_cancel(progress_dict, task_id)
@@ -616,7 +592,8 @@ def download_items_bundle(
         sync_task_to_db(task_id)
 
         out_dir = tempfile.mkdtemp(prefix="out_", dir=local_temp_base)
-        if not base_name: base_name = "backup_drive"
+        if not base_name:
+            base_name = "backup_drive"
         base_name = safe_name(base_name)
 
         archive_path = ""
@@ -626,13 +603,21 @@ def download_items_bundle(
             archive_path = os.path.join(out_dir, f"{base_name}.zip")
             comp = zipfile.ZIP_DEFLATED
             level = 1 if compression_level == "fast" else (9 if compression_level == "max" else 6)
-            archive_obj = zipfile.ZipFile(archive_path, "w", compression=comp, compresslevel=level, allowZip64=True)
+            archive_obj = zipfile.ZipFile(
+                archive_path,
+                "w",
+                compression=comp,
+                compresslevel=level,
+                allowZip64=True,
+            )
         else:
             archive_path = os.path.join(out_dir, f"{base_name}.tar.gz")
             archive_obj = tarfile.open(archive_path, "w:gz")
 
         try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_ARCHIVE_WORKERS) as executor:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=MAX_ARCHIVE_WORKERS
+            ) as executor:
                 futures = []
                 for f_info in files_list_result:
                     fut = executor.submit(
@@ -642,7 +627,7 @@ def download_items_bundle(
                         archive_obj,
                         archive_format,
                         progress_dict,
-                        task_id
+                        task_id,
                     )
                     futures.append(fut)
 
@@ -654,12 +639,18 @@ def download_items_bundle(
                 archive_obj.close()
 
     except Exception as e:
-        shutil.rmtree(prepare_long_path(tmp_root), onerror=handle_remove_readonly)
+        shutil.rmtree(
+            StorageService.prepare_long_path(tmp_root),
+            onerror=handle_remove_readonly,
+        )
         if progress_dict and task_id:
             sync_task_to_db(task_id)
         raise e
 
-    shutil.rmtree(prepare_long_path(tmp_root), onerror=handle_remove_readonly)
+    shutil.rmtree(
+        StorageService.prepare_long_path(tmp_root),
+        onerror=handle_remove_readonly,
+    )
 
     update_progress(task_id, {
         "phase": "concluido",
@@ -681,8 +672,8 @@ def mirror_items_to_local(
     processing_mode: str = "sequential",
 ) -> None:
 
-    dest_root_long = prepare_long_path(dest_root)
-    ensure_dir_exists(dest_root_long)
+    dest_root_long = StorageService.prepare_long_path(dest_root)
+    StorageService.ensure_dir(dest_root_long)
 
     check_status_pause_cancel(progress_dict, task_id)
 

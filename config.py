@@ -70,3 +70,7 @@ BACKUP_RETENTION_MAX_FILES = 12  # exemplo: 10
 
 # Quantidade máxima de dias a manter (0 ou None = ilimitado)
 BACKUP_RETENTION_MAX_DAYS = 30   # exemplo: 30
+
+LOG_ENABLED = False  # False = desativa totalmente os logs
+LOG_EXTERNAL_ENABLED = False  # envia logs para endpoint externo
+LOG_EXTERNAL_URL = "http://meu-servico-de-logs/api/events"

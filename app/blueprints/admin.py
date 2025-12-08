@@ -28,6 +28,7 @@ from flask import (
 )
 
 from app.services.auth import get_credentials
+from app.services.storage import StorageService
 from app.models import (
     db,
     TaskModel,
@@ -213,8 +214,7 @@ def _sync_backups_from_disk():
     Garante que todos os arquivos em storage/backups estejam refletidos
     na tabela backup_files.
     """
-    folder_path = os.path.join(current_app.root_path, BACKUP_FOLDER_NAME)
-    os.makedirs(folder_path, exist_ok=True)
+    folder_path = StorageService.backups_dir()
 
     existing_by_name = {b.filename: b for b in BackupFileModel.query.all()}
     changed = False
@@ -952,7 +952,7 @@ def _worker_extract_local(app, task_id, backup_id, target_path, selected_paths):
             lower = backup.path.lower()
 
             # Garante criação da pasta
-            os.makedirs(target_path, exist_ok=True)
+            StorageService.ensure_dir(target_path)
 
             # Lógica ZIP
             if lower.endswith(".zip"):
