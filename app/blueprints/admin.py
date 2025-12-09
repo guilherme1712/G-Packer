@@ -409,6 +409,11 @@ def _build_archive_tree(archive_path: str):
 def list_backups():
     """
     Tela que lista todos os backups salvos em storage/backups.
+
+    Agora:
+    - Agrupa por SÉRIE (series_key/display_series)
+    - Para cada série, manda todas as versões (snapshots) para o template
+    - A última versão (mais recente) é marcada como "latest"
     """
     creds = get_credentials()
     if not creds:
@@ -416,17 +421,28 @@ def list_backups():
 
     _sync_backups_from_disk()
 
-    # OTIMIZAÇÃO: defer('structure_cache') faz com que o SQLAlchemy NÃO traga
-    # o JSON gigante nesta consulta, apenas quando for explicitamente acessado.
+    # Não trazemos o JSON gigante da estrutura nesta tela
     backups = BackupFileModel.query.options(
         defer(BackupFileModel.structure_cache)
     ).order_by(
-        BackupFileModel.created_at.desc()
+        BackupFileModel.series_key.asc().nullslast(),
+        BackupFileModel.version_index.desc().nullslast(),
+        BackupFileModel.created_at.desc(),
     ).all()
 
-    files = []
+    # Agrupa por série lógica
+    series_map = {}
     for b in backups:
-        files.append({
+        series_key = _logical_series_key(b)
+
+        if series_key not in series_map:
+            series_map[series_key] = {
+                "series_key": series_key,
+                "latest": None,
+                "versions": [],
+            }
+
+        version_info = {
             "id": b.id,
             "name": b.filename,
             "path": b.path,
@@ -435,10 +451,40 @@ def list_backups():
             "items_count": b.items_count or 0,
             "origin_task_id": b.origin_task_id,
             "encrypted": getattr(b, "encrypted", False),
-        })
+            "version_index": b.version_index or 1,
+            "is_full": bool(getattr(b, "is_full", True)),
+        }
 
-    return render_template("admin_backups.html", files=files)
+        series_map[series_key]["versions"].append(version_info)
 
+        # O primeiro da lista (por causa da ordenação) é o mais recente
+        if series_map[series_key]["latest"] is None:
+            series_map[series_key]["latest"] = version_info
+
+    # Ordena as séries por nome para ficar estável/organizado
+    series_list = sorted(series_map.values(), key=lambda s: s["series_key"])
+
+    # ⚠️ IMPORTANTE: agora passamos series_list e não mais files
+    return render_template("admin_backups.html", series_list=series_list)
+
+   # Helper local para derivar uma "chave lógica" de série para agrupamento
+def _logical_series_key(b: BackupFileModel) -> str:
+    # 1) Se já temos series_key "nova", usamos ela
+    if b.series_key and not str(b.series_key).startswith("task:task-"):
+        return b.series_key
+
+    # 2) Para backups antigos (ou sem série), agrupamos pelo NOME base do arquivo
+    fname = b.filename or ""
+    lower = fname.lower()
+
+    if lower.endswith(".tar.gz"):
+        base = fname[:-7]
+    elif "." in fname:
+        base = fname.rsplit(".", 1)[0]
+    else:
+        base = fname
+
+    return f"name:{base}"
 
 @admin_bp.route("/admin/backups/<int:backup_id>/download")
 def download_backup_file(backup_id):

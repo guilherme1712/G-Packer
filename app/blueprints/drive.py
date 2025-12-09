@@ -147,50 +147,94 @@ def _background_backup_task(
                     processing_mode=processing_mode,
                 )
 
-                generated_filename = os.path.basename(temp_zip_path)
-                final_dest_path = os.path.join(storage_root_path, generated_filename)
+                # -----------------------------------------
+                # DEFINE A SÉRIE E O PRÓXIMO NÚMERO DE VERSÃO
+                # -----------------------------------------
+                try:
+                    series_key = BackupFileModel.build_series_key(zip_file_name, items)
+                    if not series_key:
+                        series_key = BackupFileModel._normalize_series_key(
+                            None, origin_task_id=task_id
+                        )
+                except Exception:
+                    # fallback em caso de qualquer erro
+                    series_key = BackupFileModel._normalize_series_key(
+                        None, origin_task_id=task_id
+                    )
+
+                last_snapshot = BackupFileModel.get_last_snapshot(series_key)
+                next_version = (
+                    (last_snapshot.version_index or 0) + 1
+                    if last_snapshot and last_snapshot.version_index
+                    else 1
+                )
+
+                # -----------------------------------------
+                # GERA NOME FÍSICO ÚNICO: base-(TASKID)_v{N}.ext
+                # -----------------------------------------
+                original_name = os.path.basename(temp_zip_path)
+                lower = original_name.lower()
+
+                if lower.endswith(".tar.gz"):
+                    base = original_name[:-7]
+                    ext = ".tar.gz"
+                else:
+                    base, ext = os.path.splitext(original_name)
+
+                # Nome versionado com parte do task_id (para evitar colisão entre backups diferentes)
+                # Exemplo: backup-20251209-task-1765283119_v2.tar.gz
+                task_suffix = str(task_id).replace(":", "-").replace("_", "-")[-10:]  # parte final legível
+                versioned_name = f"{base}-{task_suffix}_v{next_version}{ext}"
+                final_dest_path = os.path.join(storage_root_path, versioned_name)
 
                 # move do tmp para a pasta definitiva de backups
                 shutil.move(temp_zip_path, final_dest_path)
 
-                PROGRESS[task_id]["final_filename"] = generated_filename
+                PROGRESS[task_id]["final_filename"] = versioned_name
                 PROGRESS[task_id]["message"] = "Arquivo gerado e salvo com sucesso."
 
-                # Registra/atualiza o BackupFileModel
+                # -----------------------------------------
+                # REGISTRO DO SNAPSHOT (VERSIONAMENTO)
+                # -----------------------------------------
                 try:
                     stat = os.stat(final_dest_path)
                     size_mb = round(stat.st_size / (1024 * 1024), 2)
                     items_count = PROGRESS.get(task_id, {}).get("files_total", 0)
 
-                    existing = BackupFileModel.query.filter_by(
-                        filename=generated_filename
-                    ).first()
+                    # Se for o primeiro da série -> FULL; senão, INCREMENTAL
+                    is_full = last_snapshot is None
+                    parent_id = None if is_full else last_snapshot.id if last_snapshot else None
 
-                    if not existing:
-                        bf = BackupFileModel(
-                            filename=generated_filename,
-                            path=final_dest_path,
-                            size_mb=size_mb,
-                            items_count=items_count,
-                            origin_task_id=task_id,
-                        )
-                        db.session.add(bf)
-                    else:
-                        existing.path = final_dest_path
-                        existing.size_mb = size_mb
-                        existing.items_count = items_count
-                        existing.origin_task_id = task_id
-                        existing.created_at = datetime.utcnow()
+                    # Metadados ricos para consulta futura / UI
+                    metadata = {
+                        "archive_format": archive_format,
+                        "compression_level": compression_level,
+                        "filters": filters or {},
+                        "processing_mode": processing_mode,
+                        "output_mode": output_mode,
+                        "storage_root_path": storage_root_path,
+                    }
 
-                    db.session.commit()
+                    BackupFileModel.register_snapshot(
+                        filename=versioned_name,
+                        path=final_dest_path,
+                        size_mb=size_mb,
+                        items_count=items_count,
+                        origin_task_id=task_id,
+                        series_key=series_key,
+                        is_full=is_full,
+                        parent_id=parent_id,
+                        metadata=metadata,
+                    )
 
+                    # Aplica política de retenção global, agora respeitando séries
                     _apply_retention_policy(storage_root_path)
 
                 except Exception as db_err:
                     db.session.rollback()
                     PROGRESS[task_id]["phase"] = "erro"
                     PROGRESS[task_id]["message"] = (
-                        f"Erro ao registrar backup no banco: {db_err}"
+                        f"Erro ao registrar snapshot de backup no banco: {db_err}"
                     )
 
             # Sincroniza o estado final com a tabela tasks (TaskModel)
@@ -205,6 +249,7 @@ def _background_backup_task(
             except Exception:
                 pass
             sync_task_to_db(task_id)
+
 
 
 @drive_bp.route("/folders")
