@@ -1,4 +1,4 @@
-# controllers/auth_controller.py
+# app/blueprints/auth.py
 from flask import (
     Blueprint,
     render_template,
@@ -8,27 +8,21 @@ from flask import (
     session,
     flash,
 )
-
 from app.services.auth import (
     get_credentials,
     build_flow,
-    save_credentials,          # <<< aqui
+    save_credentials,
 )
+from app.services.audit import AuditService  # <--- IMPORT
 
 auth_bp = Blueprint("auth", __name__)
 
-
-# -----------------------------------------------------------
-# Rotas de autenticação / tela inicial
-# -----------------------------------------------------------
 @auth_bp.route("/")
 def index():
     creds = get_credentials()
     if creds:
-        # endpoint 'folders' dentro do blueprint 'drive'
         return redirect(url_for("admin.dashboard"))
     return render_template("index.html")
-
 
 @auth_bp.route("/login")
 def login():
@@ -47,7 +41,10 @@ def login():
 
 @auth_bp.route("/logout")
 def logout():
-    # remove apenas o id da sessão (tokens continuam no banco)
+    # [AUDIT] Log antes de limpar a sessão
+    user_email = AuditService.get_current_user_email()
+    AuditService.log("LOGOUT", "Sistema", user_email=user_email)
+
     session.pop("google_auth_id", None)
     flash("Sessão encerrada com sucesso.")
     return redirect(url_for("auth.index"))
@@ -62,12 +59,12 @@ def oauth2callback():
     try:
         flow = build_flow(state=state)
         flow.fetch_token(authorization_response=request.url)
-
         creds = flow.credentials
-
-        # Em vez de mexer diretamente na session, usamos a função que
-        # salva na session + em arquivo (para o scheduler)
         save_credentials(creds)
+
+        # [AUDIT] Login realizado com sucesso
+        # O email pode ser extraído se estiver disponível no objeto creds ou via serviço
+        AuditService.log("LOGIN", "Google Auth", details="Autenticação OAuth2 completada")
 
         return redirect(url_for("admin.dashboard"))
     except Exception as e:

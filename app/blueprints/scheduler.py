@@ -4,6 +4,7 @@ import json
 
 from app.models import db, ScheduledTaskModel, BackupProfileModel
 from app.services.scheduler import reload_jobs
+from app.services.audit import AuditService
 
 scheduler_bp = Blueprint("scheduler", __name__)
 
@@ -74,6 +75,12 @@ def create_task():
         # Atualiza o scheduler em tempo real
         reload_jobs(current_app._get_current_object())
 
+        AuditService.log(
+            "SCHEDULE_CREATE",
+            name,
+            details=f"Freq: {frequency} | Horário: {run_time} | Fonte: {source}"
+        )
+
         return jsonify({"ok": True})
     except Exception as e:
         db.session.rollback()
@@ -86,6 +93,8 @@ def delete_task(task_id):
         db.session.delete(task)
         db.session.commit()
         reload_jobs(current_app._get_current_object())
+
+        AuditService.log("SCHEDULE_DELETE", f"ID: {task_id}", details=f"Nome: {task_name}")
     return jsonify({"ok": True})
 
 @scheduler_bp.route("/scheduler/toggle/<int:task_id>", methods=["POST"])
@@ -93,8 +102,13 @@ def toggle_task(task_id):
     task = ScheduledTaskModel.query.get(task_id)
     if task:
         task.active = not task.active
+        
         db.session.commit()
         reload_jobs(current_app._get_current_object())
+
+        action = "ENABLE" if task.active else "DISABLE"
+        AuditService.log(f"SCHEDULE_{action}", task.name, details=f"ID: {task_id}")
+
         return jsonify({"ok": True, "active": task.active})
 
     return jsonify({"ok": False, "error": "Task não encontrada"}), 404

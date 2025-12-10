@@ -29,6 +29,7 @@ from flask import (
 
 from app.services.auth import get_credentials
 from app.services.storage import StorageService
+from app.services.audit import AuditService
 from app.models import (
     db,
     TaskModel,
@@ -501,6 +502,12 @@ def download_backup_file(backup_id):
         flash("Arquivo de backup não encontrado no disco.", "error")
         return redirect(url_for("admin.list_backups"))
 
+    AuditService.log(
+        "BACKUP_DOWNLOAD",
+        backup.filename,
+        details=f"Size: {backup.size_mb} MB"
+    )
+
     return send_file(
         backup.path,
         as_attachment=True,
@@ -552,6 +559,7 @@ def api_backup_tree(backup_id):
         return jsonify({"error": "unauthorized"}), 403
 
     backup = BackupFileModel.query.get_or_404(backup_id)
+    filename = backup.filename
 
     if not backup.path or not os.path.exists(backup.path):
         return jsonify({"ok": False, "error": "Arquivo de backup não encontrado."}), 404
@@ -576,6 +584,8 @@ def api_backup_tree(backup_id):
         # SALVA O CACHE NO BANCO
         backup.structure_cache = tree
         db.session.commit()
+
+        AuditService.log("BACKUP_DELETE", filename)
 
         return jsonify({
             "ok": True,
@@ -640,6 +650,13 @@ def api_backup_download_partial(backup_id):
     buf.seek(0)
     base_name, _ = os.path.splitext(backup.filename)
     download_name = f"{base_name}__parcial.zip"
+
+    paths = request.get_json(silent=True).get("paths", [])
+    AuditService.log(
+        "BACKUP_DOWNLOAD_PARTIAL",
+        backup.filename,
+        details=f"Itens baixados: {len(paths)}"
+    )
 
     return send_file(
         buf,
@@ -857,6 +874,12 @@ def api_backup_restore_drive(backup_id):
                     .execute()
                 )
                 uploaded.append({"path": rel_path, "drive_id": created["id"]})
+
+    AuditService.log(
+        "RESTORE_DRIVE",
+        backup.filename,
+        details=f"Arquivos restaurados: {len(paths)}"
+    )
 
     return jsonify(
         {
@@ -1115,6 +1138,12 @@ def api_backup_extract_local(backup_id):
         args=(app, task_id, backup_id, target_path, selected_paths)
     )
     t.start()
+
+    AuditService.log(
+        "EXTRACT_LOCAL",
+        backup.filename,
+        details=f"Destino: {target_path}"
+    )
 
     # 4. Retorna imediatamente
     return jsonify({

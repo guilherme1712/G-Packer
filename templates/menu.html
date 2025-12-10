@@ -42,11 +42,24 @@
             <span class="sidebar-tooltip">Status</span>
         </a>
 
-        <a href="{{ url_for('scheduler.index') }}"
+        <a href="{{ url_for('audit.index') }}"
+            class="sidebar-link {% if 'audit' in request.endpoint %}active{% endif %}" aria-label="Auditoria">
+
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                class="feather feather-clock">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+
+            <span class="sidebar-tooltip">Auditoria</span>
+        </a>
+
+        <!-- <a href="{{ url_for('scheduler.index') }}"
             class="sidebar-link {% if active_page == 'scheduler' %}sidebar-link-active{% endif %}" title="Agendador">
             <span class="sidebar-icon">⏱️</span>
             <span class="sidebar-tooltip">Agendador</span>
-        </a>
+        </a> -->
     </nav>
 
 </aside>

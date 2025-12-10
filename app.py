@@ -24,6 +24,7 @@ from app.blueprints.profile import profile_bp
 from app.blueprints.admin import admin_bp
 from app.blueprints.scheduler import scheduler_bp
 from app.blueprints.health import health_bp
+from app.blueprints.audit import audit_bp
 
 from app.services.scheduler import init_scheduler
 
@@ -35,7 +36,7 @@ def register_flask_error_logging(app):
 
     if not LOG_ENABLED:
         return
-    
+
     @app.errorhandler(Exception)
     def handle_flask_exception(e):
         import traceback
@@ -162,6 +163,7 @@ def create_app() -> Flask:
     app.register_blueprint(admin_bp)
     app.register_blueprint(scheduler_bp)
     app.register_blueprint(health_bp)
+    app.register_blueprint(audit_bp)
 
     # ------------------------------
     # BANCO + SCHEDULER

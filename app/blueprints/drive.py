@@ -30,7 +30,7 @@ from app.services.Google.drive_cache import (
     rebuild_full_cache,
     search_cache,
 )
-
+from app.services.audit import AuditService
 from app.services.Google.drive_download import download_items_bundle, mirror_items_to_local
 from app.services.Google.drive_activity import fetch_activity_log
 from app.services.storage import StorageService
@@ -114,7 +114,9 @@ def _background_backup_task(
     archive_format,
     filters,
     processing_mode,
-    backup_type="full"  # 'full' ou 'incremental'
+    backup_type="full",  # 'full' ou 'incremental'
+    client_ip=None,   # [NOVO]
+    user_email=None   # [NOVO]
 ):
     with app_context:
         try:
@@ -138,7 +140,7 @@ def _background_backup_task(
                 # Modo Archive (ZIP/TAR) com suporte a FULL/INCREMENTAL
                 # download_items_bundle agora retorna (path, current_manifest)
                  # 1. Determina a Série ANTES de processar
-            # Precisamos disso para achar o manifesto anterior se for incremental
+                 # Precisamos disso para achar o manifesto anterior se for incremental
                 try:
                     series_key = BackupFileModel.build_series_key(zip_file_name, items)
                     if not series_key:
@@ -238,6 +240,30 @@ def _background_backup_task(
 
                     _apply_retention_policy(storage_root_path)
 
+                    final_target = local_mirror_path if output_mode == "mirror" else versioned_name
+                    final_size = "N/A"
+
+                    if output_mode != "mirror":
+                        try:
+                            stat_info = os.stat(final_dest_path)
+                            final_size = f"{round(stat_info.st_size / (1024 * 1024), 2)} MB"
+                        except: pass
+
+                    details_json = json.dumps({
+                        "size_mb": size_mb,
+                        "items": items_downloaded,
+                        "type": type_tag,
+                        "mode": output_mode
+                    })
+
+                    AuditService.log(
+                        action_type="DOWNLOAD_COMPLETE",
+                        target=versioned_name,
+                        ip_address=client_ip,
+                        user_email=user_email,
+                        details=details_json
+                    )
+
                 except Exception as db_err:
                     db.session.rollback()
                     print(f"Erro DB snapshot: {db_err}")
@@ -249,6 +275,15 @@ def _background_backup_task(
         except Exception as e:
             PROGRESS[task_id]["phase"] = "erro"
             PROGRESS[task_id]["message"] = f"Falha: {e}"
+
+            AuditService.log(
+                action_type="DOWNLOAD_ERROR",
+                target=zip_file_name,
+                ip_address=client_ip,
+                user_email=user_email,
+                details=str(e)
+            )
+
             sync_task_to_db(task_id)
 
 
@@ -414,6 +449,8 @@ def add_favorite():
 
     try:
         db.session.commit()
+        AuditService.log("FAVORITE_ADD", data.get('name'), details=data.get('path'))
+
         return jsonify({"ok": True})
     except Exception as e:
         db.session.rollback()
@@ -466,6 +503,9 @@ def download():
     task_id = data.get("task_id") or f"task-{int(time.time())}"
     init_download_task(task_id)
 
+    client_ip = request.remote_addr
+    user_email = AuditService.get_current_user_email()
+
     thread = Thread(
         target=_background_backup_task,
         args=(
@@ -481,7 +521,9 @@ def download():
             archive_format,
             build_filters_from_form(data),
             processing_mode,
-            backup_type
+            backup_type,
+            client_ip,
+            user_email
         ),
         daemon=True,
     )
