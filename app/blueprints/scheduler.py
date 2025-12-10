@@ -8,10 +8,10 @@ from app.services.audit import AuditService
 
 scheduler_bp = Blueprint("scheduler", __name__)
 
-@scheduler_bp.route("/scheduler")
-def index():
-    tasks = ScheduledTaskModel.query.all()
-    return render_template("scheduler.html", tasks=tasks)
+# @scheduler_bp.route("/scheduler")
+# def index():
+#     tasks = ScheduledTaskModel.query.all()
+#     return render_template("scheduler.html", tasks=tasks)
 
 @scheduler_bp.route("/scheduler/create", methods=["POST"])
 def create_task():

@@ -1,12 +1,23 @@
 # app/blueprints/audit.py
-from flask import Blueprint, render_template, jsonify, request
+from flask import (
+    Blueprint,
+    render_template,
+    jsonify,
+    redirect,
+    url_for,
+    request,
+)
 from dateutil.parser import parse
 from app.services.audit import AuditService
+from app.services.auth import get_credentials
 
 audit_bp = Blueprint("audit", __name__)
 
 @audit_bp.route("/audit")
 def index():
+    creds = get_credentials()
+    if not creds:
+        return redirect(url_for('auth.login'))
     return render_template("audit_logs.html")
 
 @audit_bp.route("/api/audit/logs")

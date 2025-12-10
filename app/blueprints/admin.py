@@ -152,7 +152,7 @@ def _run_auto_migrations():
 def view_db():
     creds = get_credentials()
     if not creds:
-        return "Acesso negado. Faça login primeiro.", 403
+        return redirect(url_for('auth.login'))
 
     _run_auto_migrations()
 
