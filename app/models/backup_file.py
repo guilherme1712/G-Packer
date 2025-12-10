@@ -153,23 +153,11 @@ class BackupFileModel(db.Model):
     # -------------------------------
     # SNAPSHOTS / SÉRIES
     # -------------------------------
-    @classmethod
-    def _normalize_series_key(
-        cls, series_key: Optional[str], origin_task_id: Optional[str]
-    ) -> str:
-        """
-        Regra padrão para gerar a series_key quando não for
-        passada explicitamente:
 
-        - se series_key for informado, usa ele
-        - se origin_task_id for informado, usa "task:<origin_task_id>"
-        - senão, usa "manual:default"
-        """
-        if series_key:
-            return series_key
-        if origin_task_id:
-            return f"task:{origin_task_id}"
-        return "manual:default"
+    @staticmethod
+    def _normalize_series_key(series_key, origin_task_id=None):
+        if series_key: return series_key
+        return f"legacy_{origin_task_id}" if origin_task_id else "unknown"
 
     @classmethod
     def get_last_snapshot(cls, series_key: str) -> Optional["BackupFileModel"]:

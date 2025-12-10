@@ -259,6 +259,8 @@ def _worker_process_folder(
                     "mimeType": mime,
                     "rel_path": rel_path,
                     "size_bytes": size_bytes,
+                    "modifiedTime": f.get("modifiedTime"),
+                    "createdTime": f.get("createdTime"),
                 })
 
         page_token = results.get("nextPageToken")
@@ -336,6 +338,8 @@ def build_files_list_for_items(
                         "mimeType": mime,
                         "rel_path": rel_path,
                         "size_bytes": size_bytes,
+                        "modifiedTime": meta.get("modifiedTime"),
+                        "createdTime": meta.get("createdTime"),
                     }
                     all_files_list.append(obj)
 
@@ -533,70 +537,4 @@ def calculate_selection_stats(creds, items):
             break
 
     return stats
-    """
-    Calcula estatísticas (tamanho, contagem) dos itens selecionados
-    sem iniciar o download. Retorna JSON para o modal.
-    """
-    service = get_thread_safe_service(creds)
-
-    stats = {
-        "files_count": 0,
-        "folders_count": 0,
-        "total_size_bytes": 0,
-        "preview_files": [] # Lista com nomes dos primeiros 5 arquivos
-    }
-
-    # Fila para processar pastas
-    stack = []
-
-    # 1. Processa a seleção inicial
-    for item in items:
-        if item.get("type") == "folder":
-            stats["folders_count"] += 1
-            stack.append(item["id"])
-        else:
-            stats["files_count"] += 1
-            # Se já veio da árvore com tamanho, usa. Se não, assume 0 ou busca depois (aqui simplificado)
-            s = int(item.get("size_bytes", 0))
-            if s == 0 and item.get("size"): s = int(item["size"]) # Fallback
-            stats["total_size_bytes"] += s
-
-            if len(stats["preview_files"]) < 5:
-                stats["preview_files"].append(item["name"])
-
-    # 2. Varredura recursiva rápida (apenas metadados)
-    while stack:
-        parent_id = stack.pop(0)
-        page_token = None
-
-        while True:
-            try:
-                # Pede apenas campos leves
-                results = service.files().list(
-                    q=f"'{parent_id}' in parents and trashed = false",
-                    fields="nextPageToken, files(id, name, mimeType, size)",
-                    pageToken=page_token,
-                    pageSize=1000
-                ).execute()
-
-                files = results.get("files", [])
-
-                for f in files:
-                    if f["mimeType"] == "application/vnd.google-apps.folder":
-                        stats["folders_count"] += 1
-                        stack.append(f["id"])
-                    else:
-                        stats["files_count"] += 1
-                        stats["total_size_bytes"] += int(f.get("size", 0))
-
-                        if len(stats["preview_files"]) < 5:
-                            stats["preview_files"].append(f["name"])
-
-                page_token = results.get("nextPageToken")
-                if not page_token:
-                    break
-            except Exception as e:
-                print(f"Erro ao calcular stats da pasta {parent_id}: {e}")
-                break
-
-    return stats
+    

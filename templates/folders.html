@@ -1556,6 +1556,43 @@
     </div>
 </div>
 
+<div id="modal-backdrop-type-choice" class="modal-backdrop hidden">
+    <div class="modal" style="max-width: 450px;">
+        <div class="modal-header">
+            <h2 class="modal-title">Backup Existente Encontrado</h2>
+        </div>
+        <div class="modal-body">
+            <p style="color:#e5e7eb; margin-bottom:12px;">
+                Já existe uma série de backups para esta seleção (<strong id="choice-series-key"></strong>).
+            </p>
+            <p style="color:#9ca3af; font-size:0.9rem; margin-bottom:20px;">
+                O último backup foi feito em <span id="choice-last-date" style="color:#fff;"></span>.
+                Como deseja prosseguir?
+            </p>
+            <div class="radio-group-vertical">
+                <label class="radio-option">
+                    <input type="radio" name="backup_choice_type" value="incremental" checked>
+                    <div>
+                        <strong>Incremental (Recomendado)</strong>
+                        <span>Baixar apenas o que mudou desde o último backup.</span>
+                    </div>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="backup_choice_type" value="full">
+                    <div>
+                        <strong>Completo (Full)</strong>
+                        <span>Baixar tudo novamente.</span>
+                    </div>
+                </label>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-ghost" onclick="closeModal('type_choice')">Cancelar</button>
+            <button class="btn-primary" onclick="confirmBackupType()">Continuar</button>
+        </div>
+    </div>
+</div>
+
 <style>
     @keyframes spin {
         0% {
@@ -1570,6 +1607,8 @@
 
 
 <script>
+    let pendingPayload = null;
+
     function updateSchedulerItemsPreviewFromSelection() {
         const previewList = document.getElementById('sched-items-preview');
         const countEl = document.getElementById('sched-items-count');
@@ -2732,21 +2771,14 @@
         if (mb) mb.classList.remove('hidden');
     }
 
-    function closeModal(which) {
-        if (which === 'download') {
-            const mb = document.getElementById('modal-backdrop-download');
-            if (mb) mb.classList.add('hidden');
-            const menu = document.getElementById('suggestion-menu');
-            if (menu) menu.classList.remove('show');
-        } else if (which === 'profile') {
-            const mb = document.getElementById('modal-backdrop-profile');
-            if (mb) mb.classList.add('hidden');
-        } else if (which === 'scheduler') {
-            const mb = document.getElementById('modal-backdrop-scheduler');
-            if (mb) mb.classList.add('hidden');
-        }
+    const mbChoice = document.getElementById('modal-backdrop-type-choice');
+    if (mbChoice) {
+        mbChoice.addEventListener('click', (e) => { if (e.target === mbChoice) closeModal('type_choice'); });
     }
-
+    const mbSummary = document.getElementById('modal-backdrop-summary');
+    if (mbSummary) {
+        mbSummary.addEventListener('click', (e) => { if (e.target === mbSummary) closeModal('summary'); });
+    }
 
     function startDownloadProcess() {
         const form = document.getElementById('download-form');
@@ -2755,45 +2787,188 @@
         const formData = new FormData(form);
         const payload = Object.fromEntries(formData.entries());
 
+        // Checkboxes manuais
         ['type_pdf', 'type_docs', 'type_sheets', 'type_images', 'type_videos', 'type_others'].forEach(k => {
             const el = form.querySelector(`input[name="${k}"]`);
             if (el && el.checked) payload[k] = "1";
             else delete payload[k];
         });
 
+        // Adiciona itens se não vieram do form hidden
+        if (!payload.items_json && selectedItems.length > 0) {
+            payload.items_json = JSON.stringify(selectedItems);
+        }
+
+        // Salva na variável global correta
+        pendingDownloadPayload = payload;
         closeModal('download');
-        const executionMode = payload.execution_mode || 'immediate';
+
+        // Se for espelho local, vai direto (sem incremental)
+        if (payload.output_mode === 'mirror') {
+            openSummaryModal();
+            return;
+        }
+
+        // --- VERIFICAÇÃO DE SÉRIE ---
+        let items = [];
+        try { items = JSON.parse(payload.items_json); } catch(e){}
+
+        fetch('/api/backup/check-series', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                items: items,
+                zip_name: payload.zip_name
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok && data.exists) {
+                // SÉRIE EXISTE: Pergunta ao usuário
+                showTypeChoiceModal(data);
+            } else {
+                // NÃO EXISTE: Segue como Full
+                pendingDownloadPayload.backup_type = 'full';
+                openSummaryModal();
+            }
+        })
+        .catch(err => {
+            console.error("Erro check-series:", err);
+            // Fallback: abre resumo direto
+            openSummaryModal();
+        });
+    }
+
+    function showTypeChoiceModal(data) {
+        const keyEl = document.getElementById('choice-series-key');
+        if(keyEl) keyEl.innerText = data.series_key.split(':')[0];
+
+        let dateStr = 'Desconhecida';
+        if (data.last_date) {
+            try { dateStr = new Date(data.last_date).toLocaleString(); } catch(e){}
+        }
+        const dateEl = document.getElementById('choice-last-date');
+        if(dateEl) dateEl.innerText = dateStr;
+
+        const mb = document.getElementById('modal-backdrop-type-choice');
+        if(mb) mb.classList.remove('hidden');
+    }
+
+    function confirmBackupType() {
+        const typeEl = document.querySelector('input[name="backup_choice_type"]:checked');
+        const type = typeEl ? typeEl.value : 'full';
+
+        if (pendingDownloadPayload) {
+            pendingDownloadPayload.backup_type = type;
+        }
+        closeModal('type_choice');
+        openSummaryModal();
+    }
+
+    function openSummaryModal() {
+        const mb = document.getElementById('modal-backdrop-summary');
+        mb.classList.remove('hidden');
+
+        document.getElementById('summary-loading').classList.remove('hidden');
+        document.getElementById('summary-content').classList.add('hidden');
+        document.getElementById('btn-confirm-download').disabled = true;
+
+        fetch('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: selectedItems })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                fillSummaryData(data.stats);
+            } else {
+                showToast('Erro ao calcular: ' + data.error, 'error');
+                closeModal('summary');
+            }
+        })
+        .catch(err => {
+            showToast('Erro de conexão.', 'error');
+            closeModal('summary');
+        });
+    }
+
+    function fillSummaryData(stats) {
+        document.getElementById('summary-loading').classList.add('hidden');
+        document.getElementById('summary-content').classList.remove('hidden');
+        document.getElementById('btn-confirm-download').disabled = false;
+
+        const suffix = stats.is_partial ? "+" : "";
+        document.getElementById('sum-files').innerText = stats.files_count + suffix;
+        document.getElementById('sum-folders').innerText = stats.folders_count + suffix;
+
+        const sizeEl = document.getElementById('sum-size');
+        sizeEl.innerText = (stats.size_formatted || "0 B") + suffix;
+        sizeEl.style.color = stats.is_partial ? "#f39c12" : "#2ecc71";
+
+        const listEl = document.getElementById('sum-preview-list');
+        listEl.innerHTML = '';
+        if (stats.preview_files && stats.preview_files.length > 0) {
+            stats.preview_files.forEach(name => {
+                const div = document.createElement('div');
+                div.className = 'file-preview-item';
+                div.innerText = '📄 ' + name;
+                listEl.appendChild(div);
+            });
+        }
+    }
+
+    function confirmAndDownload() {
+        if (!pendingDownloadPayload) return;
+
+        closeModal('summary');
+        const executionMode = pendingDownloadPayload.execution_mode || 'immediate';
 
         if (executionMode === 'background') {
-            alert("Tarefa iniciada em segundo plano! Acompanhe no widget inferior direito.");
+            showToast("Tarefa em segundo plano! 🚀", 'success');
         } else {
             showProgressUI();
+            showToast("Iniciando...", 'info');
         }
 
         fetch('/download', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(pendingDownloadPayload)
         })
-            .then(r => r.json())
-            .then(data => {
-                if (data.ok) {
-                    if (executionMode === 'immediate') {
-                        currentTaskId = data.task_id;
-                        startPollingForeground();
-                    } else {
-                        pollActiveTasks();
-                    }
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                if (executionMode === 'immediate') {
+                    currentTaskId = data.task_id;
+                    startPollingForeground();
                 } else {
-                    alert("Erro ao iniciar: " + data.error);
-                    hideProgressUI();
+                    pollActiveTasks();
                 }
-            })
-            .catch(err => {
-                console.error(err);
-                alert("Erro de conexão.");
+            } else {
+                showToast("Erro: " + data.error, 'error');
                 hideProgressUI();
-            });
+            }
+        })
+        .catch(err => {
+            showToast("Erro de conexão.", 'error');
+            hideProgressUI();
+        });
+    }
+
+    function closeModal(which) {
+        if (which === 'download') {
+            document.getElementById('modal-backdrop-download').classList.add('hidden');
+            document.getElementById('suggestion-menu')?.classList.remove('show');
+        } else if (which === 'profile') {
+            document.getElementById('modal-backdrop-profile').classList.add('hidden');
+        } else if (which === 'scheduler') {
+            document.getElementById('modal-backdrop-scheduler').classList.add('hidden');
+        } else if (which === 'summary') {
+            document.getElementById('modal-backdrop-summary').classList.add('hidden');
+        } else if (which === 'type_choice') {
+            document.getElementById('modal-backdrop-type-choice').classList.add('hidden');
+        }
     }
 
     // --- PROGRESSO FOREGROUND ---
@@ -3605,178 +3780,6 @@
 
     // Variável temporária para guardar o payload do formulário enquanto o resumo é exibido
     let pendingDownloadPayload = null;
-
-    function startDownloadProcess() {
-        // 1. Coleta os dados do formulário de Download
-        const form = document.getElementById('download-form');
-        if (!form) return;
-
-        const formData = new FormData(form);
-        const payload = Object.fromEntries(formData.entries());
-
-        // Checkboxes manuais
-        ['type_pdf', 'type_docs', 'type_sheets', 'type_images', 'type_videos', 'type_others'].forEach(k => {
-            const el = form.querySelector(`input[name="${k}"]`);
-            if (el && el.checked) payload[k] = "1";
-            else delete payload[k];
-        });
-
-        // Salva payload para usar depois da confirmação
-        pendingDownloadPayload = payload;
-
-        // Fecha modal de configuração
-        closeModal('download');
-
-        // 2. Abre o Modal de Resumo (Calculando...)
-        openSummaryModal();
-    }
-
-    function openSummaryModal() {
-        const mb = document.getElementById('modal-backdrop-summary');
-        mb.classList.remove('hidden');
-
-        // UI Loading
-        document.getElementById('summary-loading').classList.remove('hidden');
-        document.getElementById('summary-content').classList.add('hidden');
-        document.getElementById('btn-confirm-download').disabled = true;
-
-        // Chama API para calcular
-        fetch('/api/analyze', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: selectedItems })
-        })
-            .then(r => r.json())
-            .then(data => {
-                if (data.ok) {
-                    fillSummaryData(data.stats);
-                } else {
-                    showToast('Erro ao calcular resumo: ' + data.error, 'error');
-                    closeModal('summary');
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                showToast('Erro de conexão ao calcular.', 'error');
-                closeModal('summary');
-            });
-    }
-
-    function fillSummaryData(stats) {
-        document.getElementById('summary-loading').classList.add('hidden');
-        document.getElementById('summary-content').classList.remove('hidden');
-        document.getElementById('btn-confirm-download').disabled = false;
-
-        // Lógica Visual para Estimativa
-        const isPartial = stats.is_partial;
-        const suffix = isPartial ? "+" : "";
-        const colorClass = isPartial ? "text-warning" : "text-primary"; // Amarelo se for estimativa, Azul se exato
-
-        // Atualiza contadores
-        const filesEl = document.getElementById('sum-files');
-        filesEl.innerText = stats.files_count + suffix;
-        filesEl.className = "summary-value " + (isPartial ? "text-orange" : ""); // Ex: classe CSS personalizada ou inline style
-
-        document.getElementById('sum-folders').innerText = stats.folders_count + suffix;
-
-        // Tamanho
-        const sizeEl = document.getElementById('sum-size');
-        sizeEl.innerText = (stats.size_formatted || "0 B") + suffix;
-
-        if (isPartial) {
-            // Adiciona um aviso visual
-            sizeEl.style.color = "#f39c12"; // Laranja
-            showToast("Pasta muito grande! Mostrando estimativa parcial.", "warning");
-        } else {
-            sizeEl.style.color = "#2ecc71"; // Verde
-        }
-
-        // Lista de arquivos
-        const listEl = document.getElementById('sum-preview-list');
-        listEl.innerHTML = '';
-        if (stats.preview_files && stats.preview_files.length > 0) {
-            stats.preview_files.forEach(name => {
-                const div = document.createElement('div');
-                div.className = 'file-preview-item';
-                div.innerText = '📄 ' + name;
-                listEl.appendChild(div);
-            });
-
-            // Mensagem de rodapé da lista
-            const moreCount = stats.files_count - stats.preview_files.length;
-            if (moreCount > 0) {
-                const more = document.createElement('div');
-                more.style.fontStyle = 'italic';
-                more.style.marginTop = '5px';
-                // Texto adaptado para parcial
-                const textMore = isPartial ? `...e muitos outros arquivos (+${moreCount})` : `...e mais ${moreCount} arquivos.`;
-                more.innerText = textMore;
-                listEl.appendChild(more);
-            }
-        } else {
-            listEl.innerText = "Nenhum arquivo encontrado diretamente.";
-        }
-    }
-
-    function confirmAndDownload() {
-        if (!pendingDownloadPayload) return;
-
-        closeModal('summary');
-        const executionMode = pendingDownloadPayload.execution_mode || 'immediate';
-
-        if (executionMode === 'background') {
-            showToast("Tarefa enviada para segundo plano! 🚀", 'success');
-        } else {
-            showProgressUI();
-            showToast("Iniciando download... Aguarde.", 'info');
-        }
-
-        // Dispara o download real
-        fetch('/download', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(pendingDownloadPayload)
-        })
-            .then(r => r.json())
-            .then(data => {
-                if (data.ok) {
-                    if (executionMode === 'immediate') {
-                        currentTaskId = data.task_id;
-                        startPollingForeground();
-                    } else {
-                        pollActiveTasks();
-                    }
-                } else {
-                    showToast("Erro ao iniciar: " + data.error, 'error');
-                    hideProgressUI();
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                showToast("Erro de conexão.", 'error');
-                hideProgressUI();
-            });
-    }
-
-    // Atualize também o fechar modal para incluir o novo ID
-    function closeModal(which) {
-        if (which === 'download') {
-            document.getElementById('modal-backdrop-download').classList.add('hidden');
-            document.getElementById('suggestion-menu')?.classList.remove('show');
-        } else if (which === 'profile') {
-            document.getElementById('modal-backdrop-profile').classList.add('hidden');
-        } else if (which === 'summary') {
-            document.getElementById('modal-backdrop-summary').classList.add('hidden');
-        }
-    }
-
-    // Listener para fechar o novo modal clicando fora
-    const mbSummary = document.getElementById('modal-backdrop-summary');
-    if (mbSummary) {
-        mbSummary.addEventListener('click', (e) => {
-            if (e.target === mbSummary) closeModal('summary');
-        });
-    }
 
     function closeSchedulerModal() {
         const backdrop = document.getElementById('modal-backdrop-scheduler');

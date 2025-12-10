@@ -521,6 +521,9 @@ def handle_remove_readonly(func, path, exc):
         # Se for outro erro, deixa estourar (ou ignora se preferir)
         pass
 
+# -----------------------------------------------------------
+#  FUNÇÃO PRINCIPAL DE DOWNLOAD (MODIFICADA)
+# -----------------------------------------------------------
 def download_items_bundle(
     creds: Credentials,
     items: list,
@@ -531,20 +534,26 @@ def download_items_bundle(
     task_id: str | None = None,
     filters: dict | None = None,
     processing_mode: str = "sequential",
-) -> str:
-
-    # Diretório base de trabalho temporário:
-    # antes: os.path.join(os.getcwd(), "storage/temp_work")
+    previous_manifest: dict | None = None  # <<< NOVO PARÂMETRO
+):
+    """
+    Se previous_manifest for passado (dict {id: modifiedTime}),
+    filtra a lista para baixar apenas novos ou modificados.
+    Retorna (caminho_do_zip, manifesto_atual).
+    """
     local_temp_base = StorageService.temp_work_dir()
-
     tmp_root = tempfile.mkdtemp(prefix="dl_", dir=local_temp_base)
 
-    files_list_result = []
+    files_to_download = []
+    full_manifest = {}
 
     try:
         check_status_pause_cancel(progress_dict, task_id)
 
-        # 1. DOWNLOAD (Concorrente ou Sequencial)
+        # Se for Incremental, forçamos modo sequencial para garantir o diff correto
+        if previous_manifest is not None:
+            processing_mode = "sequential"
+
         if processing_mode == "concurrent":
             update_progress(task_id, {
                 "phase": "mapeando",
@@ -558,108 +567,89 @@ def download_items_bundle(
                 creds, items, tmp_root, progress_dict, task_id, filters
             )
         else:
+            # 1. MAPEAMENTO COMPLETO (Estado ATUAL do Drive)
             service_main = build("drive", "v3", credentials=creds)
-            files_list_result = build_files_list_for_items(
-                service_main,
-                items,
-                creds=creds,
-                filters=filters,
-                progress_dict=progress_dict,
-                task_id=task_id,
+            all_files = build_files_list_for_items(
+                service_main, items, creds=creds, filters=filters, progress_dict=progress_dict, task_id=task_id
             )
 
-            if not files_list_result:
+            # 2. GERA MANIFESTO ATUAL E FILTRA (Lógica Incremental)
+            for f in all_files:
+                fid = f['id']
+                # modifiedTime vem do Drive (string ISO)
+                mtime = f.get('modifiedTime')
+
+                # Salva no manifesto completo (Estado Atual)
+                full_manifest[fid] = mtime
+
+                # Filtra: Baixa se não existir no anterior OU se mudou
+                should_download = True
+                if previous_manifest is not None:
+                    prev_time = previous_manifest.get(fid)
+                    # Se existia e a data é igual (ou anterior, o que seria estranho), pula
+                    if prev_time and mtime <= prev_time:
+                        should_download = False
+
+                if should_download:
+                    files_to_download.append(f)
+
+            if not files_to_download and previous_manifest is None:
                 raise Exception("Nenhum arquivo encontrado.")
 
-            download_files_to_folder(
-                creds,
-                files_list_result,
-                dest_root=tmp_root,
-                progress_dict=progress_dict,
-                task_id=task_id,
-                filters=filters,
-                processing_mode=processing_mode,
-            )
+            if not files_to_download and previous_manifest is not None:
+                # Incremental vazio (nenhuma mudança)
+                update_progress(task_id, {"message": "Nenhuma alteração encontrada (Incremental vazio)."})
+            else:
+                # 3. DOWNLOAD APENAS DO DELTA
+                download_files_to_folder(
+                    creds, files_to_download, dest_root=tmp_root,
+                    progress_dict=progress_dict, task_id=task_id,
+                    filters=filters, processing_mode=processing_mode
+                )
 
         check_status_pause_cancel(progress_dict, task_id)
 
-        # 2. COMPACTAÇÃO
+        # 4. COMPACTAÇÃO
         update_progress(task_id, {
-            "phase": "compactando",
-            "message": "Compactando (Multi-thread)...",
-            "history": ["Iniciando compactação..."]
+            "phase": "compactando", "message": "Compactando...",
+            "history": [f"Compactando {len(files_to_download)} arquivos..."]
         })
         sync_task_to_db(task_id)
 
         out_dir = tempfile.mkdtemp(prefix="out_", dir=local_temp_base)
-        if not base_name:
-            base_name = "backup_drive"
-        base_name = safe_name(base_name)
+        base_name = safe_name(base_name if base_name else "backup")
 
-        archive_path = ""
+        ext = "zip" if archive_format == "zip" else "tar.gz"
+        archive_path = os.path.join(out_dir, f"{base_name}.{ext}")
+
         archive_obj = None
-
         if archive_format == "zip":
-            archive_path = os.path.join(out_dir, f"{base_name}.zip")
-            comp = zipfile.ZIP_DEFLATED
-            level = 1 if compression_level == "fast" else (9 if compression_level == "max" else 6)
-            archive_obj = zipfile.ZipFile(
-                archive_path,
-                "w",
-                compression=comp,
-                compresslevel=level,
-                allowZip64=True,
-            )
+            lvl = 1 if compression_level == "fast" else (9 if compression_level == "max" else 6)
+            archive_obj = zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=lvl, allowZip64=True)
         else:
-            archive_path = os.path.join(out_dir, f"{base_name}.tar.gz")
             archive_obj = tarfile.open(archive_path, "w:gz")
 
         try:
-            with concurrent.futures.ThreadPoolExecutor(
-                max_workers=MAX_ARCHIVE_WORKERS
-            ) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_ARCHIVE_WORKERS) as executor:
                 futures = []
-                for f_info in files_list_result:
-                    fut = executor.submit(
-                        _worker_archive_one,
-                        f_info,
-                        tmp_root,
-                        archive_obj,
-                        archive_format,
-                        progress_dict,
-                        task_id,
-                    )
-                    futures.append(fut)
-
-                # Aguarda todas as threads de compactação
-                for future in concurrent.futures.as_completed(futures):
-                    future.result()
+                for f_info in files_to_download:
+                    futures.append(executor.submit(_worker_archive_one, f_info, tmp_root, archive_obj, archive_format, progress_dict, task_id))
+                for future in concurrent.futures.as_completed(futures): future.result()
         finally:
-            if archive_obj:
-                archive_obj.close()
+            if archive_obj: archive_obj.close()
 
     except Exception as e:
-        shutil.rmtree(
-            StorageService.prepare_long_path(tmp_root),
-            onerror=handle_remove_readonly,
-        )
-        if progress_dict and task_id:
-            sync_task_to_db(task_id)
+        shutil.rmtree(StorageService.prepare_long_path(tmp_root), onerror=handle_remove_readonly)
+        if progress_dict and task_id: sync_task_to_db(task_id)
         raise e
 
-    shutil.rmtree(
-        StorageService.prepare_long_path(tmp_root),
-        onerror=handle_remove_readonly,
-    )
+    shutil.rmtree(StorageService.prepare_long_path(tmp_root), onerror=handle_remove_readonly)
 
-    update_progress(task_id, {
-        "phase": "concluido",
-        "message": "Sucesso!",
-        "history": ["Finalizado."]
-    })
+    update_progress(task_id, {"phase": "concluido", "message": "Sucesso!", "history": ["Finalizado."]})
     sync_task_to_db(task_id)
 
-    return archive_path
+    # RETORNA A TUPLA (Arquivo, ManifestoCompleto)
+    return archive_path, full_manifest
 
 
 def mirror_items_to_local(

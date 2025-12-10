@@ -114,6 +114,7 @@ def _background_backup_task(
     archive_format,
     filters,
     processing_mode,
+    backup_type="full"  # 'full' ou 'incremental'
 ):
     with app_context:
         try:
@@ -132,10 +133,31 @@ def _background_backup_task(
                     filters=filters,
                     processing_mode=processing_mode,
                 )
-
+                # Mirror não gera registro de BackupFileModel snapshot por enquanto
             else:
-                # Modo "archive" - gera um pacote (zip / tar.xz / etc.)
-                temp_zip_path = download_items_bundle(
+                # Modo Archive (ZIP/TAR) com suporte a FULL/INCREMENTAL
+                # download_items_bundle agora retorna (path, current_manifest)
+                 # 1. Determina a Série ANTES de processar
+            # Precisamos disso para achar o manifesto anterior se for incremental
+                try:
+                    series_key = BackupFileModel.build_series_key(zip_file_name, items)
+                    if not series_key:
+                        series_key = BackupFileModel._normalize_series_key(None, origin_task_id=task_id)
+                except:
+                    series_key = BackupFileModel._normalize_series_key(None, origin_task_id=task_id)
+
+                last_snapshot = BackupFileModel.get_last_snapshot(series_key)
+
+                # Se pediu incremental mas não tem pai, vira Full forçado
+                if backup_type == "incremental" and not last_snapshot:
+                    print(f"Task {task_id}: Incremental solicitado, mas sem backup anterior. Forçando FULL.")
+                    backup_type = "full"
+
+                previous_manifest = None
+                if backup_type == "incremental" and last_snapshot and last_snapshot.metadata_json:
+                    previous_manifest = last_snapshot.metadata_json.get("manifest")
+
+                result = download_items_bundle(
                     creds,
                     items,
                     base_name=zip_file_name,
@@ -145,81 +167,68 @@ def _background_backup_task(
                     task_id=task_id,
                     filters=filters,
                     processing_mode=processing_mode,
+                    previous_manifest=previous_manifest
                 )
 
-                # -----------------------------------------
-                # DEFINE A SÉRIE E O PRÓXIMO NÚMERO DE VERSÃO
-                # -----------------------------------------
-                try:
-                    series_key = BackupFileModel.build_series_key(zip_file_name, items)
-                    if not series_key:
-                        series_key = BackupFileModel._normalize_series_key(
-                            None, origin_task_id=task_id
-                        )
-                except Exception:
-                    # fallback em caso de qualquer erro
-                    series_key = BackupFileModel._normalize_series_key(
-                        None, origin_task_id=task_id
-                    )
-
-                last_snapshot = BackupFileModel.get_last_snapshot(series_key)
-                next_version = (
-                    (last_snapshot.version_index or 0) + 1
-                    if last_snapshot and last_snapshot.version_index
-                    else 1
-                )
+                # Desempacota retorno (suporta versão antiga que retornava só string)
+                if isinstance(result, tuple):
+                    temp_zip_path, current_manifest = result
+                else:
+                    temp_zip_path, current_manifest = result, {}
 
                 # -----------------------------------------
-                # GERA NOME FÍSICO ÚNICO: base-(TASKID)_v{N}.ext
+                # Define próxima versão
                 # -----------------------------------------
+                next_version = ((last_snapshot.version_index or 0) + 1) if last_snapshot else 1
+
+                # Define se é Full ou Inc baseado no que de fato ocorreu
+                # (Se não passou previous_manifest, foi Full)
+                is_full = (previous_manifest is None)
+
+                # Gera nome físico
                 original_name = os.path.basename(temp_zip_path)
                 lower = original_name.lower()
-
                 if lower.endswith(".tar.gz"):
-                    base = original_name[:-7]
-                    ext = ".tar.gz"
+                    base, ext = original_name[:-7], ".tar.gz"
                 else:
                     base, ext = os.path.splitext(original_name)
 
-                # Nome versionado com parte do task_id (para evitar colisão entre backups diferentes)
-                # Exemplo: backup-20251209-task-1765283119_v2.tar.gz
-                task_suffix = str(task_id).replace(":", "-").replace("_", "-")[-10:]  # parte final legível
-                versioned_name = f"{base}-{task_suffix}_v{next_version}{ext}"
+                # Sufixo do arquivo
+                type_tag = "INC" if not is_full else "FULL"
+                task_suffix = str(task_id).replace(":", "")[-6:]
+                versioned_name = f"{base}_v{next_version}_{type_tag}_{task_suffix}{ext}"
                 final_dest_path = os.path.join(storage_root_path, versioned_name)
 
-                # move do tmp para a pasta definitiva de backups
                 shutil.move(temp_zip_path, final_dest_path)
 
                 PROGRESS[task_id]["final_filename"] = versioned_name
-                PROGRESS[task_id]["message"] = "Arquivo gerado e salvo com sucesso."
+                PROGRESS[task_id]["message"] = "Arquivo salvo com sucesso."
 
                 # -----------------------------------------
-                # REGISTRO DO SNAPSHOT (VERSIONAMENTO)
+                # Registro no Banco
                 # -----------------------------------------
                 try:
-                    stat = os.stat(final_dest_path)
-                    size_mb = round(stat.st_size / (1024 * 1024), 2)
-                    items_count = PROGRESS.get(task_id, {}).get("files_total", 0)
+                    stat_info = os.stat(final_dest_path)
+                    size_mb = round(stat_info.st_size / (1024 * 1024), 2)
 
-                    # Se for o primeiro da série -> FULL; senão, INCREMENTAL
-                    is_full = last_snapshot is None
-                    parent_id = None if is_full else last_snapshot.id if last_snapshot else None
+                    # Se foi incremental, items_count é quantos baixou no ZIP
+                    # Mas o 'manifest' guardamos O ESTADO COMPLETO da pasta para o próximo diff
+                    items_downloaded = PROGRESS.get(task_id, {}).get("files_downloaded", 0)
 
-                    # Metadados ricos para consulta futura / UI
+                    parent_id = last_snapshot.id if (not is_full and last_snapshot) else None
+
                     metadata = {
                         "archive_format": archive_format,
-                        "compression_level": compression_level,
                         "filters": filters or {},
                         "processing_mode": processing_mode,
-                        "output_mode": output_mode,
-                        "storage_root_path": storage_root_path,
+                        "manifest": current_manifest  # Guarda estado atual completo
                     }
 
                     BackupFileModel.register_snapshot(
                         filename=versioned_name,
                         path=final_dest_path,
                         size_mb=size_mb,
-                        items_count=items_count,
+                        items_count=items_downloaded,
                         origin_task_id=task_id,
                         series_key=series_key,
                         is_full=is_full,
@@ -227,29 +236,20 @@ def _background_backup_task(
                         metadata=metadata,
                     )
 
-                    # Aplica política de retenção global, agora respeitando séries
                     _apply_retention_policy(storage_root_path)
 
                 except Exception as db_err:
                     db.session.rollback()
+                    print(f"Erro DB snapshot: {db_err}")
                     PROGRESS[task_id]["phase"] = "erro"
-                    PROGRESS[task_id]["message"] = (
-                        f"Erro ao registrar snapshot de backup no banco: {db_err}"
-                    )
+                    PROGRESS[task_id]["message"] = f"Erro ao registrar: {db_err}"
 
-            # Sincroniza o estado final com a tabela tasks (TaskModel)
             sync_task_to_db(task_id)
 
         except Exception as e:
-            # Qualquer erro que escapar da lógica acima cai aqui.
             PROGRESS[task_id]["phase"] = "erro"
-            PROGRESS[task_id]["message"] = f"Falha no processo de backup: {e}"
-            try:
-                db.session.rollback()
-            except Exception:
-                pass
+            PROGRESS[task_id]["message"] = f"Falha: {e}"
             sync_task_to_db(task_id)
-
 
 
 @drive_bp.route("/folders")
@@ -440,33 +440,29 @@ def download():
         return jsonify({"ok": False, "error": "Sessão expirada"}), 401
 
     data = request.get_json() or {}
+
+    # ... (Lógica de items e zip_name mantida igual) ...
     items_raw = data.get("items_json")
     if isinstance(items_raw, str):
-        try:
-            items = json.loads(items_raw)
-        except Exception:
-            items = []
-    else:
-        items = items_raw or []
+        try: items = json.loads(items_raw)
+        except: items = []
+    else: items = items_raw or []
 
-    if not items:
-        return jsonify({"ok": False, "error": "Nenhum item selecionado"}), 400
+    if not items: return jsonify({"ok": False, "error": "Nenhum item selecionado"}), 400
 
     zip_name = (data.get("zip_name") or "backup").strip()
-    if zip_name.lower().endswith(".zip"):
-        zip_name = zip_name[:-4]
+    if zip_name.lower().endswith(".zip"): zip_name = zip_name[:-4]
 
     archive_format = data.get("archive_format") or "zip"
     compression_level = data.get("compression_level") or "normal"
     output_mode = data.get("output_mode") or "archive"
     local_mirror_path = (data.get("local_mirror_path") or "").strip()
-
-    execution_mode = data.get("execution_mode") or "immediate"
     processing_mode = data.get("processing_mode") or "sequential"
 
-    # Caminho físico onde os backups são armazenados
-    storage_root_path = StorageService.backups_dir()
+    # --- CORREÇÃO AQUI: Captura a escolha do usuário ---
+    backup_type = data.get("backup_type", "full")
 
+    storage_root_path = StorageService.backups_dir()
     task_id = data.get("task_id") or f"task-{int(time.time())}"
     init_download_task(task_id)
 
@@ -485,6 +481,7 @@ def download():
             archive_format,
             build_filters_from_form(data),
             processing_mode,
+            backup_type
         ),
         daemon=True,
     )
@@ -561,3 +558,39 @@ def analyze_selection():
         return jsonify({"ok": True, "stats": stats})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# -------------------------------------------------------------------------
+#  NOVO ENDPOINT: CHECAR SE JÁ EXISTE SÉRIE (Para perguntar Full/Inc)
+# -------------------------------------------------------------------------
+@drive_bp.route("/api/backup/check-series", methods=["POST"])
+def check_backup_series():
+    creds = get_credentials()
+    if not creds:
+        return jsonify({"ok": False, "error": "Sessão expirada"}), 401
+
+    data = request.get_json() or {}
+    items = data.get("items") or []
+    zip_name = data.get("zip_name", "backup")
+
+    # Calcula a chave da série
+    series_key = BackupFileModel.build_series_key(zip_name, items)
+
+    # Verifica se já existe algum backup dessa série
+    last = BackupFileModel.get_last_snapshot(series_key)
+
+    if last:
+        return jsonify({
+            "ok": True,
+            "exists": True,
+            "series_key": series_key,
+            "last_version": last.version_index,
+            "last_date": last.created_at.isoformat() if last.created_at else None,
+            "is_full": last.is_full
+        })
+    else:
+        return jsonify({
+            "ok": True,
+            "exists": False,
+            "series_key": series_key
+        })
