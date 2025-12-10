@@ -5,687 +5,722 @@
 {% block extra_head %}
 <style>
     /* =========================================
-       CORREÇÃO DO LAYOUT (Fix para .page grid)
+       LAYOUT GRID PRINCIPAL
        ========================================= */
-    .upload-wrapper {
-        /* Garante que este container ocupe toda a largura do grid pai (.page) */
-        grid-column: 1 / -1; 
-        
-        display: grid;
-        grid-template-columns: 1fr 420px; /* Esquerda Flexível | Direita Fixa */
-        gap: 24px;
-        height: calc(100vh - 140px);
-        min-height: 600px;
-        align-items: stretch;
+    h2 {
+        color: white;
     }
 
-    @media (max-width: 1100px) {
-        .upload-wrapper {
-            grid-template-columns: 1fr;
+    .page-content-wrapper {
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 100px);
+        overflow: hidden;
+        padding: 0 24px 24px 24px;
+    }
+
+    .upload-grid {
+        display: grid;
+        grid-template-columns: 1fr 400px;
+        grid-template-rows: auto 1fr;
+        gap: 20px;
+        height: 100%;
+        min-height: 0;
+    }
+
+    @media (max-width: 992px) {
+        .page-content-wrapper {
             height: auto;
-            min-height: auto;
+            overflow: auto;
         }
-        /* No mobile, define altura fixa para a árvore ter scroll */
-        .tree-card-col {
-            height: 600px !important; 
+
+        .upload-grid {
+            grid-template-columns: 1fr;
+            grid-template-rows: auto auto 600px;
+            height: auto;
         }
     }
 
     /* =========================================
-       COMPONENTES VISUAIS (Glassmorphism)
+       STATUS BAR (PROGRESSO GLOBAL)
        ========================================= */
-    .glass-card {
-        background: rgba(15, 23, 42, 0.85); /* Um pouco mais escuro para contraste */
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border: 1px solid rgba(148, 163, 184, 0.15);
-        border-radius: 20px;
-        box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.7);
+    .status-bar-container {
+        grid-column: 1 / -1;
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(148, 163, 184, 0.1);
+        border-radius: 12px;
+        padding: 12px 20px;
+        display: none;
+        /* Oculto se vazio */
+        align-items: center;
+        gap: 20px;
+        backdrop-filter: blur(10px);
+        animation: slideDown 0.3s ease;
+    }
+
+    .status-bar-container.active {
+        display: flex;
+    }
+
+    .status-info {
+        flex: 1;
+    }
+
+    .status-metrics {
+        display: flex;
+        gap: 15px;
+        font-size: 0.8rem;
+        color: #cbd5e1;
+        border-left: 1px solid rgba(255, 255, 255, 0.1);
+        padding-left: 15px;
+    }
+
+    @keyframes slideDown {
+        from {
+            transform: translateY(-10px);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    /* =========================================
+       GLASS PANELS & UI
+       ========================================= */
+    .glass-panel {
+        background: rgba(30, 41, 59, 0.7);
+        border: 1px solid rgba(148, 163, 184, 0.1);
+        border-radius: 16px;
         display: flex;
         flex-direction: column;
         overflow: hidden;
         position: relative;
+        box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(12px);
     }
 
-    .glass-header {
-        padding: 16px 24px;
-        border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-        background: linear-gradient(to right, rgba(30, 41, 59, 0.6), rgba(30, 41, 59, 0.3));
+    .panel-header {
+        padding: 16px 20px;
+        background: rgba(15, 23, 42, 0.4);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         display: flex;
         justify-content: space-between;
         align-items: center;
     }
 
-    .glass-title {
-        font-size: 1rem;
-        font-weight: 700;
+    .panel-title {
         color: #f1f5f9;
-        margin: 0;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-
-    /* =========================================
-       DROPZONE (Área de Arraste)
-       ========================================= */
-    .dropzone-container {
-        flex: 1;
-        margin: 24px;
-        border: 2px dashed rgba(99, 102, 241, 0.4);
-        border-radius: 16px;
-        background: rgba(99, 102, 241, 0.03);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        min-height: 300px;
-    }
-
-    .dropzone-container:hover, 
-    .dropzone-container.drag-over {
-        border-color: #818cf8;
-        background: rgba(99, 102, 241, 0.15);
-        transform: translateY(-2px);
-        box-shadow: 0 15px 35px -10px rgba(99, 102, 241, 0.25);
-    }
-
-    .drop-icon-wrapper {
-        width: 80px;
-        height: 80px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(168, 85, 247, 0.2));
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 24px;
-        border: 1px solid rgba(129, 140, 248, 0.3);
-        font-size: 2.5rem;
-        color: #a5b4fc;
-        transition: transform 0.3s ease;
-    }
-
-    .dropzone-container:hover .drop-icon-wrapper {
-        transform: scale(1.15) rotate(10deg);
-        color: #fff;
-        border-color: #818cf8;
-    }
-
-    /* Botões dentro do Dropzone */
-    .btn-glass-action {
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        color: #e2e8f0;
-        padding: 10px 24px;
-        border-radius: 99px;
-        font-size: 0.9rem;
         font-weight: 600;
-        transition: all 0.2s;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    
-    .btn-glass-action:hover {
-        background: rgba(255, 255, 255, 0.2);
-        color: #fff;
-        transform: translateY(-2px);
+        font-size: 1rem;
+        margin: 0;
     }
 
-    /* =========================================
-       LISTA DE ARQUIVOS (Fila)
-       ========================================= */
-    .file-queue-panel {
-        display: none; /* Oculto inicialmente */
+    /* SWITCH CUSTOMIZADO */
+    .structure-toggle {
+        background: rgba(0, 0, 0, 0.3);
+        padding: 12px;
+        border-radius: 8px;
+        margin: 16px 16px 0 16px;
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        display: flex;
+        align-items: center;
+    }
+
+    /* DROPZONE & LISTA */
+    .left-column {
+        display: flex;
         flex-direction: column;
-        border-top: 1px solid rgba(148, 163, 184, 0.15);
-        background: rgba(15, 23, 42, 0.4);
-        height: 45%;
-        min-height: 200px;
+        gap: 16px;
+        height: 100%;
+        min-height: 0;
     }
 
-    .file-queue-panel.active {
-        display: flex;
-    }
-
-    .queue-list {
+    .dropzone-wrapper {
         flex: 1;
-        overflow-y: auto;
-        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
     }
-    
-    /* Scrollbar Fina */
-    .queue-list::-webkit-scrollbar { width: 6px; }
-    .queue-list::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.4); border-radius: 99px; }
 
-    .file-item {
+    .dropzone-area {
+        flex: 1;
+        margin: 16px;
+        border: 2px dashed rgba(99, 102, 241, 0.3);
+        border-radius: 12px;
+        background: rgba(99, 102, 241, 0.02);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        min-height: 150px;
+    }
+
+    .dropzone-area.drag-over {
+        border-color: #818cf8;
+        background: rgba(99, 102, 241, 0.1);
+    }
+
+    .drop-icon {
+        width: 64px;
+        height: 64px;
+        background: rgba(99, 102, 241, 0.2);
+        color: #818cf8;
+        border-radius: 50%;
         display: flex;
         align-items: center;
-        padding: 12px 16px;
-        margin-bottom: 8px;
-        background: rgba(255, 255, 255, 0.04);
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.02);
-        transition: background 0.2s;
-    }
-    .file-item:hover { background: rgba(255, 255, 255, 0.08); }
-
-    .file-icon-box {
-        width: 40px; height: 40px;
-        border-radius: 10px;
-        background: rgba(15, 23, 42, 0.6);
-        display: flex; align-items: center; justify-content: center;
-        margin-right: 16px;
-        font-size: 1.2rem;
+        justify-content: center;
+        font-size: 1.8rem;
+        margin-bottom: 16px;
     }
 
-    /* =========================================
-       ÁRVORE DE PASTAS (Treeview)
-       ========================================= */
-    .tree-scroll-container {
+    .file-queue-container {
+        height: 50%;
+        display: none;
+        flex-direction: column;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+        background: rgba(15, 23, 42, 0.3);
+    }
+
+    .file-queue-container.active {
+        display: flex;
+    }
+
+    .queue-scroll {
+        flex: 1;
+        overflow-y: auto;
+        padding: 10px;
+    }
+
+    .queue-scroll::-webkit-scrollbar {
+        width: 5px;
+    }
+
+    .queue-scroll::-webkit-scrollbar-thumb {
+        background: #475569;
+        border-radius: 4px;
+    }
+
+    .file-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 12px;
+        background: rgba(255, 255, 255, 0.03);
+        margin-bottom: 6px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        color: #cbd5e1;
+    }
+
+    /* TREEVIEW & ACTIONS */
+    .right-column {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+    }
+
+    .tree-wrapper {
         flex: 1;
         overflow-y: auto;
         padding: 16px;
-        background: rgba(0, 0, 0, 0.2);
+        min-height: 0;
     }
-    .tree-scroll-container::-webkit-scrollbar { width: 6px; }
-    .tree-scroll-container::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.4); border-radius: 99px; }
 
-    .tree-root, .tree-children { list-style: none; padding-left: 0; margin: 0; }
-    .tree-children { 
-        padding-left: 0; 
-        margin-left: 24px; 
-        border-left: 1px solid rgba(255, 255, 255, 0.1); 
+    .action-footer {
+        padding: 20px;
+        background: rgba(15, 23, 42, 0.5);
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .target-box {
+        background: rgba(15, 23, 42, 0.8);
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .btn-hero {
+        width: 100%;
+        padding: 14px;
+        border: none;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #6366f1, #4f46e5);
+        color: white;
+        font-weight: 600;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+    .btn-hero:disabled {
+        background: #334155;
+        color: #64748b;
+        cursor: not-allowed;
+        box-shadow: none;
+    }
+
+    /* TREE CSS */
+    .tree-root,
+    .tree-children {
+        list-style: none;
+        padding-left: 0;
+        margin: 0;
+    }
+
+    .tree-children {
+        padding-left: 0;
+        margin-left: 18px;
+        border-left: 1px solid rgba(255, 255, 255, 0.1);
         display: none;
     }
 
-    .tree-node { margin: 2px 0; }
-
     .tree-row {
+        padding: 6px 8px;
+        border-radius: 4px;
+        cursor: pointer;
+        color: #94a3b8;
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 8px 10px;
-        border-radius: 8px;
-        cursor: pointer;
-        color: #cbd5e1;
-        font-size: 0.95rem;
-        border: 1px solid transparent;
-        transition: all 0.15s;
+        gap: 6px;
     }
 
     .tree-row:hover {
-        background: rgba(255, 255, 255, 0.08);
         color: #fff;
+        background: rgba(255, 255, 255, 0.05);
     }
 
-    /* Pasta Selecionada */
     .tree-row.selected {
-        background: rgba(99, 102, 241, 0.25);
-        border-color: rgba(99, 102, 241, 0.5);
+        background: rgba(99, 102, 241, 0.2);
         color: #fff;
         font-weight: 600;
     }
 
     .tree-toggle {
-        width: 24px; height: 24px;
-        display: flex; align-items: center; justify-content: center;
-        margin-right: 2px;
-        color: #94a3b8;
+        width: 20px;
+        text-align: center;
+        color: #64748b;
         font-weight: bold;
-        transition: color 0.2s;
-        border-radius: 4px;
-    }
-    .tree-toggle:hover { background: rgba(255,255,255,0.1); color: #fff; }
-
-    .tree-footer {
-        padding: 24px;
-        background: rgba(30, 41, 59, 0.4);
-        border-top: 1px solid rgba(148, 163, 184, 0.15);
-        color: #94a3b8
     }
 
-    .btn-hero {
+    /* BARRA DE PROGRESSO NEON */
+    .progress-container {
+        background: rgba(0, 0, 0, 0.4);
+        border-radius: 20px;
+        height: 24px;
         width: 100%;
-        background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
-        color: white;
-        border: none;
-        padding: 16px;
-        border-radius: 12px;
-        font-weight: 700;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        font-size: 0.95rem;
-        box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
-        transition: all 0.2s;
-        display: flex; align-items: center; justify-content: center; gap: 10px;
-    }
-    
-    .btn-hero:hover:not(:disabled) {
-        transform: translateY(-2px);
-        box-shadow: 0 12px 30px rgba(99, 102, 241, 0.6);
-        filter: brightness(1.1);
-    }
-    
-    .btn-hero:disabled {
-        background: #334155; color: #94a3b8; cursor: not-allowed; box-shadow: none; opacity: 0.7;
+        margin-top: 12px;
+        margin-bottom: 12px;
+        overflow: hidden;
+        position: relative;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.5);
     }
 
-    /* =========================================
-       STATUS CARD ANIMADO (NOVO)
-       ========================================= */
-    #statusCard {
-        z-index: 9999;
-        max-width: 450px;
-        border-left: 5px solid;
-        animation: slideInRight 0.4s ease-out;
-        /* Posicionamento Top Right Fixo */
-        position: fixed;
-        top: 90px;  /* Abaixo do header */
-        right: 30px; 
-        margin: 0;
-        backdrop-filter: blur(12px);
+    .progress-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
+        width: 0%;
+        border-radius: 20px;
+        box-shadow: 0 0 15px rgba(168, 85, 247, 0.8);
+        transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
     }
 
-    @keyframes slideInRight {
-        from { transform: translateX(100%); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
+    .progress-bar-animated {
+        background-image: linear-gradient(45deg, rgba(255, 255, 255, 0.2) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.2) 75%, transparent 75%, transparent);
+        background-size: 2rem 2rem;
+        animation: progress-bar-stripes 1.5s linear infinite;
+    }
+
+    @keyframes progress-bar-stripes {
+        0% {
+            background-position: 2rem 0;
+        }
+
+        100% {
+            background-position: 0 0;
+        }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="page">
-    
-    <div class="page-header">
-        <h1>Central de Upload</h1>
-        <p class="subtitle">Transfira arquivos e pastas para o Drive com estrutura preservada.</p>
+<div class="page-content-wrapper">
+    <div class="d-flex justify-content-between align-items-end mb-3 px-1">
+        <div>
+            <h2 class="h4 text-white fw-bold mb-0">Central de Upload</h2>
+            <small class="text-secondary">Gerencie transferências para o Google Drive</small>
+        </div>
     </div>
 
-    <div class="upload-wrapper">
-        
-        <div class="glass-card">
-            <div class="glass-header">
-                <h2 class="glass-title">
-                    <i class="fas fa-cloud-upload-alt text-primary fa-lg"></i>
-                    Origem dos Arquivos
-                </h2>
-                <div class="d-flex gap-2">
-                    <span class="badge bg-dark border border-secondary text-muted fw-normal px-3">Pastas</span>
-                    <span class="badge bg-dark border border-secondary text-muted fw-normal px-3">Arquivos</span>
+    <div class="upload-grid">
+        <div id="globalProgressPanel" class="status-bar-container">
+            <div
+                style="width: 40px; height: 40px; border-radius: 50%; background: rgba(99,102,241,0.2); display: flex; align-items: center; justify-content: center;">
+                <i class="fas fa-sync fa-spin text-primary"></i>
+            </div>
+            <div class="status-info" style="width: 100%;">
+                <div class="d-flex justify-content-between align-items-end">
+                    <span class="status-title" id="globalStatusText">Sincronizando...</span>
+                    <span class="fw-bold" id="globalPercent" style="color: white;">0%</span>
+                </div>
+                <div class="progress-container">
+                    <div id="globalProgressBar" class="progress-bar-fill progress-bar-animated"></div>
                 </div>
             </div>
-
-            <div id="dropZone" class="dropzone-container">
-                <div class="drop-icon-wrapper">
-                    <i class="fas fa-arrow-up"></i>
+            <div class="status-metrics">
+                <div class="text-center"><strong class="d-block text-white" id="countTotal">0</strong><span>Total</span>
                 </div>
-                <h3 class="text-white fw-bold mb-2">Arraste e solte aqui</h3>
-                <p class="text-secondary mb-4 text-center" style="max-width: 320px;">
-                    Arquivos individuais ou pastas inteiras.<br>A estrutura de diretórios será mantida.
-                </p>
-
-                <div class="d-flex gap-3">
-                    <button class="btn-glass-action" onclick="document.getElementById('fileInput').click()">
-                        <i class="far fa-file"></i> Selecionar Arquivos
-                    </button>
-                    <button class="btn-glass-action" onclick="document.getElementById('folderInput').click()">
-                        <i class="far fa-folder"></i> Selecionar Pasta
-                    </button>
+                <div class="text-center"><strong class="d-block text-success"
+                        id="countSuccess">0</strong><span>Ok</span></div>
+                <div class="text-center"><strong class="d-block text-danger" id="countError">0</strong><span>Erro</span>
                 </div>
-
-                <input type="file" id="fileInput" multiple style="display: none;">
-                <input type="file" id="folderInput" webkitdirectory directory multiple style="display: none;">
-            </div>
-
-            <div id="fileSection" class="file-queue-panel">
-                <div class="glass-header py-3" style="background: rgba(30,41,59,0.7);">
-                    <span class="text-white small fw-bold uppercase ls-1">FILA DE ENVIO</span>
-                    <button class="btn btn-sm text-danger fw-bold p-0" style="background:none; border:none;" onclick="clearAllFiles()">
-                        <i class="fas fa-trash me-1"></i> Limpar
-                    </button>
-                </div>
-                <div id="fileList" class="queue-list"></div>
             </div>
         </div>
 
-        <div class="glass-card tree-card-col">
-            <div class="glass-header">
-                <h2 class="glass-title">
-                    <i class="fas fa-folder-tree text-warning fa-lg"></i>
-                    Destino
-                </h2>
+        <div class="glass-panel left-column">
+            <div class="panel-header">
+                <h3 class="panel-title"><i class="fas fa-cloud-upload-alt text-primary"></i> Origem</h3>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary"
+                        onclick="document.getElementById('fileInput').click()">+ Arq</button>
+                    <button class="btn btn-sm btn-outline-secondary"
+                        onclick="document.getElementById('folderInput').click()">+ Pasta</button>
+                </div>
             </div>
 
-            <div id="treeWrapper" class="tree-scroll-container">
-                <ul id="tree-root" class="tree-root">
-                    </ul>
+            <div class="form-check form-switch structure-toggle">
+                <input class="form-check-input" type="checkbox" id="chkPreserveStructure" checked
+                    style="cursor: pointer;">
+                <label class="form-check-label text-white ps-2" for="chkPreserveStructure" style="cursor: pointer;">
+                    <strong>Manter estrutura de pastas</strong>
+                    <div class="text-secondary small">Se desligado, arquivos soltos irão para a raiz selecionada.</div>
+                </label>
             </div>
 
+            <div class="dropzone-wrapper">
+                <div id="dropZone" class="dropzone-area">
+                    <div class="drop-icon"><i class="fas fa-arrow-up"></i></div>
+                    <h5 class="text-white mb-1">Arraste e solte aqui</h5>
+                    <input type="file" id="fileInput" multiple style="display: none;">
+                    <input type="file" id="folderInput" webkitdirectory directory multiple style="display: none;">
+                </div>
+                <div id="fileSection" class="file-queue-container">
+                    <div
+                        class="px-3 py-2 border-bottom border-secondary d-flex justify-content-between align-items-center">
+                        <small class="text-white fw-bold">FILA (<span id="summaryCount">0</span>)</small>
+                        <button class="btn btn-xs text-danger" onclick="clearAllFiles()">Limpar</button>
+                    </div>
+                    <div id="fileList" class="queue-scroll"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel right-column">
+            <div class="panel-header">
+                <h3 class="panel-title"><i class="fas fa-folder-tree text-warning"></i> Destino</h3>
+            </div>
+            <div id="treeWrapper" class="tree-wrapper">
+                <ul id="tree-root" class="tree-root"></ul>
+            </div>
             <input type="hidden" id="targetFolderId" value="root">
-
-            <div class="tree-footer">
-                <div class="d-flex align-items-center gap-3 mb-4 p-3 rounded-3" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.05);">
-                    <i class="fab fa-google-drive fa-2x text-success"></i>
+            <div class="action-footer">
+                <div class="target-box">
+                    <i class="fab fa-google-drive fa-lg text-success"></i>
                     <div style="overflow: hidden;">
-                        <span class="d-block text-secondary" style="font-size: 0.7rem; text-transform: uppercase; font-weight: 700;">SALVANDO EM:</span>
-                        <strong class="text-white text-truncate d-block" id="selectedFolderNameDisplay">Raiz (Root)</strong>
+                        <span class="d-block text-secondary" style="font-size: 0.7rem; font-weight: 700;">SALVAR
+                            EM:</span>
+                        <strong class="text-white text-truncate d-block" id="selectedFolderNameDisplay">Meu Drive
+                            (Raiz)</strong>
                     </div>
                 </div>
-
-                <div class="d-flex justify-content-between mb-4 px-2 text-secondary small">
-                    <span>Total Itens: <strong class="text-white ms-1" id="summaryCount">0</strong></span>
-                    <span>Tamanho: <strong class="text-white ms-1" id="summarySize">0 MB</strong></span>
-                </div>
-
                 <button id="btnUpload" class="btn-hero" disabled>
-                    <i class="fas fa-paper-plane"></i> INICIAR UPLOAD
+                    <i class="fas fa-paper-plane me-2"></i> INICIAR UPLOAD
                 </button>
             </div>
         </div>
-
     </div>
 </div>
 
-<div id="statusCard" class="alert position-fixed bottom-0 end-0 m-4 shadow-lg d-none" style="z-index: 9999; max-width: 400px; border-left: 6px solid;">
-    <div id="statusContent" class="d-flex align-items-center gap-3"></div>
-</div>
-
 <script>
-    // =========================================================
-    // 1. LÓGICA DA ÁRVORE DE PASTAS (AJAX + Recursão)
-    // =========================================================
-
-    document.addEventListener("DOMContentLoaded", () => {
-        initTree();
-    });
-
-    function initTree() {
-        const ul = document.getElementById('tree-root');
-        ul.innerHTML = '';
-        
-        // Cria nó raiz estático
-        const rootLi = createFolderNode({ id: 'root', name: 'Meu Drive' });
-        // Marca como selecionado
-        rootLi.querySelector('.tree-row').classList.add('selected');
-        
-        // Expande e carrega
-        const ulChildren = rootLi.querySelector('.tree-children');
-        const toggleBtn = rootLi.querySelector('.tree-toggle');
-        ulChildren.style.display = 'block';
-        rootLi.classList.remove('collapsed');
-        toggleBtn.innerText = '▾';
-        
-        ul.appendChild(rootLi);
-        loadChildren('root', ulChildren, rootLi, toggleBtn);
-    }
-
-    function createFolderNode(folder) {
-        const li = document.createElement('li');
-        li.className = 'tree-node collapsed';
-        li.dataset.id = folder.id;
-        li.dataset.name = folder.name;
-
-        const row = document.createElement('div');
-        row.className = 'tree-row';
-        
-        // Clique na linha = Selecionar
-        row.onclick = (e) => {
-            if (e.target.classList.contains('tree-toggle')) return;
-            selectFolder(folder.id, folder.name, row);
-        };
-
-        // Botão Expandir
-        const toggleBtn = document.createElement('span');
-        toggleBtn.className = 'tree-toggle';
-        toggleBtn.innerText = '▸';
-        toggleBtn.onclick = (e) => {
-            e.stopPropagation();
-            toggleNode(li, folder.id, toggleBtn);
-        };
-
-        const icon = document.createElement('i');
-        icon.className = 'fas fa-folder text-warning me-2';
-        
-        const nameSpan = document.createElement('span');
-        nameSpan.className = 'tree-name';
-        nameSpan.innerText = folder.name;
-
-        row.append(toggleBtn, icon, nameSpan);
-
-        const childrenUl = document.createElement('ul');
-        childrenUl.className = 'tree-children';
-
-        li.append(row, childrenUl);
-        return li;
-    }
-
-    function toggleNode(li, folderId, toggleBtn) {
-        const childrenUl = li.querySelector('.tree-children');
-        const isCollapsed = li.classList.contains('collapsed');
-
-        if (isCollapsed) {
-            li.classList.remove('collapsed');
-            childrenUl.style.display = 'block';
-            toggleBtn.innerText = '▾';
-            if (!li.dataset.loaded) {
-                loadChildren(folderId, childrenUl, li, toggleBtn);
-            }
-        } else {
-            li.classList.add('collapsed');
-            childrenUl.style.display = 'none';
-            toggleBtn.innerText = '▸';
-        }
-    }
-
-    async function loadChildren(parentId, containerUl, li, toggleBtn) {
-        containerUl.innerHTML = '<li style="padding:6px 0 6px 34px; color:#64748b; font-size:0.85rem;"><i class="fas fa-circle-notch fa-spin me-2"></i> Carregando...</li>';
-
-        try {
-            // Usa a rota existente: files=0 para trazer só pastas
-            const res = await fetch(`/api/folders/children/${encodeURIComponent(parentId)}?files=0`);
-            const data = await res.json();
-            
-            containerUl.innerHTML = ''; 
-
-            if (data.items && data.items.length > 0) {
-                data.items.forEach(item => {
-                    if (item.type === 'folder') {
-                        const node = createFolderNode(item);
-                        containerUl.appendChild(node);
-                    }
-                });
-                li.dataset.loaded = 'true';
-                
-                if (containerUl.children.length === 0) {
-                    toggleBtn.style.opacity = '0.3'; toggleBtn.onclick = null;
-                    containerUl.innerHTML = '<li style="padding-left:34px; color:#475569; font-size:0.8rem;">(vazio)</li>';
-                }
-            } else {
-                toggleBtn.style.opacity = '0.3'; toggleBtn.onclick = null;
-                containerUl.innerHTML = '<li style="padding-left:34px; color:#475569; font-size:0.8rem;">(vazio)</li>';
-            }
-        } catch (e) {
-            console.error(e);
-            containerUl.innerHTML = '<li style="padding-left:34px; color:#ef4444; font-size:0.8rem;">Erro</li>';
-        }
-    }
-
-    function selectFolder(id, name, rowEl) {
-        document.querySelectorAll('.tree-row.selected').forEach(el => el.classList.remove('selected'));
-        rowEl.classList.add('selected');
-        
-        document.getElementById('targetFolderId').value = id;
-        document.getElementById('selectedFolderNameDisplay').innerText = name;
-    }
-
-    // =========================================================
-    // 2. LÓGICA DE UPLOAD (Inputs + Drag & Drop)
-    // =========================================================
-    const dropZone = document.getElementById('dropZone');
-    const fileList = document.getElementById('fileList');
-    const fileSection = document.getElementById('fileSection');
-    const btnUpload = document.getElementById('btnUpload');
-    const summaryCount = document.getElementById('summaryCount');
-    const summarySize = document.getElementById('summarySize');
-    const statusCard = document.getElementById('statusCard');
-    const statusContent = document.getElementById('statusContent');
-    
+    // --- ESTADO GLOBAL ---
     let uploadQueue = [];
 
-    // Inputs Ocultos
-    document.getElementById('fileInput').addEventListener('change', (e) => addFilesToQueue(Array.from(e.target.files)));
-    document.getElementById('folderInput').addEventListener('change', (e) => addFilesToQueue(Array.from(e.target.files), true));
+    // --- INICIALIZAÇÃO ---
+    document.addEventListener("DOMContentLoaded", () => {
+        initTree();
+        startGlobalMonitor();
 
-    // Drag Events
-    ['dragenter', 'dragover'].forEach(evt => dropZone.addEventListener(evt, (e) => { 
-        e.preventDefault(); dropZone.classList.add('drag-over'); 
-    }));
-    ['dragleave', 'drop'].forEach(evt => dropZone.addEventListener(evt, (e) => { 
-        e.preventDefault(); dropZone.classList.remove('drag-over'); 
-    }));
+        // RE-BINDING EVENT LISTENERS (CRÍTICO PARA FUNCIONAR)
+        const fileInput = document.getElementById('fileInput');
+        const folderInput = document.getElementById('folderInput');
 
-    dropZone.addEventListener('drop', async (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('drag-over');
-        
-        const items = e.dataTransfer.items;
-        if (!items) return;
-        
-        const promises = [];
-        for (let i = 0; i < items.length; i++) {
-            const item = items[i].webkitGetAsEntry();
-            if (item) promises.push(traverseFileTree(item));
-        }
-        await Promise.all(promises);
-        updateUI();
+        if (fileInput) fileInput.addEventListener('change', e => addFiles(Array.from(e.target.files)));
+        if (folderInput) folderInput.addEventListener('change', e => addFiles(Array.from(e.target.files), true));
+
+        // Drag & Drop
+        const dropZone = document.getElementById('dropZone');
+        ['dragenter', 'dragover'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.add('drag-over'); }));
+        ['dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.remove('drag-over'); }));
+
+        dropZone.addEventListener('drop', async e => {
+            e.preventDefault(); dropZone.classList.remove('drag-over');
+            const items = e.dataTransfer.items;
+            if (!items) return;
+
+            // Visual feedback
+            dropZone.style.opacity = '0.5';
+            const promises = [];
+            for (let i = 0; i < items.length; i++) {
+                const entry = items[i].webkitGetAsEntry();
+                if (entry) promises.push(traverse(entry));
+            }
+            await Promise.all(promises);
+            dropZone.style.opacity = '1';
+            updateUI();
+        });
     });
 
-    async function traverseFileTree(item, path = "") {
-        if (item.isFile) {
-            return new Promise((resolve) => item.file((file) => { 
-                addSingleFileToQueue(file, path + file.name); resolve(); 
+    // --- MANIPULAÇÃO DE ARQUIVOS ---
+    async function traverse(entry, path = '') {
+        if (entry.isFile) {
+            return new Promise(resolve => entry.file(f => {
+                addFile(f, path + f.name);
+                resolve();
             }));
-        } else if (item.isDirectory) {
-            const dirReader = item.createReader();
-            return new Promise((resolve) => {
-                const readEntries = () => dirReader.readEntries(async (entries) => {
-                    if (entries.length === 0) resolve();
-                    else {
-                        await Promise.all(entries.map(entry => traverseFileTree(entry, path + item.name + "/")));
-                        readEntries();
-                    }
-                });
+        }
+        if (entry.isDirectory) {
+            const reader = entry.createReader();
+            return new Promise(resolve => {
+                const readEntries = () => {
+                    reader.readEntries(async entries => {
+                        if (!entries.length) resolve();
+                        else {
+                            await Promise.all(entries.map(e => traverse(e, path + entry.name + '/')));
+                            readEntries(); // Continua lendo (chunks)
+                        }
+                    });
+                };
                 readEntries();
             });
         }
     }
 
-    function addFilesToQueue(files, isFolderInput = false) {
-        files.forEach(file => {
-            const path = (isFolderInput && file.webkitRelativePath) ? file.webkitRelativePath : file.name;
-            addSingleFileToQueue(file, path);
+    function addFiles(files, isDir = false) {
+        files.forEach(f => {
+            // Se veio de input folder, usa webkitRelativePath, senão usa name
+            const path = (isDir && f.webkitRelativePath) ? f.webkitRelativePath : f.name;
+            addFile(f, path);
         });
         updateUI();
     }
 
-    function addSingleFileToQueue(file, path) {
-        if (!uploadQueue.some(item => item.path === path && item.file.size === file.size)) {
-            uploadQueue.push({ file: file, path: path });
+    function addFile(f, path) {
+        // Evita duplicatas exatas na fila
+        if (!uploadQueue.some(i => i.path === path)) {
+            uploadQueue.push({ file: f, path: path });
         }
     }
 
-    function removeFile(index) { uploadQueue.splice(index, 1); updateUI(); }
-    function clearAllFiles() { uploadQueue = []; updateUI(); }
+    function clearAllFiles() {
+        uploadQueue = [];
+        updateUI();
+    }
 
     function updateUI() {
-        if (uploadQueue.length > 0) {
-            fileSection.classList.add('active');
-            dropZone.style.minHeight = '200px'; 
-            dropZone.style.flex = "0 0 auto"; 
-        } else {
-            fileSection.classList.remove('active');
-            dropZone.style.minHeight = '300px';
-            dropZone.style.flex = "1";
-        }
+        const hasFiles = uploadQueue.length > 0;
+        const fileSection = document.getElementById('fileSection');
+        const dropZone = document.getElementById('dropZone');
 
-        fileList.innerHTML = uploadQueue.slice(0, 100).map((item, i) => {
-            const isFolder = item.path.includes('/');
-            const iconClass = isFolder ? 'fas fa-folder icon-folder' : 'fas fa-file icon-default';
-            
-            return `
-            <div class="file-item animate__animated animate__fadeIn">
-                <div class="file-icon-box">
-                    <i class="${iconClass}"></i>
-                </div>
-                <div class="file-info">
-                    <div class="file-name" title="${item.path}">${item.path}</div>
-                    <div class="file-size">${formatSize(item.file.size)}</div>
-                </div>
-                <button onclick="removeFile(${i})" class="btn-ghost btn-xs text-secondary p-0" style="background:none;">
-                    <i class="fas fa-times fa-lg"></i>
-                </button>
-            </div>`;
-        }).join('');
+        fileSection.classList.toggle('active', hasFiles);
 
-        if(uploadQueue.length > 100) {
-            fileList.innerHTML += `<div class="text-center text-muted small py-3">E mais ${uploadQueue.length - 100} itens...</div>`;
-        }
+        // Ajuste visual
+        dropZone.style.flex = hasFiles ? '0 0 auto' : '1';
+        dropZone.style.height = hasFiles ? '160px' : 'auto';
 
-        summaryCount.innerText = uploadQueue.length;
-        summarySize.innerText = formatSize(uploadQueue.reduce((acc, i) => acc + i.file.size, 0));
-        btnUpload.disabled = uploadQueue.length === 0;
+        document.getElementById('summaryCount').innerText = uploadQueue.length;
+        document.getElementById('btnUpload').disabled = !hasFiles;
+
+        // Renderiza lista (Limitada a 100 para não travar)
+        const listHtml = uploadQueue.slice(0, 100).map((i, idx) => `
+            <div class="file-row">
+                <i class="fas ${i.path.includes('/') ? 'fa-folder text-warning' : 'fa-file text-info'}"></i>
+                <div class="text-truncate flex-grow-1">${i.path}</div>
+                <span class="text-muted ms-2">${formatSize(i.file.size)}</span>
+                <i class="fas fa-times text-danger ms-2" style="cursor:pointer" onclick="removeFromQueue(${idx})"></i>
+            </div>
+        `).join('');
+
+        const extraCount = uploadQueue.length - 100;
+        document.getElementById('fileList').innerHTML = listHtml + (extraCount > 0 ? `<div class="text-center small text-muted p-2">+ ${extraCount} outros arquivos...</div>` : '');
     }
 
-    // --- Envio para o Backend ---
-    btnUpload.addEventListener('click', async () => {
-        if (uploadQueue.length === 0) return;
-        
-        btnUpload.disabled = true;
-        const originalHtml = btnUpload.innerHTML;
-        btnUpload.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> ENVIANDO...';
-        
-        const formData = new FormData();
-        formData.append('target_folder_id', document.getElementById('targetFolderId').value);
-        
-        uploadQueue.forEach(item => { 
-            formData.append('files', item.file); 
-            formData.append('paths', item.path); 
-        });
+    function removeFromQueue(idx) {
+        uploadQueue.splice(idx, 1);
+        updateUI();
+    }
 
-        try {
-            const res = await fetch('/api/upload', { method: 'POST', body: formData });
-            const data = await res.json();
-            
-            statusCard.classList.remove('d-none');
-            
-            if (data.ok) {
-                statusCard.className = "alert alert-success position-fixed bottom-0 end-0 m-4 shadow-lg";
-                statusCard.style.borderColor = "#22c55e";
-                document.getElementById('statusContent').innerHTML = `<i class="fas fa-check-circle fa-2x text-success"></i> <div><strong>Sucesso!</strong><br>${data.message}</div>`;
-                clearAllFiles();
-                setTimeout(() => statusCard.classList.add('d-none'), 5000);
-            } else {
-                throw new Error(data.error);
+    function formatSize(b) {
+        if (b === 0) return '0 B';
+        const i = Math.floor(Math.log(b) / Math.log(1024));
+        return (b / Math.pow(1024, i)).toFixed(2) + ' ' + ['B', 'KB', 'MB', 'GB'][i];
+    }
+
+    // --- UPLOAD E MONITORAMENTO ---
+    document.getElementById('btnUpload').onclick = async () => {
+        const btn = document.getElementById('btnUpload');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ENVIANDO PARA SERVIDOR...';
+
+        const targetFolderId = document.getElementById('targetFolderId').value;
+        const preserveStructure = document.getElementById('chkPreserveStructure').checked;
+
+        // Paralelismo no Frontend
+        const CONCURRENCY_LIMIT = 2;
+        const queueToProcess = [...uploadQueue];
+        const totalItems = queueToProcess.length;
+        let processedCount = 0;
+
+        const processItem = async (item) => {
+            const fd = new FormData();
+            fd.append('file', item.file);
+            fd.append('relative_path', item.path);
+            fd.append('target_root_id', targetFolderId);
+            fd.append('preserve_structure', preserveStructure); // Envia o checkbox
+
+            try {
+                await fetch('/api/upload/enqueue', { method: 'POST', body: fd });
+            } catch (e) {
+                console.error("Erro rede:", e);
+            } finally {
+                processedCount++;
+                btn.innerHTML = `<i class="fas fa-circle-notch fa-spin"></i> ENFILEIRANDO (${processedCount}/${totalItems})`;
             }
-        } catch (e) {
-            statusCard.className = "alert alert-danger position-fixed bottom-0 end-0 m-4 shadow-lg";
-            statusCard.style.borderColor = "#ef4444";
-            document.getElementById('statusContent').innerHTML = `<i class="fas fa-exclamation-triangle fa-2x text-danger"></i> <div><strong>Erro</strong><br>${e.message}</div>`;
-        } finally {
-            btnUpload.innerHTML = originalHtml;
-            if (uploadQueue.length > 0) btnUpload.disabled = false;
-        }
-    });
+        };
 
-    function formatSize(bytes) {
-        if (bytes === 0) return '0 B';
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        // Workers
+        const worker = async () => {
+            while (queueToProcess.length > 0) {
+                const item = queueToProcess.shift();
+                if (item) await processItem(item);
+            }
+        };
+
+        const workers = [];
+        for (let i = 0; i < Math.min(CONCURRENCY_LIMIT, totalItems); i++) {
+            workers.push(worker());
+        }
+        await Promise.all(workers);
+
+        btn.innerHTML = '<i class="fas fa-check"></i> FEITO!';
+        clearAllFiles();
+        setTimeout(() => {
+            btn.innerHTML = 'INICIAR UPLOAD';
+            btn.disabled = false;
+        }, 2000);
+    };
+
+    // Polling do Banco de Dados
+    let monitorInterval = null;
+    function startGlobalMonitor() {
+        if (monitorInterval) clearInterval(monitorInterval);
+        monitorInterval = setInterval(async () => {
+            try {
+                const res = await fetch('/api/upload/global-status');
+                const stats = await res.json();
+                updateMonitorUI(stats);
+            } catch (e) { }
+        }, 2000);
+    }
+
+    function updateMonitorUI(stats) {
+        const panel = document.getElementById('globalProgressPanel');
+        const bar = document.getElementById('globalProgressBar');
+
+        const total = stats.total_files;
+        const processed = stats.success + stats.error;
+
+        if (total === 0) {
+            panel.classList.remove('active');
+            return;
+        }
+
+        // Mantém painel visível se tem pendência ou acabou recentemente
+        panel.classList.add('active');
+
+        const percent = total > 0 ? Math.round((processed / total) * 100) : 0;
+
+        bar.style.width = percent + '%';
+        document.getElementById('globalPercent').innerText = percent + '%';
+        document.getElementById('countTotal').innerText = total;
+        document.getElementById('countSuccess').innerText = stats.success;
+        document.getElementById('countError').innerText = stats.error;
+
+        if (stats.pending > 0) {
+            document.getElementById('globalStatusText').innerHTML = `<i class="fas fa-satellite-dish me-2 animate-pulse"></i> Processando ${stats.pending} arquivos...`;
+            bar.classList.add('progress-bar-animated');
+            bar.style.background = 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899)';
+        } else {
+            document.getElementById('globalStatusText').innerHTML = `<i class="fas fa-check-circle text-success me-2"></i> Concluído!`;
+            bar.classList.remove('progress-bar-animated');
+            bar.style.background = '#22c55e';
+        }
+    }
+
+    // --- ÁRVORE DE PASTAS ---
+    function initTree() {
+        const ul = document.getElementById('tree-root');
+        ul.innerHTML = '';
+        const rootLi = createFolderNode({ id: 'root', name: 'Meu Drive' });
+        ul.appendChild(rootLi);
+        toggleNode(rootLi, 'root', rootLi.querySelector('.tree-toggle'));
+    }
+
+    function createFolderNode(folder) {
+        const li = document.createElement('li'); li.className = 'tree-node collapsed'; li.dataset.id = folder.id;
+        const row = document.createElement('div'); row.className = 'tree-row';
+        row.onclick = (e) => { if (!e.target.classList.contains('tree-toggle')) selectFolder(folder.id, folder.name, row); };
+
+        const toggle = document.createElement('span'); toggle.className = 'tree-toggle'; toggle.innerText = '▸';
+        toggle.onclick = (e) => { e.stopPropagation(); toggleNode(li, folder.id, toggle); };
+
+        row.append(toggle, Object.assign(document.createElement('i'), { className: 'fas fa-folder text-warning' }), document.createTextNode(folder.name));
+        li.append(row, Object.assign(document.createElement('ul'), { className: 'tree-children' }));
+        return li;
+    }
+
+    async function toggleNode(li, id, toggle) {
+        const ul = li.querySelector('.tree-children');
+        if (li.classList.contains('collapsed')) {
+            li.classList.remove('collapsed'); ul.style.display = 'block'; toggle.innerText = '▾';
+            if (!li.dataset.loaded) {
+                try {
+                    const res = await fetch(`/api/drive/tree-nodes?parent_id=${encodeURIComponent(id)}`);
+                    const data = await res.json();
+                    if (data.ok) {
+                        ul.innerHTML = '';
+                        data.items.forEach(i => { if (i.type === 'folder') ul.appendChild(createFolderNode(i)); });
+                        li.dataset.loaded = 'true';
+                    }
+                } catch { }
+            }
+        } else {
+            li.classList.add('collapsed'); ul.style.display = 'none'; toggle.innerText = '▸';
+        }
+    }
+
+    function selectFolder(id, name, row) {
+        document.querySelectorAll('.tree-row.selected').forEach(e => e.classList.remove('selected'));
+        row.classList.add('selected');
+        document.getElementById('targetFolderId').value = id;
+        document.getElementById('selectedFolderNameDisplay').innerText = name;
     }
 </script>
 {% endblock %}

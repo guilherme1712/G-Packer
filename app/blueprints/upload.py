@@ -1,78 +1,82 @@
-# app/blueprints/upload.py
 import os
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for
+import uuid
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, current_app
+from werkzeug.utils import secure_filename
+from app.models import db, UploadHistoryModel
 from app.services.auth import get_credentials
 from app.services.Google.drive_upload import DriveUploadService
+from app.services.queue_service import QueueService
 from app.services.audit import AuditService
 
 upload_bp = Blueprint("upload", __name__)
 
 @upload_bp.route("/upload")
 def index():
-    """Renderiza a tela de upload."""
     creds = get_credentials()
-    if not creds:
-        return redirect(url_for('auth.login'))
+    if not creds: return redirect(url_for('auth.login'))
     return render_template("upload.html")
 
-@upload_bp.route("/api/upload", methods=["POST"])
-def api_process_upload():
-    """Processa o upload dos arquivos enviados."""
+@upload_bp.route("/api/drive/tree-nodes", methods=["GET"])
+def api_tree_nodes():
     creds = get_credentials()
-    if not creds: return jsonify({"ok": False, "error": "Sessão expirada"}), 401
+    if not creds: return jsonify({"ok": False, "error": "Auth required"}), 401
     
-    # Destino padrão: root
-    root_target_id = request.form.get("target_folder_id") or "root"
+    parent_id = request.args.get("parent_id", "root")
+    try:
+        folders = DriveUploadService.list_folders(creds, parent_id)
+        items = [{"id": f["id"], "name": f["name"], "type": "folder"} for f in folders]
+        return jsonify({"ok": True, "items": items})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@upload_bp.route("/api/upload/global-status")
+def api_global_status():
+    stats = QueueService.get_global_progress()
+    return jsonify(stats)
+
+@upload_bp.route("/api/upload/enqueue", methods=["POST"])
+def api_enqueue():
+    file = request.files.get("file")
+    relative_path = request.form.get("relative_path")
+    target_root_id = request.form.get("target_root_id")
     
-    uploaded_files = request.files.getlist("files")
-    relative_paths = request.form.getlist("paths")
+    # Conversão correta da string 'true'/'false' do JS para Booleano
+    raw_preserve = request.form.get("preserve_structure")
+    preserve_structure = (raw_preserve == 'true')
     
-    if not uploaded_files:
-        return jsonify({"ok": False, "error": "Nenhum arquivo enviado."}), 400
+    if not file: return jsonify({"ok": False}), 400
+
+    # 1. Salvar no Disco Local (Temp)
+    safe_name = secure_filename(file.filename)
+    temp_dir = os.path.join(current_app.root_path, '..', 'storage', 'queue')
+    os.makedirs(temp_dir, exist_ok=True)
     
-    # Se não vieram caminhos (upload simples), usa o nome do arquivo
-    if len(relative_paths) != len(uploaded_files):
-        relative_paths = [f.filename for f in uploaded_files]
+    unique_name = f"{uuid.uuid4().hex}_{safe_name}"
+    save_path = os.path.join(temp_dir, unique_name)
+    file.save(save_path)
+    file_size = os.path.getsize(save_path)
 
-    success_count = 0
-    errors = []
-    folder_cache = {} 
+    # 2. Lógica da Estrutura de Pastas
+    # Se preserve_structure é FALSE, ignoramos a pasta de origem e usamos apenas o nome do arquivo
+    final_drive_path = relative_path if preserve_structure else file.filename
 
-    for file, rel_path in zip(uploaded_files, relative_paths):
-        if file.filename == '': continue
-            
-        try:
-            # Normaliza caminho
-            clean_path = rel_path.replace('\\', '/').strip('/')
-            parts = clean_path.split('/')
-            
-            final_parent_id = root_target_id
-            filename = file.filename
+    # 3. Criar registro no Banco (PENDING)
+    user_email = AuditService.get_current_user_email()
+    
+    new_task = UploadHistoryModel(
+        filename=file.filename,
+        relative_path=final_drive_path,
+        mime_type=file.mimetype,
+        status='PENDING',
+        destination_id=target_root_id,
+        temp_path=save_path,
+        size_bytes=file_size,
+        user_email=user_email
+    )
+    db.session.add(new_task)
+    db.session.commit()
 
-            # Se for estrutura de pasta (tem barras no caminho)
-            if len(parts) > 1:
-                folder_structure = parts[:-1]
-                # Garante que as pastas existam
-                final_parent_id = DriveUploadService.ensure_folder_path(
-                    creds, root_target_id, folder_structure, folder_cache
-                )
-                filename = parts[-1]
+    # 4. Acordar o Worker
+    QueueService.start_worker(current_app._get_current_object())
 
-            # Upload
-            result = DriveUploadService.upload_file(
-                creds, file.stream, filename, 
-                parent_id=final_parent_id, mimetype=file.mimetype
-            )
-            
-            size_bytes = result.get('size', '0')
-            AuditService.log("UPLOAD", clean_path, details={"size": size_bytes, "id": result.get('id')})
-            success_count += 1
-            
-        except Exception as e:
-            errors.append(f"{rel_path}: {str(e)}")
-            AuditService.log("UPLOAD_ERROR", rel_path, details=str(e))
-
-    return jsonify({
-        "ok": True, "count": success_count, "errors": errors,
-        "message": f"{success_count} itens enviados com sucesso."
-    })
+    return jsonify({"ok": True})

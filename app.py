@@ -137,7 +137,9 @@ def create_app() -> Flask:
     app.config["BACKUP_RETENTION_MAX_DAYS"] = BACKUP_RETENTION_MAX_DAYS
     app.config["BACKUP_STORAGE_DIR"] = BACKUP_STORAGE_DIR
     app.config["AUTH_TOKEN_FILE"] = AUTH_TOKEN_FILE
+    app.config['MAX_CONTENT_LENGTH'] = None
     app.config["TIMEZONE"] = TIMEZONE
+    
 
     # Inicializa banco
     db.init_app(app)
@@ -185,4 +187,4 @@ def create_app() -> Flask:
 # --------------------------------------------------------------------
 if __name__ == "__main__":
     app = create_app()
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5555)

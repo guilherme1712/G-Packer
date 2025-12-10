@@ -30,15 +30,7 @@ from flask import (
 from app.services.auth import get_credentials
 from app.services.storage import StorageService
 from app.services.audit import AuditService
-from app.models import (
-    db,
-    TaskModel,
-    BackupProfileModel,
-    BackupFileModel,
-    ScheduledTaskModel,
-    ScheduledRunModel,
-    GoogleAuthModel,
-)
+from app.models import db, BackupFileModel, ScheduledTaskModel, TaskModel, GoogleAuthModel, UploadHistoryModel, BackupProfileModel
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
@@ -893,46 +885,29 @@ def api_backup_restore_drive(backup_id):
 def dashboard():
     """
     Tela inicial do produto (Home / Dashboard).
-    Mostra:
-      - Últimos backups
-      - Próximos agendamentos
-      - Status atual das tarefas
-      - Resumo de credencial Google
+    Mostra métricas unificadas de Backups, Tarefas e Uploads.
     """
     creds = get_credentials()
     if not creds:
         flash("Faça login no Google primeiro.")
         return redirect(url_for("auth.index"))
 
-    # --- Métricas principais ---
+    # --- Métricas de Backup e Sistema (Existentes) ---
     total_backups = BackupFileModel.query.count()
     total_tasks = TaskModel.query.count()
     total_schedules = ScheduledTaskModel.query.count()
     active_schedules = ScheduledTaskModel.query.filter_by(active=True).count()
 
-    # Soma de tamanho total dos backups (MB)
+    # Tamanho total dos backups (MB)
     total_size_mb = (
         db.session.query(func.coalesce(func.sum(BackupFileModel.size_mb), 0.0))
         .scalar()
         or 0.0
     )
 
-    # Último backup salvo
-    last_backup = (
-        BackupFileModel.query
-        .order_by(BackupFileModel.created_at.desc())
-        .first()
-    )
+    last_backup = BackupFileModel.query.order_by(BackupFileModel.created_at.desc()).first()
+    latest_backups = BackupFileModel.query.order_by(BackupFileModel.created_at.desc()).limit(5).all()
 
-    # Últimos 5 backups para a lista "Últimos backups"
-    latest_backups = (
-        BackupFileModel.query
-        .order_by(BackupFileModel.created_at.desc())
-        .limit(5)
-        .all()
-    )
-
-    # Próximos agendamentos (somente ativos)
     next_schedule = (
         ScheduledTaskModel.query
         .filter(ScheduledTaskModel.active.is_(True))
@@ -949,15 +924,8 @@ def dashboard():
         .all()
     )
 
-    # Tarefas mais recentes (para o card "Status atual das tarefas")
-    latest_tasks = (
-        TaskModel.query
-        .order_by(TaskModel.updated_at.desc())
-        .limit(6)
-        .all()
-    )
+    latest_tasks = TaskModel.query.order_by(TaskModel.updated_at.desc()).limit(6).all()
 
-    # Sucesso x Erro para o mini-gráfico
     tasks_success = TaskModel.query.filter_by(phase="concluido").count()
     tasks_error = TaskModel.query.filter_by(phase="erro").count()
     total_finished = tasks_success + tasks_error
@@ -968,17 +936,30 @@ def dashboard():
         success_percent = int((tasks_success / total_finished) * 100)
         error_percent = 100 - success_percent
 
-    # Status da credencial Google (email, último refresh)
-    from app.models import GoogleAuthModel  # já é importado no topo em sua versão atual
-    google_auth = (
-        GoogleAuthModel.query
-        .filter_by(active=True)
-        .order_by(GoogleAuthModel.updated_at.desc())
-        .first()
+    google_auth = GoogleAuthModel.query.filter_by(active=True).order_by(GoogleAuthModel.updated_at.desc()).first()
+
+    # --- NOVAS MÉTRICAS DE UPLOAD ---
+    total_uploads = UploadHistoryModel.query.count()
+    
+    # Tamanho total enviado (convertendo bytes para MB)
+    total_upload_bytes = db.session.query(func.coalesce(func.sum(UploadHistoryModel.size_bytes), 0)).scalar() or 0
+    total_upload_mb = total_upload_bytes / (1024 * 1024)
+
+    # Últimos 5 uploads
+    latest_uploads = (
+        UploadHistoryModel.query
+        .order_by(UploadHistoryModel.created_at.desc())
+        .limit(5)
+        .all()
     )
+
+    # Status de uploads
+    uploads_success = UploadHistoryModel.query.filter_by(status='SUCCESS').count()
+    uploads_error = UploadHistoryModel.query.filter_by(status='ERROR').count()
 
     return render_template(
         "dashboard.html",
+        # Backups e Geral
         total_backups=total_backups,
         total_size_mb=round(total_size_mb, 2),
         total_tasks=total_tasks,
@@ -994,6 +975,12 @@ def dashboard():
         success_percent=success_percent,
         error_percent=error_percent,
         google_auth=google_auth,
+        # Uploads (Novos)
+        total_uploads=total_uploads,
+        total_upload_mb=round(total_upload_mb, 2),
+        latest_uploads=latest_uploads,
+        uploads_success=uploads_success,
+        uploads_error=uploads_error
     )
 
 # ---------------------------------------------------------------------------
