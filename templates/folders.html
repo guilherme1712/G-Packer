@@ -869,6 +869,96 @@
             grid-column: auto;
         }
     }
+
+    /* ===============================
+   MENU DE CONTEXTO (RIGHT CLICK)
+   =============================== */
+
+    .context-menu {
+        position: fixed;
+        background: #ffffff;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        min-width: 180px;
+        padding: 6px 0;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
+        z-index: 999999;
+        display: none;
+    }
+
+    .context-menu-item {
+        padding: 8px 14px;
+        cursor: pointer;
+        font-size: 14px;
+        color: #333;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .context-menu-item:hover {
+        background: #f3f3f3;
+    }
+
+    /* Ícone de ações dentro da linha do item */
+    .tree-action-btn {
+        margin-left: auto;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 13px;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+
+    .tree-row:hover .tree-action-btn {
+        opacity: 1;
+    }
+
+    /* Caixa do modal de renomear */
+    .rename-modal {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #fff;
+        padding: 18px;
+        border-radius: 10px;
+        box-shadow: 0 5px 30px rgba(0, 0, 0, 0.25);
+        width: 320px;
+        z-index: 999999;
+        display: none;
+    }
+
+    .rename-modal input {
+        width: 100%;
+        padding: 8px 10px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+        margin-top: 10px;
+    }
+
+    .rename-modal .modal-actions {
+        margin-top: 14px;
+        text-align: right;
+    }
+
+    .rename-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.45);
+        display: none;
+        z-index: 999998;
+    }
+
+    /* Destino válido para mover */
+    .drop-target {
+        background: rgba(37, 99, 235, 0.15) !important;
+        outline: 2px dashed #1a73e8;
+    }
 </style>
 
 {% endblock %}
@@ -894,6 +984,10 @@
 
                 <button type="button" class="btn-primary btn-xs" onclick="openDownloadModal()">
                     Baixar itens selecionados
+                </button>
+
+                <button type="button" class="btn-danger btn-xs" onclick="deleteSelectedItems()">
+                    🗑 Excluir seleção
                 </button>
 
                 <button type="button" class="btn-secondary btn-xs" onclick="openSchedulerModal()">
@@ -1593,6 +1687,84 @@
     </div>
 </div>
 
+<!-- MENU DE CONTEXTO -->
+<div id="context-menu" class="context-menu">
+    <div class="context-menu-item" onclick="ctxRename()">✏️ Renomear</div>
+    <div class="context-menu-item" onclick="ctxMove()">🚚 Mover para…</div>
+    <div class="context-menu-item" onclick="ctxCreateFolder()">📁 Criar Subpasta</div>
+    <div class="context-menu-item" onclick="ctxTrash()">🗑 Excluir</div>
+    <div class="context-menu-item" onclick="ctxPreview()">👁 Pré-visualizar</div>
+</div>
+
+<!-- MODAL DE RENOMEAR -->
+<div id="rename-overlay" class="rename-overlay"></div>
+<div id="rename-modal" class="rename-modal">
+    <h3>Renomear item</h3>
+    <input id="rename-input" type="text">
+    <div class="modal-actions">
+        <button onclick="closeRenameModal()">Cancelar</button>
+        <button onclick="confirmRename()">Salvar</button>
+    </div>
+</div>
+
+<div id="create-folder-overlay" class="rename-overlay"></div>
+<div id="create-folder-modal" class="rename-modal">
+    <h3>Criar Subpasta</h3>
+    <input id="create-folder-input" type="text" placeholder="Nome da pasta">
+    <div class="modal-actions">
+        <button onclick="closeCreateFolderModal()">Cancelar</button>
+        <button onclick="confirmCreateFolder()">Criar</button>
+    </div>
+</div>
+
+
+<div id="delete-progress" class="delete-progress hidden">
+    <div class="delete-title">🗑 Excluindo itens...</div>
+
+    <div class="delete-bar-bg">
+        <div id="delete-bar" class="delete-bar-fill"></div>
+    </div>
+
+    <div id="delete-status" class="delete-status">Iniciando...</div>
+
+    <button id="delete-cancel-btn" class="btn-danger btn-xs">Cancelar</button>
+</div>
+
+<style>
+    .delete-progress {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        width: 320px;
+        background: #0f172a;
+        color: white;
+        padding: 14px;
+        border-radius: 8px;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        z-index: 999999;
+    }
+
+    .delete-bar-bg {
+        background: #334155;
+        height: 6px;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-top: 10px;
+    }
+
+    .delete-bar-fill {
+        background: #ef4444;
+        height: 100%;
+        width: 0%;
+        transition: width .25s;
+    }
+
+    .hidden {
+        display: none;
+    }
+</style>
+
+
 <style>
     @keyframes spin {
         0% {
@@ -1607,6 +1779,240 @@
 
 
 <script>
+    /* ============================================
+       CONTEXT MENU — STATE
+    ===============================================*/
+    let ctxTarget = null;
+    const ctxMenu = document.getElementById("context-menu");
+
+    document.addEventListener("click", () => ctxMenu.style.display = "none");
+
+    document.addEventListener("contextmenu", (e) => {
+        const li = e.target.closest(".tree-node");
+        if (!li) return;
+
+        e.preventDefault();
+        ctxTarget = li;
+
+        ctxMenu.style.top = e.pageY + "px";
+        ctxMenu.style.left = e.pageX + "px";
+        ctxMenu.style.display = "block";
+    });
+
+
+    /* ============================================
+       RENOMEAR
+    ===============================================*/
+    function ctxRename() {
+        if (!ctxTarget) return;
+        const input = document.getElementById("rename-input");
+        input.value = ctxTarget.dataset.name;
+
+        document.getElementById("rename-modal").style.display = "block";
+        document.getElementById("rename-overlay").style.display = "block";
+    }
+
+    function closeRenameModal() {
+        document.getElementById("rename-modal").style.display = "none";
+        document.getElementById("rename-overlay").style.display = "none";
+    }
+
+    function confirmRename() {
+        const newName = document.getElementById("rename-input").value.trim();
+        if (!newName) return;
+
+        fetch("/api/file/rename", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: ctxTarget.dataset.id, name: newName })
+        })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    ctxTarget.dataset.name = newName;
+                    ctxTarget.querySelector(".tree-name").textContent = newName;
+                    closeRenameModal();
+                    showToast("Renomeado com sucesso!", "success");
+                } else showToast(d.error, "error");
+            });
+    }
+    /* ============================================
+       ADICIONAR PASTA
+    ===============================================*/
+    function ctxCreateFolder() {
+        if (!ctxTarget || ctxTarget.dataset.type !== "folder") {
+            showToast("Selecione uma pasta para criar subpasta.", "warning");
+            return;
+        }
+
+        document.getElementById("create-folder-input").value = "";
+        document.getElementById("create-folder-modal").style.display = "block";
+        document.getElementById("create-folder-overlay").style.display = "block";
+    }
+    function closeCreateFolderModal() {
+        document.getElementById("create-folder-modal").style.display = "none";
+        document.getElementById("create-folder-overlay").style.display = "none";
+    }
+    function confirmCreateFolder() {
+        const name = document.getElementById("create-folder-input").value.trim();
+        if (!name) return;
+
+        const parentId = ctxTarget.dataset.id;
+
+        fetch("/api/folder/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ parent_id: parentId, name })
+        })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    showToast("Pasta criada com sucesso!", "success");
+                    const folder = d.folder;
+
+                    // INSERIR NA ÁRVORE SEM RECARREGAR
+                    insertCreatedFolderIntoTree(ctxTarget, folder);
+
+                    closeCreateFolderModal();
+                } else {
+                    showToast("Erro: " + d.error, "error");
+                }
+            });
+    }
+
+    function insertCreatedFolderIntoTree(parentNode, folderData) {
+        const ul = parentNode.querySelector(".tree-children");
+
+        // Se nunca carregou filhos, força abrir a pasta
+        if (!ul) return;
+
+        // Se pasta estava fechada, agora abre
+        if (parentNode.classList.contains("collapsed")) {
+            parentNode.classList.remove("collapsed");
+            ul.style.display = "block";
+            const toggle = parentNode.querySelector(".tree-toggle");
+            if (toggle) toggle.textContent = "▾";
+        }
+
+        // Criar nó da nova pasta usando sua própria função existente
+        const li = createFolderNode({
+            id: folderData.id,
+            name: folderData.name,
+        });
+
+        ul.appendChild(li);
+    }
+
+
+    /* ============================================
+       EXCLUIR
+    ===============================================*/
+    function ctxTrash() {
+        if (!ctxTarget) return;
+        const id = ctxTarget.dataset.id;
+
+        if (!confirm("Enviar para a lixeira?")) return;
+
+        fetch("/api/file/trash", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id })
+        })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    deleteNodeRecursively(ctxTarget);
+                    showToast("Item enviado para lixeira", "success");
+                } else showToast(d.error, "error");
+            });
+    }
+
+
+    /* ============================================
+       PRÉ-VISUALIZAR
+    ===============================================*/
+    function ctxPreview() {
+        if (!ctxTarget) return;
+        const item = {
+            id: ctxTarget.dataset.id,
+            name: ctxTarget.dataset.name,
+            type: ctxTarget.dataset.type
+        };
+        showItemPreview(item, ctxTarget);
+    }
+
+    /* ============================================
+       MOVER (ABRE ÁRVORE PARA SELEÇÃO DE DESTINO)
+    ===============================================*/
+    function ctxMove() {
+        alert("Arraste o item para uma pasta destino.\nDrag & Drop já está ativo!");
+    }
+
+    /* ============================================
+       DRAG & DROP
+    ===============================================*/
+    document.addEventListener("dragstart", (e) => {
+        const li = e.target.closest(".tree-node");
+        if (!li) return;
+
+        e.dataTransfer.setData("item_id", li.dataset.id);
+        e.dataTransfer.setData("item_type", li.dataset.type);
+
+        li.classList.add("dragging");
+    });
+
+    document.addEventListener("dragend", (e) => {
+        const li = e.target.closest(".tree-node");
+        if (li) li.classList.remove("dragging");
+    });
+
+    /* Permitir soltar em pastas */
+    document.addEventListener("dragover", (e) => {
+        const li = e.target.closest(".tree-node");
+        if (!li) return;
+        if (li.dataset.type !== "folder") return;
+
+        e.preventDefault();
+        li.classList.add("drop-target");
+    });
+
+    document.addEventListener("dragleave", (e) => {
+        const li = e.target.closest(".tree-node");
+        if (li) li.classList.remove("drop-target");
+    });
+
+    document.addEventListener("drop", (e) => {
+        const li = e.target.closest(".tree-node");
+        if (!li) return;
+        li.classList.remove("drop-target");
+
+        const targetId = li.dataset.id;
+        const fileId = e.dataTransfer.getData("item_id");
+
+        if (!fileId || !targetId || fileId === targetId) return;
+
+        fetch("/api/file/move", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                file_id: fileId,
+                target_id: targetId
+            })
+        })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    showToast("Movido com sucesso!", "success");
+                    reloadTree();
+                } else showToast(d.error, "error");
+            });
+    });
+
+    let deleteCancelFlag = false;
+    let deleteCurrentRate = 4;   // começa com 4/s
+    let deleteStableCycles = 0;
+
+
     let pendingPayload = null;
 
     function updateSchedulerItemsPreviewFromSelection() {
@@ -2811,47 +3217,47 @@
 
         // --- VERIFICAÇÃO DE SÉRIE ---
         let items = [];
-        try { items = JSON.parse(payload.items_json); } catch(e){}
+        try { items = JSON.parse(payload.items_json); } catch (e) { }
 
         fetch('/api/backup/check-series', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 items: items,
                 zip_name: payload.zip_name
             })
         })
-        .then(r => r.json())
-        .then(data => {
-            if (data.ok && data.exists) {
-                // SÉRIE EXISTE: Pergunta ao usuário
-                showTypeChoiceModal(data);
-            } else {
-                // NÃO EXISTE: Segue como Full
-                pendingDownloadPayload.backup_type = 'full';
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok && data.exists) {
+                    // SÉRIE EXISTE: Pergunta ao usuário
+                    showTypeChoiceModal(data);
+                } else {
+                    // NÃO EXISTE: Segue como Full
+                    pendingDownloadPayload.backup_type = 'full';
+                    openSummaryModal();
+                }
+            })
+            .catch(err => {
+                console.error("Erro check-series:", err);
+                // Fallback: abre resumo direto
                 openSummaryModal();
-            }
-        })
-        .catch(err => {
-            console.error("Erro check-series:", err);
-            // Fallback: abre resumo direto
-            openSummaryModal();
-        });
+            });
     }
 
     function showTypeChoiceModal(data) {
         const keyEl = document.getElementById('choice-series-key');
-        if(keyEl) keyEl.innerText = data.series_key.split(':')[0];
+        if (keyEl) keyEl.innerText = data.series_key.split(':')[0];
 
         let dateStr = 'Desconhecida';
         if (data.last_date) {
-            try { dateStr = new Date(data.last_date).toLocaleString(); } catch(e){}
+            try { dateStr = new Date(data.last_date).toLocaleString(); } catch (e) { }
         }
         const dateEl = document.getElementById('choice-last-date');
-        if(dateEl) dateEl.innerText = dateStr;
+        if (dateEl) dateEl.innerText = dateStr;
 
         const mb = document.getElementById('modal-backdrop-type-choice');
-        if(mb) mb.classList.remove('hidden');
+        if (mb) mb.classList.remove('hidden');
     }
 
     function confirmBackupType() {
@@ -2878,19 +3284,19 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ items: selectedItems })
         })
-        .then(r => r.json())
-        .then(data => {
-            if (data.ok) {
-                fillSummaryData(data.stats);
-            } else {
-                showToast('Erro ao calcular: ' + data.error, 'error');
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) {
+                    fillSummaryData(data.stats);
+                } else {
+                    showToast('Erro ao calcular: ' + data.error, 'error');
+                    closeModal('summary');
+                }
+            })
+            .catch(err => {
+                showToast('Erro de conexão.', 'error');
                 closeModal('summary');
-            }
-        })
-        .catch(err => {
-            showToast('Erro de conexão.', 'error');
-            closeModal('summary');
-        });
+            });
     }
 
     function fillSummaryData(stats) {
@@ -2936,24 +3342,24 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(pendingDownloadPayload)
         })
-        .then(r => r.json())
-        .then(data => {
-            if (data.ok) {
-                if (executionMode === 'immediate') {
-                    currentTaskId = data.task_id;
-                    startPollingForeground();
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) {
+                    if (executionMode === 'immediate') {
+                        currentTaskId = data.task_id;
+                        startPollingForeground();
+                    } else {
+                        pollActiveTasks();
+                    }
                 } else {
-                    pollActiveTasks();
+                    showToast("Erro: " + data.error, 'error');
+                    hideProgressUI();
                 }
-            } else {
-                showToast("Erro: " + data.error, 'error');
+            })
+            .catch(err => {
+                showToast("Erro de conexão.", 'error');
                 hideProgressUI();
-            }
-        })
-        .catch(err => {
-            showToast("Erro de conexão.", 'error');
-            hideProgressUI();
-        });
+            });
     }
 
     function closeModal(which) {
@@ -3164,6 +3570,7 @@
         li.dataset.id = folder.id;
         li.dataset.name = folder.name;
         li.dataset.type = 'folder';
+        li.draggable = true;
 
         const row = document.createElement('div');
         row.className = 'tree-row';
@@ -3188,13 +3595,23 @@
         nameSpan.className = 'tree-name';
         nameSpan.textContent = folder.name;
 
-        row.append(toggleBtn, checkbox, favBtn, icon, nameSpan);
+        // botão ⋮
+        const actionBtn = document.createElement("span");
+        actionBtn.className = "tree-action-btn";
+        actionBtn.textContent = "⋮";
+        actionBtn.onclick = (ev) => {
+            ev.stopPropagation();
+            ctxTarget = li;
+            openContextMenu(ev.pageX, ev.pageY);
+        };
+
+        row.append(toggleBtn, checkbox, favBtn, icon, nameSpan, actionBtn);
+        li.append(row);
 
         const childrenUl = document.createElement('ul');
         childrenUl.className = 'tree-children';
         childrenUl.style.display = 'none';
-
-        li.append(row, childrenUl);
+        li.appendChild(childrenUl);
 
         const item = { id: folder.id, name: folder.name, type: 'folder' };
         if (isFavorite(item.id)) favBtn.classList.add('fav-on');
@@ -3211,15 +3628,15 @@
         };
 
         row.onclick = (e) => {
-            if ([toggleBtn, checkbox, favBtn].includes(e.target)) return;
+            if ([toggleBtn, checkbox, favBtn, actionBtn].includes(e.target)) return;
             showItemPreview(item, li);
         };
 
-        toggleBtn.onclick = (e) => {
+        toggleBtn.onclick = async (e) => {
             e.stopPropagation();
             const isCollapsed = li.classList.contains('collapsed');
             if (isCollapsed && !li.dataset.loaded) {
-                loadChildren(folder.id, childrenUl, li, toggleBtn);
+                await loadChildren(folder.id, childrenUl, li, toggleBtn);
             }
             setCollapsedState(li, !isCollapsed);
             toggleBtn.textContent = li.classList.contains('collapsed') ? '▸' : '▾';
@@ -3228,12 +3645,168 @@
         return li;
     }
 
+    function openContextMenu(x, y) {
+        ctxMenu.style.top = y + "px";
+        ctxMenu.style.left = x + "px";
+        ctxMenu.style.display = "block";
+    }
+
+    function deleteNodeRecursively(nodeElement) {
+        if (!nodeElement) return;
+
+        // 1. Remover seleção deste nó
+        const id = nodeElement.dataset.id;
+        const type = nodeElement.dataset.type;
+        const key = `${type}:${id}`;
+
+        selectedNodeIds.delete(key);
+        selectedItems = selectedItems.filter(x => !(x.id === id && x.type === type));
+
+        // 2. Remover seleção dos filhos (se for pasta)
+        const descendants = nodeElement.querySelectorAll('.tree-node');
+        descendants.forEach(child => {
+            const cid = child.dataset.id;
+            const ctype = child.dataset.type;
+            const ckey = `${ctype}:${cid}`;
+
+            selectedNodeIds.delete(ckey);
+            selectedItems = selectedItems.filter(x => !(x.id === cid && x.type === ctype));
+        });
+
+        // 3. Remover do DOM
+        nodeElement.remove();
+
+        // 4. Atualiza contador de seleção
+        updateSelectionInfo();
+    }
+
+
+    async function deleteSelectedItems() {
+        if (!selectedItems || selectedItems.length === 0) {
+            showToast("Nenhum item selecionado.", "warning");
+            return;
+        }
+
+        const total = selectedItems.length;
+
+        if (!confirm(`Excluir ${total} item(ns)? Isso não poderá ser desfeito.`))
+            return;
+
+        // PREPARAÇÃO
+        deleteCancelFlag = false;
+        deleteCurrentRate = 4;
+        deleteStableCycles = 0;
+
+        const items = [...selectedItems];
+        let index = 0;
+        let errors = 0;
+
+        // EXIBIR UI
+        const ui = document.getElementById("delete-progress");
+        const bar = document.getElementById("delete-bar");
+        const status = document.getElementById("delete-status");
+        ui.classList.remove("hidden");
+
+        document.getElementById("delete-cancel-btn").onclick = () => {
+            deleteCancelFlag = true;
+            status.textContent = "Cancelando operação...";
+        };
+
+        // LOOP PRINCIPAL (RATE-LIMIT DINÂMICO)
+        while (index < items.length && !deleteCancelFlag) {
+
+            const CHUNK_SIZE = deleteCurrentRate;         // 4 ou 2 dependendo
+            const INTERVAL_MS = 1000;                     // 1 segundo entre blocos
+            const block = items.slice(index, index + CHUNK_SIZE);
+
+            status.textContent = `Excluindo ${index + 1} até ${index + block.length} de ${total}...`;
+
+            // PROCESSAR BLOCO EM PARALELO
+            const results = await Promise.all(block.map(item =>
+                fetch("/api/file/trash", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id: item.id })
+                })
+                    .then(r => r.json())
+                    .catch(err => ({ ok: false, err }))
+            ));
+
+            let hadRateLimit = false;
+
+            // TRATAR RESULTADOS
+            results.forEach((res, i) => {
+                const item = block[i];
+                if (res.ok) {
+                    const node = document.querySelector(`.tree-node[data-id="${item.id}"]`);
+                    if (node) deleteNodeRecursively(node);
+
+                    selectedNodeIds.delete(`${item.type}:${item.id}`);
+                    selectedItems = selectedItems.filter(x => x.id !== item.id);
+                } else {
+                    errors++;
+
+                    // SE DRIVE RETORNAR RATE LIMIT
+                    if (String(res.error || "").includes("Rate Limit") ||
+                        String(res.error || "").includes("403") ||
+                        String(res.error || "").includes("429")) {
+                        hadRateLimit = true;
+                    }
+                }
+            });
+
+            // FEEDBACK DE PROGRESSO
+            const percent = Math.round(((index + block.length) / total) * 100);
+            bar.style.width = percent + "%";
+
+            // ADAPTAR VELOCIDADE
+            if (hadRateLimit) {
+                deleteCurrentRate = 2;   // reduz
+                deleteStableCycles = 0;
+                status.textContent = "Google Drive limitou → reduzindo velocidade para 2/s.";
+            } else {
+                deleteStableCycles++;
+                if (deleteCurrentRate === 2 && deleteStableCycles >= 5) {
+                    deleteCurrentRate = 4;  // volta ao normal
+                    status.textContent = "Estável → aumentando velocidade para 4/s.";
+                }
+            }
+
+            index += block.length;
+
+            // ESPERAR
+            if (index < items.length && !deleteCancelFlag) {
+                await new Promise(r => setTimeout(r, INTERVAL_MS));
+            }
+        }
+
+        // FINALIZAÇÃO
+        ui.classList.add("hidden");
+
+        if (deleteCancelFlag) {
+            showToast("Exclusão cancelada pelo usuário.", "warning");
+            return;
+        }
+
+        updateSelectionInfo();
+
+        if (errors === 0) {
+            showToast("Todos os itens foram excluídos com sucesso.", "success");
+        } else {
+            showToast(`${errors} item(ns) falharam ao excluir.`, "error");
+        }
+    }
+
+    /* =====================================================
+       ARQUIVOS
+    ===================================================== */
     function createFileNode(file) {
         const li = document.createElement('li');
         li.className = 'tree-node file-node';
         li.dataset.id = file.id;
         li.dataset.name = file.name;
         li.dataset.type = 'file';
+        li.draggable = true;
 
         const row = document.createElement('div');
         row.className = 'tree-row';
@@ -3253,8 +3826,17 @@
         nameSpan.className = 'tree-name';
         nameSpan.textContent = file.name;
 
-        row.append(spacer, checkbox, icon, nameSpan);
-        li.appendChild(row);
+        const actionBtn = document.createElement("span");
+        actionBtn.className = "tree-action-btn";
+        actionBtn.textContent = "⋮";
+        actionBtn.onclick = (ev) => {
+            ev.stopPropagation();
+            ctxTarget = li;
+            openContextMenu(ev.pageX, ev.pageY);
+        };
+
+        row.append(spacer, checkbox, icon, nameSpan, actionBtn);
+        li.append(row);
 
         const item = { id: file.id, name: file.name, type: 'file' };
 
@@ -3265,12 +3847,14 @@
         };
 
         row.onclick = (e) => {
-            if (e.target === checkbox) return;
+            if ([checkbox, actionBtn].includes(e.target)) return;
             showItemPreview(item, li);
         };
 
         return li;
     }
+
+
 
     function loadChildren(parentId, containerUl, li, toggleBtn) {
         const filesParam = includeFiles ? '1' : '0';

@@ -34,6 +34,7 @@ from app.services.audit import AuditService
 from app.services.Google.drive_download import download_items_bundle, mirror_items_to_local
 from app.services.Google.drive_activity import fetch_activity_log
 from app.services.storage import StorageService
+from app.services.Google.drive_ops import DriveOperationsService
 from app.services.progress import (
     PROGRESS,
     init_download_task,
@@ -636,3 +637,47 @@ def check_backup_series():
             "exists": False,
             "series_key": series_key
         })
+
+@drive_bp.route("/api/file/rename", methods=["POST"])
+def api_rename():
+    creds = get_credentials()
+    if not creds: return jsonify({"ok": False, "error": "Auth required"}), 401
+    
+    data = request.json or {}
+    result = DriveOperationsService.rename_file(creds, data.get('id'), data.get('name'))
+    return jsonify(result)
+
+@drive_bp.route("/api/file/move", methods=["POST"])
+def api_move():
+    creds = get_credentials()
+    if not creds: return jsonify({"ok": False, "error": "Auth required"}), 401
+    
+    data = request.json or {}
+    # Aceita drag & drop: file_id (item) -> target_id (pasta destino)
+    result = DriveOperationsService.move_file(creds, data.get('file_id'), data.get('target_id'))
+    return jsonify(result)
+
+@drive_bp.route("/api/file/trash", methods=["POST"])
+def api_trash():
+    creds = get_credentials()
+    if not creds: return jsonify({"ok": False, "error": "Auth required"}), 401
+    
+    data = request.json or {}
+    result = DriveOperationsService.trash_file(creds, data.get('id'))
+    return jsonify(result)
+
+@drive_bp.route("/api/folder/create", methods=["POST"])
+def api_create_folder():
+    creds = get_credentials()
+    if not creds:
+        return jsonify({"ok": False, "error": "Auth required"}), 401
+
+    data = request.json or {}
+    parent_id = data.get("parent_id")
+    name = data.get("name")
+
+    if not parent_id or not name:
+        return jsonify({"ok": False, "error": "Missing parent_id or name"}), 400
+
+    result = DriveOperationsService.create_folder(creds, parent_id, name)
+    return jsonify(result)
