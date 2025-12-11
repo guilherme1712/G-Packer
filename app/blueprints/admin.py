@@ -30,7 +30,7 @@ from flask import (
 from app.services.auth import get_credentials
 from app.services.storage import StorageService
 from app.services.audit import AuditService
-from app.models import db, BackupFileModel, ScheduledTaskModel, TaskModel, GoogleAuthModel, UploadHistoryModel, BackupProfileModel
+from app.models import db, BackupFileModel, ScheduledTaskModel, ScheduledRunModel, TaskModel, GoogleAuthModel, UploadHistoryModel, BackupProfileModel
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
