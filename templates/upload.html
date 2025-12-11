@@ -5,18 +5,21 @@
 {% block extra_head %}
 <style>
     /* =========================================
-       LAYOUT GRID PRINCIPAL
+       LAYOUT GERAL
        ========================================= */
     h2 {
         color: white;
+        margin-bottom: 0;
     }
 
     .page-content-wrapper {
         display: flex;
         flex-direction: column;
         height: calc(100vh - 100px);
+        /* Ajuste conforme seu header/navbar */
         overflow: hidden;
         padding: 0 24px 24px 24px;
+        position: relative;
     }
 
     .upload-grid {
@@ -26,6 +29,7 @@
         gap: 20px;
         height: 100%;
         min-height: 0;
+        padding-top: 20px;
     }
 
     @media (max-width: 992px) {
@@ -42,42 +46,47 @@
     }
 
     /* =========================================
-       STATUS BAR (PROGRESSO GLOBAL)
+       WIDGET FLUTUANTE DE PROGRESSO (NOVO)
        ========================================= */
-    .status-bar-container {
-        grid-column: 1 / -1;
-        background: rgba(15, 23, 42, 0.6);
-        border: 1px solid rgba(148, 163, 184, 0.1);
+    .status-widget {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        width: 380px;
+        background: rgba(15, 23, 42, 0.95);
+        /* Fundo escuro quase sólido */
+        border: 1px solid rgba(148, 163, 184, 0.2);
         border-radius: 12px;
-        padding: 12px 20px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(12px);
+        z-index: 9999;
         display: none;
-        /* Oculto se vazio */
+        /* Oculto por padrão */
+        flex-direction: column;
+        overflow: hidden;
+        animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .status-widget.active {
+        display: flex;
+    }
+
+    .widget-header {
+        background: rgba(30, 41, 59, 0.9);
+        padding: 12px 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        display: flex;
+        justify-content: space-between;
         align-items: center;
-        gap: 20px;
-        backdrop-filter: blur(10px);
-        animation: slideDown 0.3s ease;
     }
 
-    .status-bar-container.active {
-        display: flex;
+    .widget-body {
+        padding: 20px;
     }
 
-    .status-info {
-        flex: 1;
-    }
-
-    .status-metrics {
-        display: flex;
-        gap: 15px;
-        font-size: 0.8rem;
-        color: #cbd5e1;
-        border-left: 1px solid rgba(255, 255, 255, 0.1);
-        padding-left: 15px;
-    }
-
-    @keyframes slideDown {
+    @keyframes slideUp {
         from {
-            transform: translateY(-10px);
+            transform: translateY(100%);
             opacity: 0;
         }
 
@@ -87,8 +96,58 @@
         }
     }
 
+    /* BARRA DE PROGRESSO NEON COMPACTA */
+    .progress-track {
+        background: rgba(0, 0, 0, 0.4);
+        border-radius: 10px;
+        height: 12px;
+        /* Mais fina para o widget */
+        width: 100%;
+        margin: 15px 0;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
+        width: 0%;
+        border-radius: 10px;
+        box-shadow: 0 0 10px rgba(168, 85, 247, 0.6);
+        transition: width 0.3s ease;
+    }
+
+    .progress-animated {
+        background-image: linear-gradient(45deg, rgba(255, 255, 255, 0.2) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.2) 75%, transparent 75%, transparent);
+        background-size: 1rem 1rem;
+        animation: stripes 1s linear infinite;
+    }
+
+    @keyframes stripes {
+        0% {
+            background-position: 1rem 0;
+        }
+
+        100% {
+            background-position: 0 0;
+        }
+    }
+
+    /* Métrica circular */
+    .metric-badge {
+        background: rgba(255, 255, 255, 0.05);
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        color: #cbd5e1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex: 1;
+    }
+
     /* =========================================
-       GLASS PANELS & UI
+       RESTO DA UI (GLASS PANELS)
        ========================================= */
     .glass-panel {
         background: rgba(30, 41, 59, 0.7);
@@ -98,7 +157,6 @@
         flex-direction: column;
         overflow: hidden;
         position: relative;
-        box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.3);
         backdrop-filter: blur(12px);
     }
 
@@ -129,7 +187,7 @@
         align-items: center;
     }
 
-    /* DROPZONE & LISTA */
+    /* DROPZONE */
     .left-column {
         display: flex;
         flex-direction: column;
@@ -177,6 +235,7 @@
         margin-bottom: 16px;
     }
 
+    /* LISTA DE FILA */
     .file-queue-container {
         height: 50%;
         display: none;
@@ -216,7 +275,7 @@
         color: #cbd5e1;
     }
 
-    /* TREEVIEW & ACTIONS */
+    /* COLUNA DIREITA */
     .right-column {
         display: flex;
         flex-direction: column;
@@ -257,6 +316,12 @@
         color: white;
         font-weight: 600;
         box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        transition: all 0.2s;
+    }
+
+    .btn-hero:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
     }
 
     .btn-hero:disabled {
@@ -264,6 +329,7 @@
         color: #64748b;
         cursor: not-allowed;
         box-shadow: none;
+        transform: none;
     }
 
     /* TREE CSS */
@@ -308,89 +374,27 @@
         color: #64748b;
         font-weight: bold;
     }
-
-    /* BARRA DE PROGRESSO NEON */
-    .progress-container {
-        background: rgba(0, 0, 0, 0.4);
-        border-radius: 20px;
-        height: 24px;
-        width: 100%;
-        margin-top: 12px;
-        margin-bottom: 12px;
-        overflow: hidden;
-        position: relative;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.5);
-    }
-
-    .progress-bar-fill {
-        height: 100%;
-        background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
-        width: 0%;
-        border-radius: 20px;
-        box-shadow: 0 0 15px rgba(168, 85, 247, 0.8);
-        transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-        position: relative;
-    }
-
-    .progress-bar-animated {
-        background-image: linear-gradient(45deg, rgba(255, 255, 255, 0.2) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.2) 75%, transparent 75%, transparent);
-        background-size: 2rem 2rem;
-        animation: progress-bar-stripes 1.5s linear infinite;
-    }
-
-    @keyframes progress-bar-stripes {
-        0% {
-            background-position: 2rem 0;
-        }
-
-        100% {
-            background-position: 0 0;
-        }
-    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="page-content-wrapper">
-    <div class="d-flex justify-content-between align-items-end mb-3 px-1">
+
+    <div class="d-flex justify-content-between align-items-end mb-1 px-1">
         <div>
-            <h2 class="h4 text-white fw-bold mb-0">Central de Upload</h2>
+            <h2 class="h4 fw-bold mb-0 text-white">Central de Upload</h2>
             <small class="text-secondary">Gerencie transferências para o Google Drive</small>
         </div>
     </div>
 
     <div class="upload-grid">
-        <div id="globalProgressPanel" class="status-bar-container">
-            <div
-                style="width: 40px; height: 40px; border-radius: 50%; background: rgba(99,102,241,0.2); display: flex; align-items: center; justify-content: center;">
-                <i class="fas fa-sync fa-spin text-primary"></i>
-            </div>
-            <div class="status-info" style="width: 100%;">
-                <div class="d-flex justify-content-between align-items-end">
-                    <span class="status-title" id="globalStatusText">Sincronizando...</span>
-                    <span class="fw-bold" id="globalPercent" style="color: white;">0%</span>
-                </div>
-                <div class="progress-container">
-                    <div id="globalProgressBar" class="progress-bar-fill progress-bar-animated"></div>
-                </div>
-            </div>
-            <div class="status-metrics">
-                <div class="text-center"><strong class="d-block text-white" id="countTotal">0</strong><span>Total</span>
-                </div>
-                <div class="text-center"><strong class="d-block text-success"
-                        id="countSuccess">0</strong><span>Ok</span></div>
-                <div class="text-center"><strong class="d-block text-danger" id="countError">0</strong><span>Erro</span>
-                </div>
-            </div>
-        </div>
 
         <div class="glass-panel left-column">
             <div class="panel-header">
-                <h3 class="panel-title"><i class="fas fa-cloud-upload-alt text-primary"></i> Origem</h3>
+                <h3 class="panel-title"><i class="fas fa-hdd text-primary me-2"></i> Origem dos Arquivos</h3>
                 <div class="d-flex gap-2">
                     <button class="btn btn-sm btn-outline-secondary"
-                        onclick="document.getElementById('fileInput').click()">+ Arq</button>
+                        onclick="document.getElementById('fileInput').click()">+ Arquivo</button>
                     <button class="btn btn-sm btn-outline-secondary"
                         onclick="document.getElementById('folderInput').click()">+ Pasta</button>
                 </div>
@@ -401,22 +405,27 @@
                     style="cursor: pointer;">
                 <label class="form-check-label text-white ps-2" for="chkPreserveStructure" style="cursor: pointer;">
                     <strong>Manter estrutura de pastas</strong>
-                    <div class="text-secondary small">Se desligado, arquivos soltos irão para a raiz selecionada.</div>
+                    <div class="text-secondary small" style="opacity: 0.7;">Recria a árvore de diretórios original no
+                        Drive.</div>
                 </label>
             </div>
 
             <div class="dropzone-wrapper">
                 <div id="dropZone" class="dropzone-area">
-                    <div class="drop-icon"><i class="fas fa-arrow-up"></i></div>
-                    <h5 class="text-white mb-1">Arraste e solte aqui</h5>
+                    <div class="drop-icon"><i class="fas fa-cloud-upload-alt"></i></div>
+                    <h5 class="text-white mb-1">Arraste arquivos aqui</h5>
+                    <p class="text-secondary small mb-0">ou use os botões acima</p>
+
                     <input type="file" id="fileInput" multiple style="display: none;">
                     <input type="file" id="folderInput" webkitdirectory directory multiple style="display: none;">
                 </div>
+
                 <div id="fileSection" class="file-queue-container">
                     <div
-                        class="px-3 py-2 border-bottom border-secondary d-flex justify-content-between align-items-center">
-                        <small class="text-white fw-bold">FILA (<span id="summaryCount">0</span>)</small>
-                        <button class="btn btn-xs text-danger" onclick="clearAllFiles()">Limpar</button>
+                        class="px-3 py-2 border-bottom border-secondary d-flex justify-content-between align-items-center bg-black bg-opacity-25">
+                        <small class="text-white fw-bold">FILA DE ENVIO (<span id="summaryCount">0</span>)</small>
+                        <button class="btn btn-xs text-danger hover-white" onclick="clearAllFiles()"><i
+                                class="fas fa-trash me-1"></i> Limpar</button>
                     </div>
                     <div id="fileList" class="queue-scroll"></div>
                 </div>
@@ -425,17 +434,20 @@
 
         <div class="glass-panel right-column">
             <div class="panel-header">
-                <h3 class="panel-title"><i class="fas fa-folder-tree text-warning"></i> Destino</h3>
+                <h3 class="panel-title"><i class="fab fa-google-drive text-warning me-2"></i> Destino</h3>
             </div>
+
             <div id="treeWrapper" class="tree-wrapper">
                 <ul id="tree-root" class="tree-root"></ul>
             </div>
+
             <input type="hidden" id="targetFolderId" value="root">
+
             <div class="action-footer">
                 <div class="target-box">
-                    <i class="fab fa-google-drive fa-lg text-success"></i>
+                    <i class="fas fa-folder-open fa-lg text-success"></i>
                     <div style="overflow: hidden;">
-                        <span class="d-block text-secondary" style="font-size: 0.7rem; font-weight: 700;">SALVAR
+                        <span class="d-block text-secondary" style="font-size: 0.7rem; font-weight: 700;">SALVANDO
                             EM:</span>
                         <strong class="text-white text-truncate d-block" id="selectedFolderNameDisplay">Meu Drive
                             (Raiz)</strong>
@@ -446,109 +458,119 @@
                 </button>
             </div>
         </div>
+
     </div>
+
+    <div id="globalProgressWidget" class="status-widget">
+        <div class="widget-header">
+            <div class="d-flex align-items-center gap-2">
+                <i class="fas fa-sync fa-spin text-primary" id="widgetIcon"></i>
+                <span class="text-white fw-bold" style="font-size: 0.9rem;">Status do Upload</span>
+            </div>
+            <span class="badge bg-primary rounded-pill" id="widgetPercentBadge">0%</span>
+        </div>
+
+        <div class="widget-body">
+            <div class="d-flex justify-content-between text-secondary small mb-1">
+                <span id="widgetStatusText">Preparando...</span>
+                <span id="widgetCountText">0/0</span>
+            </div>
+
+            <div class="progress-track">
+                <div id="widgetProgressBar" class="progress-fill progress-animated"></div>
+            </div>
+
+            <div class="d-flex gap-2 mt-3">
+                <div class="metric-badge">
+                    <strong class="text-white h5 mb-0" id="countTotal">0</strong>
+                    <span>Total</span>
+                </div>
+                <div class="metric-badge">
+                    <strong class="text-success h5 mb-0" id="countSuccess">0</strong>
+                    <span>Sucesso</span>
+                </div>
+                <div class="metric-badge">
+                    <strong class="text-danger h5 mb-0" id="countError">0</strong>
+                    <span>Falha</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <script>
-    // --- ESTADO GLOBAL ---
     let uploadQueue = [];
 
-    // --- INICIALIZAÇÃO ---
+    // --- INIT ---
     document.addEventListener("DOMContentLoaded", () => {
         initTree();
         startGlobalMonitor();
 
-        // RE-BINDING EVENT LISTENERS (CRÍTICO PARA FUNCIONAR)
-        const fileInput = document.getElementById('fileInput');
-        const folderInput = document.getElementById('folderInput');
-
-        if (fileInput) fileInput.addEventListener('change', e => addFiles(Array.from(e.target.files)));
-        if (folderInput) folderInput.addEventListener('change', e => addFiles(Array.from(e.target.files), true));
+        // Re-binding inputs
+        const fi = document.getElementById('fileInput');
+        const foi = document.getElementById('folderInput');
+        if (fi) fi.addEventListener('change', e => addFiles(Array.from(e.target.files)));
+        if (foi) foi.addEventListener('change', e => addFiles(Array.from(e.target.files), true));
 
         // Drag & Drop
-        const dropZone = document.getElementById('dropZone');
-        ['dragenter', 'dragover'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.add('drag-over'); }));
-        ['dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.remove('drag-over'); }));
+        const dz = document.getElementById('dropZone');
+        ['dragenter', 'dragover'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add('drag-over'); }));
+        ['dragleave', 'drop'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.remove('drag-over'); }));
 
-        dropZone.addEventListener('drop', async e => {
-            e.preventDefault(); dropZone.classList.remove('drag-over');
+        dz.addEventListener('drop', async e => {
+            e.preventDefault(); dz.classList.remove('drag-over');
             const items = e.dataTransfer.items;
             if (!items) return;
-
-            // Visual feedback
-            dropZone.style.opacity = '0.5';
+            dz.style.opacity = '0.5';
             const promises = [];
             for (let i = 0; i < items.length; i++) {
                 const entry = items[i].webkitGetAsEntry();
                 if (entry) promises.push(traverse(entry));
             }
             await Promise.all(promises);
-            dropZone.style.opacity = '1';
+            dz.style.opacity = '1';
             updateUI();
         });
     });
 
-    // --- MANIPULAÇÃO DE ARQUIVOS ---
+    // --- FILE HANDLING ---
     async function traverse(entry, path = '') {
-        if (entry.isFile) {
-            return new Promise(resolve => entry.file(f => {
-                addFile(f, path + f.name);
-                resolve();
-            }));
-        }
+        if (entry.isFile) return new Promise(r => entry.file(f => { addFile(f, path + f.name); r(); }));
         if (entry.isDirectory) {
             const reader = entry.createReader();
-            return new Promise(resolve => {
-                const readEntries = () => {
-                    reader.readEntries(async entries => {
-                        if (!entries.length) resolve();
-                        else {
-                            await Promise.all(entries.map(e => traverse(e, path + entry.name + '/')));
-                            readEntries(); // Continua lendo (chunks)
-                        }
-                    });
-                };
-                readEntries();
+            return new Promise(r => {
+                const read = () => reader.readEntries(async entries => {
+                    if (!entries.length) r();
+                    else { await Promise.all(entries.map(e => traverse(e, path + entry.name + '/'))); read(); }
+                });
+                read();
             });
         }
     }
 
     function addFiles(files, isDir = false) {
         files.forEach(f => {
-            // Se veio de input folder, usa webkitRelativePath, senão usa name
             const path = (isDir && f.webkitRelativePath) ? f.webkitRelativePath : f.name;
-            addFile(f, path);
+            if (!uploadQueue.some(i => i.path === path)) uploadQueue.push({ file: f, path: path });
         });
         updateUI();
     }
 
-    function addFile(f, path) {
-        // Evita duplicatas exatas na fila
-        if (!uploadQueue.some(i => i.path === path)) {
-            uploadQueue.push({ file: f, path: path });
-        }
-    }
-
-    function clearAllFiles() {
-        uploadQueue = [];
-        updateUI();
-    }
+    function clearAllFiles() { uploadQueue = []; updateUI(); }
 
     function updateUI() {
         const hasFiles = uploadQueue.length > 0;
         const fileSection = document.getElementById('fileSection');
-        const dropZone = document.getElementById('dropZone');
+        const dz = document.getElementById('dropZone');
 
         fileSection.classList.toggle('active', hasFiles);
-
-        // Ajuste visual
-        dropZone.style.flex = hasFiles ? '0 0 auto' : '1';
-        dropZone.style.height = hasFiles ? '160px' : 'auto';
+        dz.style.flex = hasFiles ? '0 0 auto' : '1';
+        dz.style.height = hasFiles ? '160px' : 'auto';
 
         document.getElementById('summaryCount').innerText = uploadQueue.length;
         document.getElementById('btnUpload').disabled = !hasFiles;
 
-        // Renderiza lista (Limitada a 100 para não travar)
         const listHtml = uploadQueue.slice(0, 100).map((i, idx) => `
             <div class="file-row">
                 <i class="fas ${i.path.includes('/') ? 'fa-folder text-warning' : 'fa-file text-info'}"></i>
@@ -557,33 +579,22 @@
                 <i class="fas fa-times text-danger ms-2" style="cursor:pointer" onclick="removeFromQueue(${idx})"></i>
             </div>
         `).join('');
-
-        const extraCount = uploadQueue.length - 100;
-        document.getElementById('fileList').innerHTML = listHtml + (extraCount > 0 ? `<div class="text-center small text-muted p-2">+ ${extraCount} outros arquivos...</div>` : '');
+        document.getElementById('fileList').innerHTML = listHtml + (uploadQueue.length > 100 ? `<div class="text-center small text-muted p-2">+ ${uploadQueue.length - 100} arq...</div>` : '');
     }
 
-    function removeFromQueue(idx) {
-        uploadQueue.splice(idx, 1);
-        updateUI();
-    }
+    function removeFromQueue(idx) { uploadQueue.splice(idx, 1); updateUI(); }
 
-    function formatSize(b) {
-        if (b === 0) return '0 B';
-        const i = Math.floor(Math.log(b) / Math.log(1024));
-        return (b / Math.pow(1024, i)).toFixed(2) + ' ' + ['B', 'KB', 'MB', 'GB'][i];
-    }
+    function formatSize(b) { if (b === 0) return '0 B'; const i = Math.floor(Math.log(b) / Math.log(1024)); return (b / Math.pow(1024, i)).toFixed(2) + ' ' + ['B', 'KB', 'MB', 'GB'][i]; }
 
-    // --- UPLOAD E MONITORAMENTO ---
+    // --- UPLOAD LOGIC ---
     document.getElementById('btnUpload').onclick = async () => {
         const btn = document.getElementById('btnUpload');
         btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ENVIANDO PARA SERVIDOR...';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ENVIANDO...';
 
         const targetFolderId = document.getElementById('targetFolderId').value;
         const preserveStructure = document.getElementById('chkPreserveStructure').checked;
-
-        // Paralelismo no Frontend
-        const CONCURRENCY_LIMIT = 2;
+        const CONCURRENCY_LIMIT = 6;
         const queueToProcess = [...uploadQueue];
         const totalItems = queueToProcess.length;
         let processedCount = 0;
@@ -593,19 +604,14 @@
             fd.append('file', item.file);
             fd.append('relative_path', item.path);
             fd.append('target_root_id', targetFolderId);
-            fd.append('preserve_structure', preserveStructure); // Envia o checkbox
-
-            try {
-                await fetch('/api/upload/enqueue', { method: 'POST', body: fd });
-            } catch (e) {
-                console.error("Erro rede:", e);
-            } finally {
+            fd.append('preserve_structure', preserveStructure);
+            try { await fetch('/api/upload/enqueue', { method: 'POST', body: fd }); } catch (e) { }
+            finally {
                 processedCount++;
-                btn.innerHTML = `<i class="fas fa-circle-notch fa-spin"></i> ENFILEIRANDO (${processedCount}/${totalItems})`;
+                btn.innerHTML = `ENVIANDO (${processedCount}/${totalItems})`;
             }
         };
 
-        // Workers
         const worker = async () => {
             while (queueToProcess.length > 0) {
                 const item = queueToProcess.shift();
@@ -614,20 +620,15 @@
         };
 
         const workers = [];
-        for (let i = 0; i < Math.min(CONCURRENCY_LIMIT, totalItems); i++) {
-            workers.push(worker());
-        }
+        for (let i = 0; i < Math.min(CONCURRENCY_LIMIT, totalItems); i++) workers.push(worker());
         await Promise.all(workers);
 
         btn.innerHTML = '<i class="fas fa-check"></i> FEITO!';
         clearAllFiles();
-        setTimeout(() => {
-            btn.innerHTML = 'INICIAR UPLOAD';
-            btn.disabled = false;
-        }, 2000);
+        setTimeout(() => { btn.innerHTML = 'INICIAR UPLOAD'; btn.disabled = false; }, 2000);
     };
 
-    // Polling do Banco de Dados
+    // --- GLOBAL MONITOR (WIDGET FLUTUANTE) ---
     let monitorInterval = null;
     function startGlobalMonitor() {
         if (monitorInterval) clearInterval(monitorInterval);
@@ -635,46 +636,59 @@
             try {
                 const res = await fetch('/api/upload/global-status');
                 const stats = await res.json();
-                updateMonitorUI(stats);
+                updateWidgetUI(stats);
             } catch (e) { }
         }, 2000);
     }
 
-    function updateMonitorUI(stats) {
-        const panel = document.getElementById('globalProgressPanel');
-        const bar = document.getElementById('globalProgressBar');
+    function updateWidgetUI(stats) {
+        const widget = document.getElementById('globalProgressWidget');
+        const bar = document.getElementById('widgetProgressBar');
 
         const total = stats.total_files;
         const processed = stats.success + stats.error;
+        const pending = stats.pending;
 
         if (total === 0) {
-            panel.classList.remove('active');
+            widget.classList.remove('active');
             return;
         }
 
-        // Mantém painel visível se tem pendência ou acabou recentemente
-        panel.classList.add('active');
+        // Mantém ativo se houver pendência ou finalizou recentemente (opcional: lógica de fechar)
+        // Se pending == 0 e processed == total, o widget fica verde e pode ser fechado manualmente ou auto.
+        // Aqui deixamos visível para feedback.
+        if (total > 0) widget.classList.add('active');
 
-        const percent = total > 0 ? Math.round((processed / total) * 100) : 0;
+        let percent = total > 0 ? Math.round((processed / total) * 100) : 0;
 
+        // Updates UI
         bar.style.width = percent + '%';
-        document.getElementById('globalPercent').innerText = percent + '%';
+        document.getElementById('widgetPercentBadge').innerText = percent + '%';
+        document.getElementById('widgetCountText').innerText = `${processed}/${total}`;
+
         document.getElementById('countTotal').innerText = total;
         document.getElementById('countSuccess').innerText = stats.success;
         document.getElementById('countError').innerText = stats.error;
 
-        if (stats.pending > 0) {
-            document.getElementById('globalStatusText').innerHTML = `<i class="fas fa-satellite-dish me-2 animate-pulse"></i> Processando ${stats.pending} arquivos...`;
-            bar.classList.add('progress-bar-animated');
+        if (pending > 0) {
+            document.getElementById('widgetStatusText').innerText = "Sincronizando...";
+            document.getElementById('widgetIcon').className = "fas fa-sync fa-spin text-primary";
+            bar.classList.add('progress-animated');
             bar.style.background = 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899)';
+            document.getElementById('widgetPercentBadge').className = "badge bg-primary rounded-pill";
         } else {
-            document.getElementById('globalStatusText').innerHTML = `<i class="fas fa-check-circle text-success me-2"></i> Concluído!`;
-            bar.classList.remove('progress-bar-animated');
+            document.getElementById('widgetStatusText').innerText = "Concluído";
+            document.getElementById('widgetIcon').className = "fas fa-check-circle text-success";
+            bar.classList.remove('progress-animated');
             bar.style.background = '#22c55e';
+            document.getElementById('widgetPercentBadge').className = "badge bg-success rounded-pill";
+
+            // Auto hide após 5s se tudo ok? (Comentado para manter visibilidade)
+            // setTimeout(() => widget.classList.remove('active'), 5000);
         }
     }
 
-    // --- ÁRVORE DE PASTAS ---
+    // --- TREE ---
     function initTree() {
         const ul = document.getElementById('tree-root');
         ul.innerHTML = '';
@@ -687,10 +701,8 @@
         const li = document.createElement('li'); li.className = 'tree-node collapsed'; li.dataset.id = folder.id;
         const row = document.createElement('div'); row.className = 'tree-row';
         row.onclick = (e) => { if (!e.target.classList.contains('tree-toggle')) selectFolder(folder.id, folder.name, row); };
-
         const toggle = document.createElement('span'); toggle.className = 'tree-toggle'; toggle.innerText = '▸';
         toggle.onclick = (e) => { e.stopPropagation(); toggleNode(li, folder.id, toggle); };
-
         row.append(toggle, Object.assign(document.createElement('i'), { className: 'fas fa-folder text-warning' }), document.createTextNode(folder.name));
         li.append(row, Object.assign(document.createElement('ul'), { className: 'tree-children' }));
         return li;
@@ -711,9 +723,7 @@
                     }
                 } catch { }
             }
-        } else {
-            li.classList.add('collapsed'); ul.style.display = 'none'; toggle.innerText = '▸';
-        }
+        } else { li.classList.add('collapsed'); ul.style.display = 'none'; toggle.innerText = '▸'; }
     }
 
     function selectFolder(id, name, row) {

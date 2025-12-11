@@ -4,6 +4,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from app.models import db, UploadHistoryModel
 from app.services.Google.drive_upload import DriveUploadService
+from app.services.worker_manager import WorkerManager
 from app.services.auth import get_credentials
 
 # =========================================================================
@@ -30,28 +31,26 @@ class QueueService:
     @staticmethod
     def _manager_loop(app):
         """
-        Loop principal que gerencia o Pool de Threads.
-        Ele apenas distribui as tarefas, não faz o upload em si.
+        Loop principal que gerencia a distribuição de tarefas
+        usando o Pool Central de Uploads.
         """
-        # Cria um pool de threads com o limite definido
-        executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_UPLOADS)
+        # SUBSTUIÇÃO: Em vez de criar um executor novo, pegamos o global
+        executor = WorkerManager.get_upload_executor()
         
-        # Lista para rastrear tarefas em andamento (futures)
+        # Pega o limite configurado no Manager
+        max_workers = WorkerManager.MAX_UPLOAD_WORKERS
+        
         active_futures = []
 
         with app.app_context():
-            print("[QueueService] Loop de monitoramento ativo...")
+            print("[QueueService] Loop de monitoramento ativo (WorkerManager)...")
             while keep_running:
                 try:
-                    # 1. Limpeza: Remove tarefas que já terminaram da lista de ativos
                     active_futures = [f for f in active_futures if not f.done()]
 
-                    # 2. Verifica se temos "slots" livres no pool
-                    slots_available = MAX_CONCURRENT_UPLOADS - len(active_futures)
+                    slots_available = max_workers - len(active_futures)
 
                     if slots_available > 0:
-                        # 3. Busca tarefas PENDENTES no banco
-                        # Pega apenas a quantidade que cabe nos slots livres para não sobrecarregar a memória
                         tasks = UploadHistoryModel.query.filter_by(status='PENDING')\
                             .order_by(UploadHistoryModel.id.asc())\
                             .limit(slots_available)\
@@ -59,25 +58,19 @@ class QueueService:
                         
                         if tasks:
                             for task in tasks:
-                                # IMPORTANTE: Marca como UPLOADING imediatamente na thread principal
-                                # para que a próxima iteração da query não pegue o mesmo arquivo
                                 task.status = 'UPLOADING'
                                 db.session.commit()
 
-                                # Submete a tarefa para o worker (paralelo)
-                                # Passamos o ID da task, não o objeto, para evitar conflito de sessão do SQLAlchemy
                                 future = executor.submit(QueueService._upload_worker, app, task.id)
                                 active_futures.append(future)
                         else:
-                            # Se não tem tarefas e tem slots, dorme um pouco para economizar CPU
                             time.sleep(1.5)
                     else:
-                        # Se o pool está cheio, espera um pouco antes de checar de novo
                         time.sleep(0.5)
                 
                 except Exception as e:
-                    print(f"[QueueService] Erro no loop principal: {e}")
-                    time.sleep(5) # Pausa de segurança em caso de erro grave no loop
+                    print(f"[QueueService] Erro: {e}")
+                    time.sleep(5)
 
     @staticmethod
     def _upload_worker(app, task_id):

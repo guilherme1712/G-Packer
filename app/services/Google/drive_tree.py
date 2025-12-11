@@ -9,6 +9,7 @@ from googleapiclient.errors import HttpError
 
 from .drive import safe_name, file_passes_filters, extract_size_bytes
 from app.services.progress import sync_task_to_db, update_progress
+from app.services.worker_manager import WorkerManager  # <--- IMPORT NOVO
 
 # Lock para operações globais (como atualizar progresso compartilhado)
 _lock = threading.Lock()
@@ -17,10 +18,9 @@ _lock = threading.Lock()
 # Isso evita recriar o objeto 'service' milhares de vezes.
 _thread_local = threading.local()
 
-# Configuração de alta performance
-MAX_MAPPING_WORKERS = 150
+# Configurações
 RETRY_LIMIT = 8
-
+# MAX_MAPPING_WORKERS foi removido pois agora usamos o WorkerManager
 
 def get_thread_safe_service(creds):
     """
@@ -86,8 +86,6 @@ def safe_list_execute(request_obj):
 # ---------------------------------------------------------------------------
 # FUNÇÕES DE SERVIÇO (SINGLE-THREADED USAGE)
 # ---------------------------------------------------------------------------
-
-# app/services/Google/drive_tree.py
 
 def list_children(service, folder_id, include_files: bool = False) -> list[dict]:
     """
@@ -297,7 +295,7 @@ def build_files_list_for_items(
             "files_total": 0,
             "bytes_found": 0,
             "bytes_downloaded": 0,
-            "message": f"Iniciando mapeamento Turbo ({MAX_MAPPING_WORKERS} conexões)...",
+            "message": f"Iniciando mapeamento Turbo...", # Removida a contagem fixa de workers
             "history": ["Iniciando mapeamento otimizado..."]
         })
         sync_task_to_db(task_id)
@@ -359,81 +357,85 @@ def build_files_list_for_items(
             except Exception as e:
                 print(f"Erro item raiz {it_name}: {e}")
 
-    # 2. Processa Subpastas (Dividir para Conquistar com ThreadPool)
-    # O segredo aqui é que cada thread reutiliza sua própria conexão
-    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_MAPPING_WORKERS) as executor:
-        future_to_folder = {}
+    # 2. Processa Subpastas (Dividir para Conquistar com ThreadPool GLOBAL)
+    # SUBSTITUIÇÃO CRÍTICA: Usamos o Executor Global do WorkerManager
+    executor = WorkerManager.get_download_executor()
+    
+    # Mantemos controle apenas das tarefas deste job específico
+    future_to_folder = {}
 
-        # "Semeia" o executor com as pastas iniciais
-        for fid, fpath in initial_folders:
-            f = executor.submit(
-                _worker_process_folder, creds, fid, fpath, filters, progress_dict, task_id
-            )
-            future_to_folder[f] = fpath
+    # "Semeia" o executor global com as pastas iniciais
+    for fid, fpath in initial_folders:
+        f = executor.submit(
+            _worker_process_folder, creds, fid, fpath, filters, progress_dict, task_id
+        )
+        future_to_folder[f] = fpath
 
-        # Loop principal de consumo
-        while future_to_folder:
-            check_status_pause_cancel(progress_dict, task_id)
+    # Loop principal de consumo
+    while future_to_folder:
+        check_status_pause_cancel(progress_dict, task_id)
 
-            # Espera a primeira tarefa terminar para manter o fluxo constante
-            done, _ = concurrent.futures.wait(
-                future_to_folder.keys(),
-                return_when=concurrent.futures.FIRST_COMPLETED,
-            )
+        # Espera a primeira tarefa deste job terminar
+        # Nota: 'wait' funciona perfeitamente com um conjunto de futures, mesmo em um pool compartilhado
+        done, _ = concurrent.futures.wait(
+            future_to_folder.keys(),
+            return_when=concurrent.futures.FIRST_COMPLETED,
+        )
 
-            for future in done:
-                fpath_orig = future_to_folder.pop(future)
+        for future in done:
+            fpath_orig = future_to_folder.pop(future)
 
-                try:
-                    found_files, found_subfolders = future.result()
+            try:
+                found_files, found_subfolders = future.result()
 
-                    # 1. Adiciona Arquivos encontrados (RESULTADO)
-                    if found_files:
-                        with _lock:
-                            all_files_list.extend(found_files)
+                # 1. Adiciona Arquivos encontrados (RESULTADO)
+                if found_files:
+                    with _lock:
+                        all_files_list.extend(found_files)
 
-                            if progress_dict and task_id:
-                                info = progress_dict[task_id]
-                                count_now = info.get("files_found", 0) + len(found_files)
-                                info["files_found"] = count_now
+                        if progress_dict and task_id:
+                            info = progress_dict[task_id]
+                            count_now = info.get("files_found", 0) + len(found_files)
+                            info["files_found"] = count_now
 
-                                total_bytes = sum(x["size_bytes"] for x in found_files)
-                                info["bytes_found"] = info.get("bytes_found", 0) + total_bytes
-                                info["message"] = f"Mapeando: {count_now} itens encontrados..."
+                            total_bytes = sum(x["size_bytes"] for x in found_files)
+                            info["bytes_found"] = info.get("bytes_found", 0) + total_bytes
+                            info["message"] = f"Mapeando: {count_now} itens encontrados..."
 
-                                # Log inteligente (não logar tudo para não travar UI)
-                                hist = info.get("history", [])
-                                if len(found_files) < 3:
-                                    for ff in found_files:
-                                        hist.append(f"Mapeado: {ff['rel_path']}")
-                                else:
-                                    hist.append(f"Mapeados +{len(found_files)} arquivos em {fpath_orig}")
-                                info["history"] = hist
+                            # Log inteligente
+                            hist = info.get("history", [])
+                            if len(found_files) < 3:
+                                for ff in found_files:
+                                    hist.append(f"Mapeado: {ff['rel_path']}")
+                            else:
+                                hist.append(f"Mapeados +{len(found_files)} arquivos em {fpath_orig}")
+                            info["history"] = hist
 
-                                progress_dict[task_id] = info
-                                changes_since_sync += 1
+                            progress_dict[task_id] = info
+                            changes_since_sync += 1
 
-                        if progress_dict and task_id and changes_since_sync >= 100:
-                            sync_task_to_db(task_id)
-                            changes_since_sync = 0
+                    if progress_dict and task_id and changes_since_sync >= 100:
+                        sync_task_to_db(task_id)
+                        changes_since_sync = 0
 
-                    # 2. Divide para Conquistar: Submete novas pastas IMEDIATAMENTE
-                    # Isso garante que os workers nunca fiquem ociosos se houver profundidade
-                    for sub_id, sub_path in found_subfolders:
-                        new_future = executor.submit(
-                            _worker_process_folder, creds, sub_id, sub_path, filters, progress_dict, task_id
-                        )
-                        future_to_folder[new_future] = sub_path
+                # 2. Divide para Conquistar: Submete novas pastas ao Executor Global
+                # Se o pool estiver cheio, isso vai para a fila do pool global, respeitando o limite
+                for sub_id, sub_path in found_subfolders:
+                    new_future = executor.submit(
+                        _worker_process_folder, creds, sub_id, sub_path, filters, progress_dict, task_id
+                    )
+                    future_to_folder[new_future] = sub_path
 
-                except Exception as exc:
-                    err_msg = str(exc)
-                    if "Cancelado" in err_msg:
-                        for pending in future_to_folder:
-                            pending.cancel()
-                        raise exc
+            except Exception as exc:
+                err_msg = str(exc)
+                if "Cancelado" in err_msg:
+                    # Cancela apenas os futuros deste job
+                    for pending in future_to_folder:
+                        pending.cancel()
+                    raise exc
 
-                    print(f"Erro no worker de mapeamento para {fpath_orig}: {exc}")
-                    update_progress(task_id, {"history": [f"ERRO pasta {fpath_orig}: {exc}"]})
+                print(f"Erro no worker de mapeamento para {fpath_orig}: {exc}")
+                update_progress(task_id, {"history": [f"ERRO pasta {fpath_orig}: {exc}"]})
 
     # Finalização
     if progress_dict is not None and task_id is not None:
@@ -537,4 +539,3 @@ def calculate_selection_stats(creds, items):
             break
 
     return stats
-    

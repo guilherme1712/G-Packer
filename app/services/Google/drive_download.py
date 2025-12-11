@@ -23,14 +23,13 @@ from .drive_tree import build_files_list_for_items, get_children
 from .drive import file_passes_filters
 from app.services.progress import sync_task_to_db, update_progress
 from app.services.storage import StorageService
+from concurrent.futures import as_completed # Importante para esperar tarefas
+from app.services.worker_manager import WorkerManager # <--- IMPORT NOVO
 
 _dl_lock = threading.Lock()
 _archive_lock = threading.Lock()
 _thread_local = threading.local()
 
-# Configurações
-MAX_DOWNLOAD_WORKERS = 150
-MAX_ARCHIVE_WORKERS = os.cpu_count() + 4
 CHUNK_SIZE = 50 * 1024 * 1024
 RETRY_LIMIT = 10
 MEMORY_BUFFER_LIMIT = 100 * 1024 * 1024
@@ -386,34 +385,34 @@ def execute_concurrent_download(creds, items, dest_root, progress_dict, task_id,
     results_list = []
     used_rel_paths = set()
 
-    # 1. Thread de Mapeamento (Producer)
     mapper_thread = threading.Thread(
         target=_concurrent_mapper,
         args=(creds, items, file_queue, progress_dict, task_id, filters)
     )
     mapper_thread.start()
 
-    # 2. Threads de Download (Consumers)
-    workers = []
-    for _ in range(MAX_DOWNLOAD_WORKERS):
-        t = threading.Thread(
-            target=_concurrent_worker,
-            args=(creds, file_queue, dest_root, used_rel_paths, progress_dict, task_id, filters, results_list)
-        )
-        t.start()
-        workers.append(t)
+    num_workers = WorkerManager.MAX_DOWNLOAD_WORKERS
+    
+    executor = WorkerManager.get_download_executor()
+    worker_futures = []
 
-    # Espera Mapeamento
+    for _ in range(num_workers):
+        fut = executor.submit(
+            _concurrent_worker, creds, file_queue, dest_root, used_rel_paths, progress_dict, task_id, filters, results_list
+        )
+        worker_futures.append(fut)
+
     mapper_thread.join()
 
-    # Sinaliza fim da fila
-    file_queue.join() # Espera processar o que já está na fila
-    for _ in range(MAX_DOWNLOAD_WORKERS):
-        file_queue.put(None) # Poison pill
+    file_queue.join()
+    for _ in range(num_workers):
+        file_queue.put(None)
 
-    # Espera Workers
-    for t in workers:
-        t.join()
+    for fut in worker_futures:
+        try:
+            fut.result()
+        except Exception:
+            pass
 
     return results_list
 
@@ -482,15 +481,19 @@ def download_files_to_folder(
     used_rel_paths = set()
     changes_since_sync = 0
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_DOWNLOAD_WORKERS) as executor:
-        futures = []
+    executor = WorkerManager.get_download_executor()
+
+    futures = []
+    try:
+        # Submete tarefas
         for f_info in files_list:
             fut = executor.submit(
                 _worker_download_one, creds, f_info, dest_root, used_rel_paths, progress_dict, task_id, filters
             )
             futures.append(fut)
 
-        for future in concurrent.futures.as_completed(futures):
+        # Espera resultados
+        for future in as_completed(futures):
             try:
                 future.result()
                 changes_since_sync += 1
@@ -502,6 +505,8 @@ def download_files_to_folder(
                     for f in futures: f.cancel()
                     sync_task_to_db(task_id)
                     raise exc
+    except Exception as e:
+        raise e
 
     if progress_dict and task_id:
         sync_task_to_db(task_id)
@@ -630,11 +635,17 @@ def download_items_bundle(
             archive_obj = tarfile.open(archive_path, "w:gz")
 
         try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_ARCHIVE_WORKERS) as executor:
-                futures = []
-                for f_info in files_to_download:
-                    futures.append(executor.submit(_worker_archive_one, f_info, tmp_root, archive_obj, archive_format, progress_dict, task_id))
-                for future in concurrent.futures.as_completed(futures): future.result()
+            executor = WorkerManager.get_compression_executor()
+            futures = []
+            
+            for f_info in files_to_download:
+                futures.append(executor.submit(
+                    _worker_archive_one, f_info, tmp_root, archive_obj, archive_format, progress_dict, task_id
+                ))
+            
+            for future in as_completed(futures):
+                future.result()
+
         finally:
             if archive_obj: archive_obj.close()
 
