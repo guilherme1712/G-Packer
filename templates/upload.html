@@ -669,13 +669,14 @@
 
 <script>
     let uploadQueue = [];
-    let currentBatchIds = []; // NOVA VARIÁVEL: Armazena os IDs das Tasks deste lote
+    let currentBatchIds = []; 
+    let currentBatchTaskId = null;
+    let monitorInterval = null;
 
     // --- INIT ---
     document.addEventListener("DOMContentLoaded", () => {
         initTree();
-        // REMOVIDO: startGlobalMonitor(); -> Não monitoramos globalmente ao abrir, só ao iniciar upload
-
+        
         // Re-binding inputs
         const fi = document.getElementById('fileInput');
         const foi = document.getElementById('folderInput');
@@ -703,7 +704,7 @@
         });
     });
 
-    // --- FILE HANDLING (Lógica inalterada) ---
+    // --- FILE HANDLING ---
     async function traverse(entry, path = '') {
         if (entry.isFile) return new Promise(r => entry.file(f => { addFile(f, path + f.name); r(); }));
         if (entry.isDirectory) {
@@ -718,7 +719,7 @@
         }
     }
 
-    function addFile(file, path) { // Helper corrigido que faltava no original ou estava implícito
+    function addFile(file, path) {
         if (!uploadQueue.some(i => i.path === path)) uploadQueue.push({ file: file, path: path });
     }
 
@@ -756,82 +757,9 @@
     }
 
     function removeFromQueue(idx) { uploadQueue.splice(idx, 1); updateUI(); }
-
     function formatSize(b) { if (b === 0) return '0 B'; const i = Math.floor(Math.log(b) / Math.log(1024)); return (b / Math.pow(1024, i)).toFixed(2) + ' ' + ['B', 'KB', 'MB', 'GB'][i]; }
 
-    // --- UPLOAD LOGIC (MODIFICADA PARA TASKS) ---
-    document.getElementById('btnUpload').onclick = async () => {
-        const btn = document.getElementById('btnUpload');
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> PREPARANDO...';
-
-        const targetFolderId = document.getElementById('targetFolderId').value;
-        const preserveStructure = document.getElementById('chkPreserveStructure').checked;
-        const CONCURRENCY_LIMIT = 3;
-
-        // 1. Reseta lista de IDs do lote atual
-        currentBatchIds = [];
-
-        const queueToProcess = [...uploadQueue];
-        const totalItems = queueToProcess.length;
-        let enqueuedCount = 0;
-
-        // Limpa UI antiga e mostra widget zerado
-        resetWidgetUI(totalItems);
-
-        const processItem = async (item) => {
-            const fd = new FormData();
-            fd.append('file', item.file);
-            fd.append('relative_path', item.path);
-            fd.append('target_root_id', targetFolderId);
-            fd.append('preserve_structure', preserveStructure);
-
-            try {
-                const res = await fetch('/api/upload/enqueue', { method: 'POST', body: fd });
-                const data = await res.json();
-
-                // 2. CAPTURA O ID DA TASK RETORNADO
-                if (data.ok && data.task_id) {
-                    currentBatchIds.push(data.task_id);
-                }
-            } catch (e) {
-                console.error("Falha ao enfileirar", e);
-            } finally {
-                enqueuedCount++;
-                // Atualiza texto do botão apenas como feedback de "Enfileiramento"
-                btn.innerHTML = `ENVIANDO (${enqueuedCount}/${totalItems})`;
-            }
-        };
-
-        // 3. Inicia o Monitoramento IMEDIATAMENTE (mesmo antes de terminar de enviar tudo pro backend)
-        // Isso garante que o usuário veja o progresso assim que a primeira Task for criada
-        startBatchMonitor();
-
-        // Worker Loop para Enfileirar
-        const worker = async () => {
-            while (queueToProcess.length > 0) {
-                const item = queueToProcess.shift();
-                if (item) await processItem(item);
-            }
-        };
-
-        const workers = [];
-        for (let i = 0; i < Math.min(CONCURRENCY_LIMIT, totalItems); i++) workers.push(worker());
-        await Promise.all(workers);
-
-        // Ao final do enfileiramento, limpamos a lista visual, 
-        // mas o MONITOR continua rodando até as tasks acabarem.
-        btn.innerHTML = '<i class="fas fa-clock"></i> PROCESSANDO...';
-        clearAllFiles();
-
-        // O botão só volta ao normal quando o monitor terminar (controlado pelo startBatchMonitor)
-    };
-
-    // Variável Global para o ID do Lote
-    let currentBatchTaskId = null;
-    let monitorInterval = null;
-
-    // --- FUNÇÃO DE UPLOAD ATUALIZADA ---
+    // --- UPLOAD LOGIC (BATCH OTIMIZADO) ---
     document.getElementById('btnUpload').onclick = async () => {
         const btn = document.getElementById('btnUpload');
         if (uploadQueue.length === 0) return;
@@ -840,7 +768,6 @@
         btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> CRIANDO LOTE...';
 
         const totalFiles = uploadQueue.length;
-        // Soma o tamanho total (opcional, para melhor precisão futura)
         const totalBytes = uploadQueue.reduce((acc, item) => acc + item.file.size, 0);
 
         try {
@@ -854,47 +781,69 @@
                 })
             });
             const createData = await createRes.json();
-
             if (!createData.ok) throw new Error("Erro ao criar lote");
 
+            currentBatchIds = []; 
             currentBatchTaskId = createData.task_id;
-
-            // Abre o Widget imediatamente
+            
+            // Inicia monitor visual
             resetWidgetUI(totalFiles);
             startBatchMonitor(currentBatchTaskId);
 
-            // 2. LOOP DE ENVIO (ENQUEUE)
+            // --- CONFIGURAÇÃO DO ENVIO EM LOTE ---
             const targetFolderId = document.getElementById('targetFolderId').value;
             const preserveStructure = document.getElementById('chkPreserveStructure').checked;
-            const CONCURRENCY_LIMIT = 5; // Envia requisições de 5 em 5 para não travar o browser
-
+            
+            // CONFIGURAÇÃO DE VELOCIDADE
+            const CONCURRENCY_LIMIT = 6;  // Quantas requisições simultâneas
+            const UPLOAD_BATCH_SIZE = 4;  // Quantos arquivos por requisição (FormData)
+            
             const queueToProcess = [...uploadQueue];
+            let processedCount = 0;
 
-            // Worker do Front que envia para o endpoint de fila
-            const enqueueWorker = async () => {
-                while (queueToProcess.length > 0) {
-                    const item = queueToProcess.shift();
+            // Função que envia um GRUPO de arquivos
+            const processBatch = async (batchItems) => {
+                const fd = new FormData();
+                
+                // Dados comuns
+                fd.append('target_root_id', targetFolderId);
+                fd.append('preserve_structure', preserveStructure);
+                fd.append('task_id', currentBatchTaskId);
 
-                    const fd = new FormData();
-                    fd.append('file', item.file);
-                    fd.append('relative_path', item.path);
-                    fd.append('target_root_id', targetFolderId);
-                    fd.append('preserve_structure', preserveStructure);
-                    fd.append('task_id', currentBatchTaskId); // VINCULA AO PAI
+                // IMPORTANTE: Adiciona arquivos com a chave 'files' (PLURAL)
+                batchItems.forEach(item => {
+                    fd.append('files', item.file); 
+                    fd.append('relative_paths', item.path);
+                });
 
-                    try {
-                        await fetch('/api/upload/enqueue', { method: 'POST', body: fd });
-                    } catch (e) { console.error("Falha no enqueue", e); }
+                try {
+                    await fetch('/api/upload/enqueue', { method: 'POST', body: fd });
+                } catch (e) {
+                    console.error("Falha ao enviar batch", e);
+                } finally {
+                    processedCount += batchItems.length;
+                    btn.innerHTML = `ENVIANDO (${processedCount}/${totalFiles})`;
                 }
             };
 
             btn.innerHTML = '<i class="fas fa-upload"></i> ENVIANDO...';
 
+            // Worker Loop
+            const worker = async () => {
+                while (queueToProcess.length > 0) {
+                    // Retira 4 itens da fila
+                    const batch = queueToProcess.splice(0, UPLOAD_BATCH_SIZE);
+                    if (batch.length > 0) {
+                        await processBatch(batch);
+                    }
+                }
+            };
+
+            // Inicia Threads do Front
             const workers = [];
-            for (let i = 0; i < CONCURRENCY_LIMIT; i++) workers.push(enqueueWorker());
+            for (let i = 0; i < CONCURRENCY_LIMIT; i++) workers.push(worker());
             await Promise.all(workers);
 
-            // Limpa a fila visual (o processo continua no backend)
             clearAllFiles();
             btn.innerHTML = '<i class="fas fa-clock"></i> PROCESSANDO NO SERVIDOR...';
 
@@ -913,9 +862,6 @@
 
         monitorInterval = setInterval(async () => {
             try {
-                // Usa o endpoint de batch que você já tinha, mas passando APENAS o ID do Pai
-                // Nota: Talvez precise ajustar o endpoint batch-status para aceitar um único ID de Task Pai
-                // OU passamos uma lista com apenas 1 ID.
                 const res = await fetch('/api/upload/batch-status', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -924,7 +870,6 @@
                 const stats = await res.json();
                 updateWidgetUI(stats);
 
-                // Verifica se acabou (Sucesso + Erro >= Total) E se o total > 0
                 if (stats.total_files > 0 && (stats.success + stats.error >= stats.total_files)) {
                     finalizeUploadUI();
                 }
@@ -937,25 +882,20 @@
         document.getElementById('uwStatusText').innerText = "Enfileirando arquivos...";
         document.getElementById('uwProgressBar').style.width = '0%';
         document.getElementById('uwProgressBar').classList.add('active');
-
         document.getElementById('uwCountTotal').innerText = total;
         document.getElementById('uwCountSuccess').innerText = 0;
         document.getElementById('uwCountError').innerText = 0;
     }
 
     function updateWidgetUI(stats) {
-        // Stats vem do backend consolidado
         const percent = stats.percent || 0;
-
         document.getElementById('uwProgressBar').style.width = percent + '%';
         document.getElementById('uwPercentText').innerText = Math.round(percent) + '%';
-
         document.getElementById('uwCountTotal').innerText = stats.total_files;
         document.getElementById('uwCountSuccess').innerText = stats.success;
         document.getElementById('uwCountError').innerText = stats.error;
-
         const speed = stats.speed_mb_s ? `(${stats.speed_mb_s} MB/s)` : '';
-        document.getElementById('uwStatusText').innerText = `Enviando ${stats.processed}/${stats.total_files} ${speed}`;
+        document.getElementById('uwStatusText').innerText = `Processando ${stats.processed}/${stats.total_files} ${speed}`;
     }
 
     function finalizeUploadUI() {
@@ -963,10 +903,8 @@
         document.getElementById('uwStatusTitle').innerText = "Upload Concluído";
         document.getElementById('uwStatusText').innerText = "Todos os arquivos processados.";
         document.getElementById('uwProgressBar').classList.remove('active');
-        document.getElementById('uwProgressBar').style.backgroundColor = '#4ade80'; // Verde sólido
+        document.getElementById('uwProgressBar').style.backgroundColor = '#4ade80';
         document.getElementById('uwIcon').className = "fas fa-check-circle text-success-bright";
-
-        // Reseta botão
         const btn = document.getElementById('btnUpload');
         btn.disabled = false;
         btn.innerHTML = 'INICIAR UPLOAD';
@@ -976,7 +914,7 @@
         document.getElementById('batchProgressWidget').classList.toggle('active');
     }
 
-    // --- TREE (Mantido igual) ---
+    // --- TREE ---
     function initTree() {
         const ul = document.getElementById('tree-root');
         ul.innerHTML = '';

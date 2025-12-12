@@ -30,106 +30,6 @@ def api_tree_nodes():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
-@upload_bp.route("/api/upload/global-status")
-def api_global_status():
-    stats = QueueService.get_global_progress()
-    return jsonify(stats)
-
-# app/blueprints/upload.py
-
-# ... imports existentes ...
-
-@upload_bp.route("/api/upload/create-batch", methods=["POST"])
-def api_create_batch():
-    """
-    Cria a TASK PAI única para todo o lote de arquivos.
-    """
-    data = request.json
-    total_files = data.get('total_files', 0)
-    total_bytes = data.get('total_bytes', 0)
-    
-    # Gera um ID único para o LOTE (Task)
-    task_id = f"batch_{uuid.uuid4().hex}"
-    user_email = AuditService.get_current_user_email()
-
-    # Cria a Task Pai com o total de arquivos esperado
-    task = TaskModel(
-        id=task_id,
-        type=TaskTypeEnum.UPLOAD,
-        phase="processando", # ou 'enfileirando'
-        message="Iniciando upload em lote...",
-        files_found=total_files,
-        files_total=total_files,
-        files_downloaded=0, # Usaremos este campo para contar arquivos enviados
-        bytes_found=total_bytes,
-        bytes_downloaded=0,
-        canceled=False,
-        paused=False
-    )
-    
-    db.session.add(task)
-    db.session.commit()
-    
-    return jsonify({"ok": True, "task_id": task_id})
-
-
-@upload_bp.route("/api/upload/enqueue", methods=["POST"])
-def api_enqueue():
-    file = request.files.get("file")
-    
-    # Recebe os dados brutos
-    raw_relative_path = request.form.get("relative_path") 
-    target_root_id = request.form.get("target_root_id")
-    task_id = request.form.get("task_id")
-    
-    # Tratamento rigoroso do Booleano
-    raw_preserve = request.form.get("preserve_structure")
-    # O JS envia a string "true" se marcado, ou "false"/null se não.
-    preserve_structure = (str(raw_preserve).lower() == 'true')
-
-    if not file:
-        return jsonify({"ok": False}), 400
-
-    # Salvar no Disco Local (Temp)
-    safe_name = secure_filename(file.filename)
-    temp_dir = os.path.join(current_app.root_path, '..', 'storage', 'queue')
-    os.makedirs(temp_dir, exist_ok=True)
-
-    unique_name = f"{uuid.uuid4().hex}_{safe_name}"
-    save_path = os.path.join(temp_dir, unique_name)
-    file.save(save_path)
-    file_size = os.path.getsize(save_path)
-
-    # --- LÓGICA DE CORREÇÃO DO CHECKBOX ---
-    if preserve_structure:
-        # Se marcado: Usa o caminho completo vindo do JS (ex: PASTA/IMG/foto.jpg)
-        final_drive_path = raw_relative_path 
-    else:
-        # Se desmarcado: Ignora qualquer pasta e usa apenas o nome do arquivo
-        # Isso faz com que o upload_single_file_sync jogue o arquivo direto na raiz
-        final_drive_path = file.filename 
-
-    user_email = AuditService.get_current_user_email()
-
-    new_history = UploadHistoryModel(
-        task_id=task_id,
-        filename=file.filename,
-        relative_path=final_drive_path, # <--- Caminho corrigido aqui
-        mime_type=file.mimetype,
-        status='PENDING',
-        destination_id=target_root_id,
-        temp_path=save_path,
-        size_bytes=file_size,
-        user_email=user_email
-    )
-    
-    db.session.add(new_history)
-    db.session.commit()
-
-    QueueService.start_worker(current_app._get_current_object())
-
-    return jsonify({"ok": True, "file_id": new_history.id})
-
 @upload_bp.route("/api/upload/batch-status", methods=["POST"])
 def api_batch_status():
     data = request.json or {}
@@ -138,14 +38,11 @@ def api_batch_status():
     if not task_ids:
         return jsonify({"percent": 0, "total_files": 0, "processed": 0, "success": 0, "error": 0})
 
-    # Pegamos o ID do Lote (assumindo que mandamos apenas 1 ID no array, que é o ID do pai)
     batch_id = task_ids[0]
-    
     task = db.session.get(TaskModel, batch_id)
     if not task:
         return jsonify({"percent": 0, "total_files": 0, "processed": 0})
 
-    # Leitura direta da Task Pai
     total = task.files_total or 0
     success = task.files_downloaded or 0
     error = task.errors_count or 0
@@ -161,7 +58,114 @@ def api_batch_status():
         "success": success,
         "error": error,
         "percent": round(percent, 1),
-        "speed_mb_s": 0.0, # Implementar calc de velocidade depois se necessário
+        "speed_mb_s": 0.0,
         "bytes_total": task.bytes_found,
         "bytes_downloaded": task.bytes_downloaded
     })
+
+@upload_bp.route("/api/upload/create-batch", methods=["POST"])
+def api_create_batch():
+    data = request.json
+    total_files = data.get('total_files', 0)
+    total_bytes = data.get('total_bytes', 0)
+    
+    task_id = f"batch_{uuid.uuid4().hex}"
+    
+    task = TaskModel(
+        id=task_id,
+        type=TaskTypeEnum.UPLOAD,
+        phase="processando",
+        message="Iniciando upload em lote...",
+        files_found=total_files,
+        files_total=total_files,
+        files_downloaded=0,
+        bytes_found=total_bytes,
+        bytes_downloaded=0,
+        canceled=False,
+        paused=False
+    )
+    db.session.add(task)
+    db.session.commit()
+    return jsonify({"ok": True, "task_id": task_id})
+
+@upload_bp.route("/api/upload/enqueue", methods=["POST"])
+def api_enqueue():
+    # --- ESTRATÉGIA ROBUSTA DE CAPTURA DE ARQUIVOS ---
+    # Tenta pegar 'files' (padrão)
+    files = request.files.getlist("files")
+    
+    # Se vazio, tenta 'files[]' (alguns browsers forçam isso)
+    if not files:
+        files = request.files.getlist("files[]")
+        
+    # Se ainda vazio, tenta 'file' (legado ou erro de frontend)
+    if not files:
+        files = request.files.getlist("file")
+
+    # Captura os caminhos relativos
+    raw_relative_paths = request.form.getlist("relative_paths")
+    if not raw_relative_paths:
+        raw_relative_paths = request.form.getlist("relative_paths[]") # Tenta com colchetes
+
+    target_root_id = request.form.get("target_root_id")
+    task_id = request.form.get("task_id")
+    raw_preserve = request.form.get("preserve_structure")
+    
+    preserve_structure = (str(raw_preserve).strip().lower() == 'true')
+
+    if not files:
+        # Se cair aqui, realmente não chegou nada
+        return jsonify({
+            "ok": False, 
+            "msg": "No files received", 
+            "keys_received": list(request.files.keys())
+        }), 400
+
+    created_ids = []
+    user_email = AuditService.get_current_user_email()
+    
+    temp_dir = os.path.join(current_app.root_path, '..', 'storage', 'queue')
+    os.makedirs(temp_dir, exist_ok=True)
+
+    for i, file in enumerate(files):
+        if not file: continue
+
+        # Sincroniza path. Se não tiver path correspondente, usa o filename.
+        raw_relative_path = raw_relative_paths[i] if i < len(raw_relative_paths) else file.filename
+
+        # 1. Salvar Temp
+        safe_name = secure_filename(file.filename)
+        unique_name = f"{uuid.uuid4().hex}_{safe_name}"
+        save_path = os.path.join(temp_dir, unique_name)
+        
+        file.save(save_path)
+        file_size = os.path.getsize(save_path)
+
+        # 2. Define Caminho Final
+        if preserve_structure and raw_relative_path and raw_relative_path != 'undefined':
+            final_drive_path = raw_relative_path
+        else:
+            final_drive_path = file.filename
+
+        # 3. DB Insert
+        new_history = UploadHistoryModel(
+            task_id=task_id,
+            filename=file.filename,
+            relative_path=final_drive_path,
+            mime_type=file.mimetype,
+            status='PENDING',
+            destination_id=target_root_id,
+            temp_path=save_path,
+            size_bytes=file_size,
+            user_email=user_email
+        )
+        db.session.add(new_history)
+        db.session.flush()
+        created_ids.append(new_history.id)
+
+    db.session.commit()
+    
+    # Acorda o Worker
+    QueueService.start_worker(current_app._get_current_object())
+
+    return jsonify({"ok": True, "count": len(created_ids), "ids": created_ids})
