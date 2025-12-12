@@ -2,14 +2,13 @@ import threading
 import time
 import os
 from concurrent.futures import ThreadPoolExecutor
-from app.models import db, UploadHistoryModel
+from app.models import db, UploadHistoryModel, TaskModel  # <--- IMPORTANTE: Importar TaskModel
 from app.services.Google.drive_upload import DriveUploadService
 from app.services.worker_manager import WorkerManager
 from app.services.auth import get_credentials
 
 # =========================================================================
 # CONSTANTE DE PARALELISMO
-# Define quantos arquivos serão enviados SIMULTANEAMENTE para o Drive.
 # =========================================================================
 MAX_CONCURRENT_UPLOADS = 150
 
@@ -30,16 +29,9 @@ class QueueService:
 
     @staticmethod
     def _manager_loop(app):
-        """
-        Loop principal que gerencia a distribuição de tarefas
-        usando o Pool Central de Uploads.
-        """
-        # SUBSTUIÇÃO: Em vez de criar um executor novo, pegamos o global
+        """Loop principal que gerencia a distribuição de tarefas."""
         executor = WorkerManager.get_upload_executor()
-        
-        # Pega o limite configurado no Manager
         max_workers = WorkerManager.MAX_UPLOAD_WORKERS
-        
         active_futures = []
 
         with app.app_context():
@@ -47,7 +39,6 @@ class QueueService:
             while keep_running:
                 try:
                     active_futures = [f for f in active_futures if not f.done()]
-
                     slots_available = max_workers - len(active_futures)
 
                     if slots_available > 0:
@@ -59,8 +50,7 @@ class QueueService:
                         if tasks:
                             for task in tasks:
                                 task.status = 'UPLOADING'
-                                db.session.commit()
-
+                                db.session.commit() # Commit rápido para marcar como UPLOADING
                                 future = executor.submit(QueueService._upload_worker, app, task.id)
                                 active_futures.append(future)
                         else:
@@ -76,83 +66,67 @@ class QueueService:
     def _upload_worker(app, task_id):
         """
         Esta função roda DENTRO de cada thread individualmente.
-        Faz o upload pesado e atualiza o banco.
+        Faz o upload pesado e atualiza o banco (Arquivo E Task Pai).
         """
-        # Cada thread precisa do seu próprio contexto de aplicação e sessão de banco
         with app.app_context():
-            # Busca a task novamente (nova sessão do DB para esta thread)
-            task = db.session.get(UploadHistoryModel, task_id)
-            if not task: return
+            # Busca o registro do arquivo
+            upload_record = db.session.get(UploadHistoryModel, task_id)
+            if not upload_record: return
 
             try:
                 creds = get_credentials()
-                if not creds:
-                    raise Exception("Sem credenciais válidas na thread.")
+                if not creds: raise Exception("Sem credenciais válidas na thread.")
 
-                # Verifica arquivo físico
-                if not task.temp_path or not os.path.exists(task.temp_path):
-                    raise FileNotFoundError(f"Arquivo temporário sumiu: {task.temp_path}")
+                if not upload_record.temp_path or not os.path.exists(upload_record.temp_path):
+                    raise FileNotFoundError(f"Arquivo temporário sumiu: {upload_record.temp_path}")
 
-                # --- UPLOAD REAL (O Retry está dentro desta função agora) ---
+                # --- UPLOAD REAL ---
                 result = DriveUploadService.upload_single_file_sync(
                     creds=creds,
-                    local_path=task.temp_path,
-                    filename=task.filename,
-                    mimetype=task.mime_type,
-                    relative_path=task.relative_path,
-                    root_target_id=task.destination_id,
-                    user_email=task.user_email
+                    local_path=upload_record.temp_path,
+                    filename=upload_record.filename,
+                    mimetype=upload_record.mime_type,
+                    relative_path=upload_record.relative_path, # Já tratado no upload.py
+                    root_target_id=upload_record.destination_id,
+                    user_email=upload_record.user_email
                 )
 
                 # Sucesso
-                task.status = 'SUCCESS'
-                task.file_id = result.get('id')
-                task.size_bytes = int(result.get('size', 0))
+                upload_record.status = 'SUCCESS'
+                upload_record.file_id = result.get('id')
+                upload_record.size_bytes = int(result.get('size', 0))
                 
-                # Remove arquivo temp com segurança
-                try:
-                    if os.path.exists(task.temp_path):
-                        os.remove(task.temp_path)
-                except Exception as clean_err:
-                    print(f"[Worker Warning] Falha ao limpar temp {task_id}: {clean_err}")
+                if os.path.exists(upload_record.temp_path):
+                    os.remove(upload_record.temp_path)
 
             except Exception as e:
-                # Se chegou aqui, é porque os 5 retries falharam ou é um erro fatal
-                print(f"[Worker Error] ID {task_id} ({task.filename}): {e}")
-                task.status = 'ERROR'
-                task.error_message = str(e)
+                print(f"[Worker Error] ID {task_id} ({upload_record.filename}): {e}")
+                upload_record.status = 'ERROR'
+                upload_record.error_message = str(e)
             
             finally:
-                # Commit final da thread para salvar SUCCESS ou ERROR
+                # ==============================================================================
+                # CORREÇÃO DO PROGRESSO: ATUALIZAR A TASK PAI (LOTE)
+                # ==============================================================================
                 try:
+                    if upload_record.task_id:
+                        parent_task = db.session.get(TaskModel, upload_record.task_id)
+                        if parent_task:
+                            # Incremento Atômico (+1) direto no banco para evitar conflito de threads
+                            if upload_record.status == 'SUCCESS':
+                                parent_task.files_downloaded = TaskModel.files_downloaded + 1
+                                parent_task.bytes_downloaded = TaskModel.bytes_downloaded + upload_record.size_bytes
+                            elif upload_record.status == 'ERROR':
+                                parent_task.errors_count = TaskModel.errors_count + 1
+                    
+                    # Salva tudo (Status do Arquivo + Incremento da Task) em uma única transação
                     db.session.commit()
+
                 except Exception as db_err:
                     print(f"[Worker DB Error] Falha ao salvar status final: {db_err}")
                     db.session.rollback()
 
     @staticmethod
     def get_global_progress():
-        """Retorna estatísticas para o Frontend."""
-        try:
-            # Queries otimizadas apenas para contagem
-            total_q = UploadHistoryModel.query.count()
-            
-            # PENDING e UPLOADING contam como "Fila Ativa"
-            pending = UploadHistoryModel.query.filter(
-                UploadHistoryModel.status.in_(['PENDING', 'UPLOADING'])
-            ).count()
-            
-            success = UploadHistoryModel.query.filter_by(status='SUCCESS').count()
-            error = UploadHistoryModel.query.filter_by(status='ERROR').count()
-            
-            return {
-                "total_files": total_q,
-                "pending": pending,
-                "success": success,
-                "error": error,
-                "is_active": pending > 0
-            }
-        except Exception as e:
-            # Fallback em caso de erro no banco (ex: lock)
-            print(f"[Status Error] {e}")
-            return {"total_files": 0, "pending": 0, "success": 0, "error": 0, "is_active": False}
+        """Mantido para compatibilidade, mas o Frontend agora usa o endpoint batch-status."""
+        return {}

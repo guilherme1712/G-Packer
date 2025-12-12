@@ -157,54 +157,159 @@
         }
     }
 
-    /* BARRA DE PROGRESSO NEON COMPACTA */
-    .progress-track {
-        background: rgba(0, 0, 0, 0.4);
-        border-radius: 10px;
-        height: 12px;
-        /* Mais fina para o widget */
-        width: 100%;
-        margin: 15px 0;
-        overflow: hidden;
+    /* =========================================
+       NOVO WIDGET DE PROGRESSO (Moderno)
+       ========================================= */
+    .upload-widget-container {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        width: 380px;
+        background: #1e293b;
+        /* Slate 800 */
         border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+        color: white;
+        z-index: 1050;
+        font-family: 'Inter', system-ui, sans-serif;
+        overflow: hidden;
+
+        /* Animação de entrada */
+        transform: translateY(120%);
+        transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    .progress-fill {
+    .upload-widget-container.active {
+        transform: translateY(0);
+    }
+
+    /* Header do Widget */
+    .uw-header {
+        padding: 16px;
+        background: rgba(15, 23, 42, 0.6);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .uw-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .uw-minimize-btn {
+        background: transparent;
+        border: none;
+        color: #94a3b8;
+        cursor: pointer;
+        transition: color 0.2s;
+    }
+
+    .uw-minimize-btn:hover {
+        color: white;
+    }
+
+    /* Corpo do Widget */
+    .uw-body {
+        padding: 20px 16px;
+    }
+
+    /* Barra de Progresso */
+    .uw-progress-track {
+        height: 8px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        margin: 12px 0 20px 0;
+        overflow: hidden;
+    }
+
+    .uw-progress-fill {
         height: 100%;
-        background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
+        background: linear-gradient(90deg, #3b82f6, #8b5cf6);
         width: 0%;
-        border-radius: 10px;
-        box-shadow: 0 0 10px rgba(168, 85, 247, 0.6);
         transition: width 0.3s ease;
+        border-radius: 4px;
+        position: relative;
     }
 
-    .progress-animated {
-        background-image: linear-gradient(45deg, rgba(255, 255, 255, 0.2) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.2) 75%, transparent 75%, transparent);
+    .uw-progress-fill.active::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        right: 0;
+        background: linear-gradient(45deg, rgba(255, 255, 255, .15) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, .15) 50%, rgba(255, 255, 255, .15) 75%, transparent 75%, transparent);
         background-size: 1rem 1rem;
-        animation: stripes 1s linear infinite;
+        animation: uw-stripes 1s linear infinite;
     }
 
-    @keyframes stripes {
-        0% {
+    @keyframes uw-stripes {
+        from {
             background-position: 1rem 0;
         }
 
-        100% {
+        to {
             background-position: 0 0;
         }
     }
 
-    /* Métrica circular */
-    .metric-badge {
-        background: rgba(255, 255, 255, 0.05);
-        padding: 6px 12px;
-        border-radius: 6px;
-        font-size: 0.75rem;
-        color: #cbd5e1;
+    /* Grid de Estatísticas */
+    .uw-stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 12px;
+    }
+
+    .uw-stat-box {
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 8px;
+        padding: 10px;
+        text-align: center;
         display: flex;
         flex-direction: column;
-        align-items: center;
-        flex: 1;
+        justify-content: center;
+    }
+
+    .uw-stat-value {
+        font-size: 1.1rem;
+        font-weight: 700;
+        line-height: 1.2;
+        margin-bottom: 2px;
+    }
+
+    .uw-stat-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #94a3b8;
+    }
+
+    /* Cores de Status */
+    .text-success-bright {
+        color: #4ade80;
+    }
+
+    .text-error-bright {
+        color: #f87171;
+    }
+
+    .text-total {
+        color: #e2e8f0;
+    }
+
+    /* Info extra (velocidade) */
+    .uw-info-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.8rem;
+        color: #cbd5e1;
+        margin-bottom: 5px;
     }
 
     /* =========================================
@@ -522,44 +627,39 @@
 
     </div>
 
-    <div id="globalProgressWidget" class="status-widget">
-        <div class="widget-header">
-            <div class="d-flex align-items-center gap-2">
-                <i class="fas fa-sync fa-spin text-primary" id="widgetIcon"></i>
-                <span class="text-white fw-bold" style="font-size: 0.9rem;">Status do Upload</span>
+    <div id="batchProgressWidget" class="upload-widget-container">
+        <div class="uw-header">
+            <div class="uw-title">
+                <i class="fas fa-cloud-upload-alt text-primary" id="uwIcon"></i>
+                <span id="uwStatusTitle">Aguardando...</span>
             </div>
-            <div class="d-flex align-items-center gap-2">
-                <span class="badge bg-primary rounded-pill" id="widgetPercentBadge">0%</span>
-                <button type="button" class="btn btn-sm btn-outline-secondary border-0 text-secondary"
-                    onclick="document.getElementById('globalProgressWidget').classList.remove('active')">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
+            <button class="uw-minimize-btn" onclick="toggleWidget()">
+                <i class="fas fa-chevron-down"></i>
+            </button>
         </div>
 
-
-        <div class="widget-body">
-            <div class="d-flex justify-content-between text-secondary small mb-1">
-                <span id="widgetStatusText">Preparando...</span>
-                <span id="widgetCountText">0/0</span>
+        <div class="uw-body">
+            <div class="uw-info-row">
+                <span id="uwStatusText">Preparando arquivos...</span>
+                <span id="uwPercentText" class="fw-bold">0%</span>
             </div>
 
-            <div class="progress-track">
-                <div id="widgetProgressBar" class="progress-fill progress-animated"></div>
+            <div class="uw-progress-track">
+                <div id="uwProgressBar" class="uw-progress-fill"></div>
             </div>
 
-            <div class="d-flex gap-2 mt-3">
-                <div class="metric-badge">
-                    <strong class="text-white h5 mb-0" id="countTotal">0</strong>
-                    <span>Total</span>
+            <div class="uw-stats-grid">
+                <div class="uw-stat-box">
+                    <span class="uw-stat-value text-total" id="uwCountTotal">0</span>
+                    <span class="uw-stat-label">Total</span>
                 </div>
-                <div class="metric-badge">
-                    <strong class="text-success h5 mb-0" id="countSuccess">0</strong>
-                    <span>Sucesso</span>
+                <div class="uw-stat-box">
+                    <span class="uw-stat-value text-success-bright" id="uwCountSuccess">0</span>
+                    <span class="uw-stat-label">Sucesso</span>
                 </div>
-                <div class="metric-badge">
-                    <strong class="text-danger h5 mb-0" id="countError">0</strong>
-                    <span>Falha</span>
+                <div class="uw-stat-box">
+                    <span class="uw-stat-value text-error-bright" id="uwCountError">0</span>
+                    <span class="uw-stat-label">Falhas</span>
                 </div>
             </div>
         </div>
@@ -569,11 +669,12 @@
 
 <script>
     let uploadQueue = [];
+    let currentBatchIds = []; // NOVA VARIÁVEL: Armazena os IDs das Tasks deste lote
 
     // --- INIT ---
     document.addEventListener("DOMContentLoaded", () => {
         initTree();
-        startGlobalMonitor();
+        // REMOVIDO: startGlobalMonitor(); -> Não monitoramos globalmente ao abrir, só ao iniciar upload
 
         // Re-binding inputs
         const fi = document.getElementById('fileInput');
@@ -602,7 +703,7 @@
         });
     });
 
-    // --- FILE HANDLING ---
+    // --- FILE HANDLING (Lógica inalterada) ---
     async function traverse(entry, path = '') {
         if (entry.isFile) return new Promise(r => entry.file(f => { addFile(f, path + f.name); r(); }));
         if (entry.isDirectory) {
@@ -615,6 +716,10 @@
                 read();
             });
         }
+    }
+
+    function addFile(file, path) { // Helper corrigido que faltava no original ou estava implícito
+        if (!uploadQueue.some(i => i.path === path)) uploadQueue.push({ file: file, path: path });
     }
 
     function addFiles(files, isDir = false) {
@@ -654,18 +759,25 @@
 
     function formatSize(b) { if (b === 0) return '0 B'; const i = Math.floor(Math.log(b) / Math.log(1024)); return (b / Math.pow(1024, i)).toFixed(2) + ' ' + ['B', 'KB', 'MB', 'GB'][i]; }
 
-    // --- UPLOAD LOGIC ---
+    // --- UPLOAD LOGIC (MODIFICADA PARA TASKS) ---
     document.getElementById('btnUpload').onclick = async () => {
         const btn = document.getElementById('btnUpload');
         btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ENVIANDO...';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> PREPARANDO...';
 
         const targetFolderId = document.getElementById('targetFolderId').value;
         const preserveStructure = document.getElementById('chkPreserveStructure').checked;
-        const CONCURRENCY_LIMIT = 6;
+        const CONCURRENCY_LIMIT = 3;
+
+        // 1. Reseta lista de IDs do lote atual
+        currentBatchIds = [];
+
         const queueToProcess = [...uploadQueue];
         const totalItems = queueToProcess.length;
-        let processedCount = 0;
+        let enqueuedCount = 0;
+
+        // Limpa UI antiga e mostra widget zerado
+        resetWidgetUI(totalItems);
 
         const processItem = async (item) => {
             const fd = new FormData();
@@ -673,13 +785,29 @@
             fd.append('relative_path', item.path);
             fd.append('target_root_id', targetFolderId);
             fd.append('preserve_structure', preserveStructure);
-            try { await fetch('/api/upload/enqueue', { method: 'POST', body: fd }); } catch (e) { }
-            finally {
-                processedCount++;
-                btn.innerHTML = `ENVIANDO (${processedCount}/${totalItems})`;
+
+            try {
+                const res = await fetch('/api/upload/enqueue', { method: 'POST', body: fd });
+                const data = await res.json();
+
+                // 2. CAPTURA O ID DA TASK RETORNADO
+                if (data.ok && data.task_id) {
+                    currentBatchIds.push(data.task_id);
+                }
+            } catch (e) {
+                console.error("Falha ao enfileirar", e);
+            } finally {
+                enqueuedCount++;
+                // Atualiza texto do botão apenas como feedback de "Enfileiramento"
+                btn.innerHTML = `ENVIANDO (${enqueuedCount}/${totalItems})`;
             }
         };
 
+        // 3. Inicia o Monitoramento IMEDIATAMENTE (mesmo antes de terminar de enviar tudo pro backend)
+        // Isso garante que o usuário veja o progresso assim que a primeira Task for criada
+        startBatchMonitor();
+
+        // Worker Loop para Enfileirar
         const worker = async () => {
             while (queueToProcess.length > 0) {
                 const item = queueToProcess.shift();
@@ -691,72 +819,164 @@
         for (let i = 0; i < Math.min(CONCURRENCY_LIMIT, totalItems); i++) workers.push(worker());
         await Promise.all(workers);
 
-        btn.innerHTML = '<i class="fas fa-check"></i> FEITO!';
+        // Ao final do enfileiramento, limpamos a lista visual, 
+        // mas o MONITOR continua rodando até as tasks acabarem.
+        btn.innerHTML = '<i class="fas fa-clock"></i> PROCESSANDO...';
         clearAllFiles();
-        setTimeout(() => { btn.innerHTML = 'INICIAR UPLOAD'; btn.disabled = false; }, 2000);
+
+        // O botão só volta ao normal quando o monitor terminar (controlado pelo startBatchMonitor)
     };
 
-    // --- GLOBAL MONITOR (WIDGET FLUTUANTE) ---
+    // Variável Global para o ID do Lote
+    let currentBatchTaskId = null;
     let monitorInterval = null;
-    function startGlobalMonitor() {
+
+    // --- FUNÇÃO DE UPLOAD ATUALIZADA ---
+    document.getElementById('btnUpload').onclick = async () => {
+        const btn = document.getElementById('btnUpload');
+        if (uploadQueue.length === 0) return;
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> CRIANDO LOTE...';
+
+        const totalFiles = uploadQueue.length;
+        // Soma o tamanho total (opcional, para melhor precisão futura)
+        const totalBytes = uploadQueue.reduce((acc, item) => acc + item.file.size, 0);
+
+        try {
+            // 1. CRIA A TASK PAI (LOTE)
+            const createRes = await fetch('/api/upload/create-batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    total_files: totalFiles,
+                    total_bytes: totalBytes
+                })
+            });
+            const createData = await createRes.json();
+
+            if (!createData.ok) throw new Error("Erro ao criar lote");
+
+            currentBatchTaskId = createData.task_id;
+
+            // Abre o Widget imediatamente
+            resetWidgetUI(totalFiles);
+            startBatchMonitor(currentBatchTaskId);
+
+            // 2. LOOP DE ENVIO (ENQUEUE)
+            const targetFolderId = document.getElementById('targetFolderId').value;
+            const preserveStructure = document.getElementById('chkPreserveStructure').checked;
+            const CONCURRENCY_LIMIT = 5; // Envia requisições de 5 em 5 para não travar o browser
+
+            const queueToProcess = [...uploadQueue];
+
+            // Worker do Front que envia para o endpoint de fila
+            const enqueueWorker = async () => {
+                while (queueToProcess.length > 0) {
+                    const item = queueToProcess.shift();
+
+                    const fd = new FormData();
+                    fd.append('file', item.file);
+                    fd.append('relative_path', item.path);
+                    fd.append('target_root_id', targetFolderId);
+                    fd.append('preserve_structure', preserveStructure);
+                    fd.append('task_id', currentBatchTaskId); // VINCULA AO PAI
+
+                    try {
+                        await fetch('/api/upload/enqueue', { method: 'POST', body: fd });
+                    } catch (e) { console.error("Falha no enqueue", e); }
+                }
+            };
+
+            btn.innerHTML = '<i class="fas fa-upload"></i> ENVIANDO...';
+
+            const workers = [];
+            for (let i = 0; i < CONCURRENCY_LIMIT; i++) workers.push(enqueueWorker());
+            await Promise.all(workers);
+
+            // Limpa a fila visual (o processo continua no backend)
+            clearAllFiles();
+            btn.innerHTML = '<i class="fas fa-clock"></i> PROCESSANDO NO SERVIDOR...';
+
+        } catch (err) {
+            alert("Erro ao iniciar upload: " + err.message);
+            btn.disabled = false;
+            btn.innerHTML = 'INICIAR UPLOAD';
+        }
+    };
+
+    // --- MONITORAMENTO ---
+    function startBatchMonitor(taskId) {
         if (monitorInterval) clearInterval(monitorInterval);
+        const widget = document.getElementById('batchProgressWidget');
+        widget.classList.add('active');
+
         monitorInterval = setInterval(async () => {
             try {
-                const res = await fetch('/api/upload/global-status');
+                // Usa o endpoint de batch que você já tinha, mas passando APENAS o ID do Pai
+                // Nota: Talvez precise ajustar o endpoint batch-status para aceitar um único ID de Task Pai
+                // OU passamos uma lista com apenas 1 ID.
+                const res = await fetch('/api/upload/batch-status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_ids: [taskId] })
+                });
                 const stats = await res.json();
                 updateWidgetUI(stats);
-            } catch (e) { }
-        }, 2000);
+
+                // Verifica se acabou (Sucesso + Erro >= Total) E se o total > 0
+                if (stats.total_files > 0 && (stats.success + stats.error >= stats.total_files)) {
+                    finalizeUploadUI();
+                }
+            } catch (e) { console.error(e); }
+        }, 1500);
+    }
+
+    function resetWidgetUI(total) {
+        document.getElementById('uwStatusTitle').innerText = "Iniciando Upload...";
+        document.getElementById('uwStatusText').innerText = "Enfileirando arquivos...";
+        document.getElementById('uwProgressBar').style.width = '0%';
+        document.getElementById('uwProgressBar').classList.add('active');
+
+        document.getElementById('uwCountTotal').innerText = total;
+        document.getElementById('uwCountSuccess').innerText = 0;
+        document.getElementById('uwCountError').innerText = 0;
     }
 
     function updateWidgetUI(stats) {
-        const widget = document.getElementById('globalProgressWidget');
-        const bar = document.getElementById('widgetProgressBar');
+        // Stats vem do backend consolidado
+        const percent = stats.percent || 0;
 
-        const total = stats.total_files;
-        const processed = stats.success + stats.error;
-        const pending = stats.pending;
+        document.getElementById('uwProgressBar').style.width = percent + '%';
+        document.getElementById('uwPercentText').innerText = Math.round(percent) + '%';
 
-        if (total === 0) {
-            widget.classList.remove('active');
-            return;
-        }
+        document.getElementById('uwCountTotal').innerText = stats.total_files;
+        document.getElementById('uwCountSuccess').innerText = stats.success;
+        document.getElementById('uwCountError').innerText = stats.error;
 
-        // Mantém ativo se houver pendência ou finalizou recentemente (opcional: lógica de fechar)
-        // Se pending == 0 e processed == total, o widget fica verde e pode ser fechado manualmente ou auto.
-        // Aqui deixamos visível para feedback.
-        if (total > 0) widget.classList.add('active');
-
-        let percent = total > 0 ? Math.round((processed / total) * 100) : 0;
-
-        // Updates UI
-        bar.style.width = percent + '%';
-        document.getElementById('widgetPercentBadge').innerText = percent + '%';
-        document.getElementById('widgetCountText').innerText = `${processed}/${total}`;
-
-        document.getElementById('countTotal').innerText = total;
-        document.getElementById('countSuccess').innerText = stats.success;
-        document.getElementById('countError').innerText = stats.error;
-
-        if (pending > 0) {
-            document.getElementById('widgetStatusText').innerText = "Sincronizando...";
-            document.getElementById('widgetIcon').className = "fas fa-sync fa-spin text-primary";
-            bar.classList.add('progress-animated');
-            bar.style.background = 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899)';
-            document.getElementById('widgetPercentBadge').className = "badge bg-primary rounded-pill";
-        } else {
-            document.getElementById('widgetStatusText').innerText = "Concluído";
-            document.getElementById('widgetIcon').className = "fas fa-check-circle text-success";
-            bar.classList.remove('progress-animated');
-            bar.style.background = '#22c55e';
-            document.getElementById('widgetPercentBadge').className = "badge bg-success rounded-pill";
-
-            // Auto hide após 5s se tudo ok? (Comentado para manter visibilidade)
-            // setTimeout(() => widget.classList.remove('active'), 5000);
-        }
+        const speed = stats.speed_mb_s ? `(${stats.speed_mb_s} MB/s)` : '';
+        document.getElementById('uwStatusText').innerText = `Enviando ${stats.processed}/${stats.total_files} ${speed}`;
     }
 
-    // --- TREE ---
+    function finalizeUploadUI() {
+        clearInterval(monitorInterval);
+        document.getElementById('uwStatusTitle').innerText = "Upload Concluído";
+        document.getElementById('uwStatusText').innerText = "Todos os arquivos processados.";
+        document.getElementById('uwProgressBar').classList.remove('active');
+        document.getElementById('uwProgressBar').style.backgroundColor = '#4ade80'; // Verde sólido
+        document.getElementById('uwIcon').className = "fas fa-check-circle text-success-bright";
+
+        // Reseta botão
+        const btn = document.getElementById('btnUpload');
+        btn.disabled = false;
+        btn.innerHTML = 'INICIAR UPLOAD';
+    }
+
+    function toggleWidget() {
+        document.getElementById('batchProgressWidget').classList.toggle('active');
+    }
+
+    // --- TREE (Mantido igual) ---
     function initTree() {
         const ul = document.getElementById('tree-root');
         ul.innerHTML = '';

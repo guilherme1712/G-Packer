@@ -3,10 +3,11 @@ import time
 import random
 import threading
 import socket
-from googleapiclient.discovery import build
+from app.services.auth import get_credentials
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 from app.services.Google.drive_tree import get_thread_safe_service
+from app.models import db, UploadHistoryModel, TaskModel
 
 # =========================================================================
 # CONSTANTES DE RETRY (CONFIGURAÇÃO)
@@ -35,16 +36,16 @@ class DriveUploadService:
         
         for attempt in range(MAX_RETRIES):
             try:
-                # Executa a requisição (espera-se que request_func retorne o objeto .execute())
+                # Executa a requisição
                 return request_func(*args, **kwargs).execute()
             
             except HttpError as e:
                 last_error = e
-                # Se for erro fatal (ex: 404 Not Found, 401 Auth), não adianta tentar de novo
+                # Erros fatais (400, 401, 404) não adiantam retentar
                 if e.resp.status not in RETRIABLE_STATUS_CODES:
                     raise e
                 
-                # Se for Rate Limit ou Server Error, espera e tenta de novo
+                # Rate Limit ou Server Error -> Backoff Exponencial
                 sleep_time = (BASE_DELAY * (2 ** attempt)) + random.uniform(0, 1)
                 print(f"[DriveUpload] Erro {e.resp.status}. Tentativa {attempt+1}/{MAX_RETRIES}. Esperando {sleep_time:.2f}s...")
                 time.sleep(sleep_time)
@@ -55,7 +56,6 @@ class DriveUploadService:
                 print(f"[DriveUpload] Erro de Conexão. Tentativa {attempt+1}/{MAX_RETRIES}. Esperando {sleep_time:.2f}s...")
                 time.sleep(sleep_time)
 
-        # Se esgotou as tentativas, lança o último erro
         print(f"[DriveUpload] Falha definitiva após {MAX_RETRIES} tentativas.")
         raise last_error
 
@@ -63,6 +63,7 @@ class DriveUploadService:
     def upload_single_file_sync(creds, local_path, filename, mimetype, relative_path, root_target_id, user_email):
         """
         Realiza o upload síncrono com RETRY automático em caso de falha.
+        Retorna o objeto 'file' do Google Drive (dict) com 'id' e 'size'.
         """
         if not creds:
             raise Exception("Credenciais inválidas fornecidas para o upload.")
@@ -76,12 +77,9 @@ class DriveUploadService:
         final_parent_id = root_target_id
         
         if relative_path and relative_path != filename:
-            # Normaliza barras
             clean_path = relative_path.replace('\\', '/').strip('/')
             parts = clean_path.split('/')
-            
-            # Remove o nome do arquivo, pega só as pastas
-            folder_structure = parts[:-1]
+            folder_structure = parts[:-1] # Remove nome do arquivo
             
             if folder_structure:
                 dummy_cache = {} 
@@ -99,23 +97,16 @@ class DriveUploadService:
             mimetype = 'application/octet-stream'
 
         # 3. Executar Upload (COM RETRY)
-        # chunksize=5MB ajuda em conexões instáveis
         media = MediaFileUpload(local_path, mimetype=mimetype, resumable=True, chunksize=5*1024*1024)
 
         try:
-            # Passamos a função de criação, mas o execute() é chamado dentro do execute_with_retry
-            # Nota: O execute_with_retry espera receber o objeto request prontp para chamar .execute()
-            # Então criamos um lambda ou passamos o objeto request direto.
-            
             request = service.files().create(
                 body=file_metadata,
                 media_body=media,
                 fields='id, size'
             )
             
-            # Usamos uma lógica levemente adaptada aqui para o retry funcionar com o objeto request
             file = DriveUploadService._internal_retry_execute(request)
-            
             return file
 
         except Exception as e:
@@ -124,7 +115,7 @@ class DriveUploadService:
 
     @staticmethod
     def _internal_retry_execute(request):
-        """Helper específico para executar objetos Request do Google com retry."""
+        """Helper para executar objetos Request criados manualmente."""
         last_error = None
         for attempt in range(MAX_RETRIES):
             try:
@@ -143,9 +134,7 @@ class DriveUploadService:
 
     @staticmethod
     def ensure_folder_path(creds, base_parent_id, path_parts, cache):
-        """
-        Navega ou cria pastas. Usa LOCK para garantir thread-safety no paralelismo.
-        """
+        """Navega ou cria pastas com Lock para thread-safety."""
         service = get_thread_safe_service(creds)
         current_parent = base_parent_id
         
@@ -153,15 +142,12 @@ class DriveUploadService:
             if not folder_name: continue
             
             cache_key = f"{current_parent}|{folder_name}"
-            
             if cache and cache_key in cache:
                 current_parent = cache[cache_key]
                 continue
 
             # --- SEÇÃO CRÍTICA (LOCK) ---
-            # Evita que 10 threads criem a pasta "FOTOS" ao mesmo tempo
             with FOLDER_CREATION_LOCK:
-                # Verifica se já existe (com retry leve)
                 existing_id = DriveUploadService.find_folder(service, folder_name, current_parent)
                 
                 if existing_id:
@@ -183,7 +169,6 @@ class DriveUploadService:
             'mimeType': 'application/vnd.google-apps.folder',
             'parents': [parent_id]
         }
-        # Create também merece retry
         request = service.files().create(body=file_metadata, fields='id')
         file = DriveUploadService._internal_retry_execute(request)
         return file.get('id')
@@ -191,7 +176,6 @@ class DriveUploadService:
     @staticmethod
     def find_folder(service, name, parent_id):
         query = f"mimeType='application/vnd.google-apps.folder' and name='{name}' and '{parent_id}' in parents and trashed=false"
-        # Listagem também merece retry
         request = service.files().list(q=query, fields="files(id)", pageSize=1)
         results = DriveUploadService._internal_retry_execute(request)
         files = results.get('files', [])
@@ -205,7 +189,76 @@ class DriveUploadService:
         results = DriveUploadService._internal_retry_execute(request)
         return results.get('files', [])
 
-    # --- Métodos Legados (Mantidos para compatibilidade) ---
+    # --- Worker de Upload (Core da Lógica de Batch) ---
+    @staticmethod
+    def _upload_worker(app, upload_history_id):
+        """
+        Executa o upload em background e atualiza o Status da Task Pai (Batch).
+        """
+        with app.app_context():
+            upload_record = db.session.get(UploadHistoryModel, upload_history_id)
+            if not upload_record:
+                return
+
+            try:
+                creds = get_credentials()
+                if not creds:
+                    raise Exception("Sem credenciais válidas na thread.")
+
+                if not upload_record.temp_path or not os.path.exists(upload_record.temp_path):
+                    raise FileNotFoundError(f"Arquivo temporário sumiu: {upload_record.temp_path}")
+
+                # EXECUTA O UPLOAD REAL
+                result = DriveUploadService.upload_single_file_sync(
+                    creds=creds,
+                    local_path=upload_record.temp_path,
+                    filename=upload_record.filename,
+                    mimetype=upload_record.mime_type,
+                    relative_path=upload_record.relative_path,
+                    root_target_id=upload_record.destination_id,
+                    user_email=upload_record.user_email
+                )
+
+                # Sucesso: Atualiza o registro individual
+                upload_record.status = 'SUCCESS'
+                upload_record.file_id = result.get('id')
+                upload_record.size_bytes = int(result.get('size', 0))
+
+                # Remove arquivo local
+                if os.path.exists(upload_record.temp_path):
+                    os.remove(upload_record.temp_path)
+
+            except Exception as e:
+                print(f"[Worker Error] ID {upload_history_id} ({upload_record.filename}): {e}")
+                upload_record.status = 'ERROR'
+                upload_record.error_message = str(e)
+
+            finally:
+                # --- ATUALIZAÇÃO DA TASK PAI (LOTE) ---
+                try:
+                    if upload_record.task_id:
+                        # Carrega a Task Pai (Lote)
+                        parent_task = db.session.get(TaskModel, upload_record.task_id)
+                        
+                        if parent_task:
+                            # Incremento Atômico (+1) para garantir thread-safety no banco
+                            # Isso evita que duas threads sobrescrevam o contador uma da outra
+                            if upload_record.status == 'SUCCESS':
+                                parent_task.files_downloaded = TaskModel.files_downloaded + 1
+                                parent_task.bytes_downloaded = TaskModel.bytes_downloaded + upload_record.size_bytes
+                            elif upload_record.status == 'ERROR':
+                                parent_task.errors_count = TaskModel.errors_count + 1
+
+                            # Opcional: Atualizar mensagem de status se quiser log no banco
+                            # (Mas o front usa o contador numérico, então isso é apenas cosmético)
+                
+                    db.session.commit()
+
+                except Exception as db_err:
+                    print(f"[Worker DB Error] Falha ao salvar status final: {db_err}")
+                    db.session.rollback()
+
+    # --- Métodos Legados ---
     @staticmethod
     def get_progress(task_id):
         return UPLOAD_PROGRESS.get(task_id, {})
@@ -216,7 +269,3 @@ class DriveUploadService:
             UPLOAD_PROGRESS[task_id]['cancel'] = True
             return True
         return False
-    
-    @staticmethod
-    def background_upload_worker(*args, **kwargs):
-        pass # Depreciado em favor do QueueService
