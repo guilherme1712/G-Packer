@@ -19,22 +19,22 @@ from flask import (
 )
 
 from app.services.auth import get_credentials
-from app.services.Google.drive_filters import build_filters_from_form
-from app.services.Google.drive_tree import (
+from app.services.google.drive_filters import build_filters_from_form
+from app.services.google.drive_tree import (
     get_file_metadata,
     calculate_selection_stats,
     get_ancestors_path,
 )
-from app.services.Google.drive_cache import (
+from app.services.google.drive_cache_service import (
     get_children_cached,
     rebuild_full_cache,
     search_cache,
 )
 from app.services.audit import AuditService
-from app.services.Google.drive_download import download_items_bundle, mirror_items_to_local
-from app.services.Google.drive_activity import fetch_activity_log
+from app.services.google.drive_download import download_items_bundle, mirror_items_to_local
+from app.services.google.drive_activity import fetch_activity_log
 from app.services.storage import StorageService
-from app.services.Google.drive_ops import DriveOperationsService
+from app.services.google.drive_ops import DriveOperationsService
 from app.services.progress import (
     PROGRESS,
     init_download_task,

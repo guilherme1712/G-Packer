@@ -2,7 +2,7 @@
 from datetime import datetime
 from googleapiclient.errors import HttpError
 from app.models import db, DriveItemCacheModel
-from app.services.Google.drive_tree import get_thread_safe_service
+from app.services.google.drive_tree import get_thread_safe_service
 from app.services.audit import AuditService
 
 class DriveOperationsService:

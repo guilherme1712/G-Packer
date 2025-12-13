@@ -6,7 +6,7 @@ import socket
 from app.services.auth import get_credentials
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
-from app.services.Google.drive_tree import get_thread_safe_service
+from app.services.google.drive_tree import get_thread_safe_service
 
 MAX_RETRIES = 5
 BASE_DELAY = 1.5

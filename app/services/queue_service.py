@@ -3,8 +3,9 @@ import time
 import os
 from concurrent.futures import ThreadPoolExecutor
 from app.models import db, UploadHistoryModel, TaskModel
-from app.services.Google.drive_upload import DriveUploadService
+from app.services.google.drive_upload import DriveUploadService
 from app.services.worker_manager import WorkerManager
+from app.services.google.drive_cache_service import cache_uploaded_item
 from app.services.auth import get_credentials
 
 # Usamos o limite configurado no WorkerManager
@@ -98,6 +99,9 @@ class QueueService:
                 upload_record.status = 'SUCCESS'
                 upload_record.file_id = result.get('id')
                 upload_record.size_bytes = int(result.get('size', 0))
+                
+                if upload_record.file_id:
+                    cache_uploaded_item(creds, upload_record.file_id)
                 
                 # Limpa disco
                 try:
