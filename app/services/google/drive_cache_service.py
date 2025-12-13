@@ -13,7 +13,7 @@ from app.services.google.drive_tree import get_children
 from app.services.worker_manager import WorkerManager
 
 # Tempo padrão de expiração (não usado no modo Read-Only, mas mantido para referência)
-DEFAULT_MAX_AGE_SECONDS = 172800
+DEFAULT_MAX_AGE_SECONDS = 172800 #(24H)
 
 
 def _ensure_root_item():
@@ -176,23 +176,35 @@ def search_cache(
 
 
 def cache_uploaded_item(creds, file_id: str):
-    """Atualiza um único item no cache após upload (Helper)."""
-    # (Mantido igual, mas com rollback preventivo)
+    """
+    Atualiza UM ÚNICO item no cache após upload com estratégia OTIMIZADA.
+    1. Busca metadados básicos na API (só do arquivo).
+    2. Resolve o pai usando o banco local (sem API recursiva).
+    3. Insere/Atualiza no banco.
+    """
     try:
         from app.services.google.drive_tree import get_thread_safe_service
         service = get_thread_safe_service(creds)
 
+        # 1. Busca metadados frescos do arquivo recém-upado
         meta = service.files().get(
             fileId=file_id,
-            fields="id, name, mimeType, size, parents, modifiedTime, createdTime"
+            fields="id, name, mimeType, size, parents, modifiedTime"
         ).execute()
 
         parent_id = meta.get('parents', ['root'])[0]
 
-        # Tenta descobrir path do pai
+        # 2. Descobre o path do pai usando o CACHE LOCAL (Sem chamar API)
         parent_cache = DriveItemCacheModel.query.filter_by(drive_id=parent_id).first()
-        parent_path = parent_cache.path if parent_cache else ("Meu Drive" if parent_id == 'root' else "")
 
+        if parent_cache and parent_cache.path:
+            parent_path = parent_cache.path
+        elif parent_id == 'root':
+            parent_path = "Meu Drive"
+        else:
+            parent_path = ""  # Pai não mapeado ainda, fica sem path visual por enquanto
+
+        # 3. Prepara dados para inserção
         item_data = {
             "id": meta["id"],
             "name": meta["name"],
@@ -202,20 +214,23 @@ def cache_uploaded_item(creds, file_id: str):
             "modified_time": meta.get("modifiedTime")
         }
 
+        # Garante que a raiz exista
         _ensure_root_item()
 
+        # 4. Insere/Atualiza apenas este nó
         upserted = _upsert_item_from_remote(
             parent_id=parent_id,
             parent_path=parent_path,
             item_data=item_data,
             seen_at=datetime.utcnow()
         )
+
         db.session.commit()
         return upserted
 
     except Exception as e:
         db.session.rollback()
-        print(f"[CACHE] Erro cache upload: {e}")
+        print(f"[CACHE] Erro cache upload item {file_id}: {e}")
         return None
 
 
