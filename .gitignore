@@ -19,6 +19,9 @@ venv.bak/
 .env.local
 .flaskenv
 
+#CREDENCIAIS DE SERVIÇOS
+CREDENCIAIS/*
+
 # Banco de Dados Local
 *.sqlite3
 *.db*

@@ -24,6 +24,8 @@ from app.blueprints.profile import profile_bp
 from app.blueprints.admin import admin_bp
 from app.blueprints.scheduler import scheduler_bp
 from app.blueprints.health import health_bp
+from app.blueprints.audit import audit_bp
+from app.blueprints.upload import upload_bp
 
 from app.services.scheduler import init_scheduler
 
@@ -35,7 +37,7 @@ def register_flask_error_logging(app):
 
     if not LOG_ENABLED:
         return
-    
+
     @app.errorhandler(Exception)
     def handle_flask_exception(e):
         import traceback
@@ -135,7 +137,9 @@ def create_app() -> Flask:
     app.config["BACKUP_RETENTION_MAX_DAYS"] = BACKUP_RETENTION_MAX_DAYS
     app.config["BACKUP_STORAGE_DIR"] = BACKUP_STORAGE_DIR
     app.config["AUTH_TOKEN_FILE"] = AUTH_TOKEN_FILE
+    app.config['MAX_CONTENT_LENGTH'] = None
     app.config["TIMEZONE"] = TIMEZONE
+    
 
     # Inicializa banco
     db.init_app(app)
@@ -162,6 +166,8 @@ def create_app() -> Flask:
     app.register_blueprint(admin_bp)
     app.register_blueprint(scheduler_bp)
     app.register_blueprint(health_bp)
+    app.register_blueprint(audit_bp)
+    app.register_blueprint(upload_bp)
 
     # ------------------------------
     # BANCO + SCHEDULER
@@ -181,4 +187,4 @@ def create_app() -> Flask:
 # --------------------------------------------------------------------
 if __name__ == "__main__":
     app = create_app()
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5555)
