@@ -60,4 +60,4 @@ def converter():
             flash(f"Erro: {e}", 'danger')
             return redirect(request.url)
 
-    return render_template('tools_converter.html')
+    return render_template('tools/converter.html')
