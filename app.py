@@ -28,6 +28,7 @@ from app.blueprints.health import health_bp
 from app.blueprints.audit import audit_bp
 from app.blueprints.upload import upload_bp
 from app.blueprints.tools.packer import packer_bp
+from app.blueprints.graph_viz import graph_bp
 
 from app.services.scheduler import init_scheduler
 
@@ -172,6 +173,7 @@ def create_app() -> Flask:
     app.register_blueprint(upload_bp)
     app.register_blueprint(tools_bp)
     app.register_blueprint(packer_bp)
+    app.register_blueprint(graph_bp)
 
     # ------------------------------
     # BANCO + SCHEDULER
