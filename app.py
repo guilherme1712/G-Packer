@@ -2,7 +2,7 @@ from flask import Flask, request
 import os
 import logging
 
-from app.blueprints.tools import tools_bp
+from app.blueprints.tools.conversor import tools_bp
 from config import (
     SECRET_KEY,
     SQLALCHEMY_DATABASE_URI,
@@ -27,6 +27,7 @@ from app.blueprints.scheduler import scheduler_bp
 from app.blueprints.health import health_bp
 from app.blueprints.audit import audit_bp
 from app.blueprints.upload import upload_bp
+from app.blueprints.tools.packer import packer_bp
 
 from app.services.scheduler import init_scheduler
 
@@ -140,7 +141,7 @@ def create_app() -> Flask:
     app.config["AUTH_TOKEN_FILE"] = AUTH_TOKEN_FILE
     app.config['MAX_CONTENT_LENGTH'] = None
     app.config["TIMEZONE"] = TIMEZONE
-    
+
 
     # Inicializa banco
     db.init_app(app)
@@ -170,6 +171,7 @@ def create_app() -> Flask:
     app.register_blueprint(audit_bp)
     app.register_blueprint(upload_bp)
     app.register_blueprint(tools_bp)
+    app.register_blueprint(packer_bp)
 
     # ------------------------------
     # BANCO + SCHEDULER

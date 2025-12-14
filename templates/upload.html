@@ -1,4 +1,4 @@
-{% extends "layout.html" %}
+{% extends "layouts/layout.html" %}
 
 {% block title %}Central de Upload{% endblock %}
 
@@ -670,14 +670,14 @@
 
 <script>
     let uploadQueue = [];
-    let currentBatchIds = []; 
+    let currentBatchIds = [];
     let currentBatchTaskId = null;
     let monitorInterval = null;
 
     // --- INIT ---
     document.addEventListener("DOMContentLoaded", () => {
         initTree();
-        
+
         // Re-binding inputs
         const fi = document.getElementById('fileInput');
         const foi = document.getElementById('folderInput');
@@ -784,9 +784,9 @@
             const createData = await createRes.json();
             if (!createData.ok) throw new Error("Erro ao criar lote");
 
-            currentBatchIds = []; 
+            currentBatchIds = [];
             currentBatchTaskId = createData.task_id;
-            
+
             // Inicia monitor visual
             resetWidgetUI(totalFiles);
             startBatchMonitor(currentBatchTaskId);
@@ -794,18 +794,18 @@
             // --- CONFIGURAÇÃO DO ENVIO EM LOTE ---
             const targetFolderId = document.getElementById('targetFolderId').value;
             const preserveStructure = document.getElementById('chkPreserveStructure').checked;
-            
+
             // CONFIGURAÇÃO DE VELOCIDADE
             const CONCURRENCY_LIMIT = 6;  // Quantas requisições simultâneas
             const UPLOAD_BATCH_SIZE = 4;  // Quantos arquivos por requisição (FormData)
-            
+
             const queueToProcess = [...uploadQueue];
             let processedCount = 0;
 
             // Função que envia um GRUPO de arquivos
             const processBatch = async (batchItems) => {
                 const fd = new FormData();
-                
+
                 // Dados comuns
                 fd.append('target_root_id', targetFolderId);
                 fd.append('preserve_structure', preserveStructure);
@@ -813,7 +813,7 @@
 
                 // IMPORTANTE: Adiciona arquivos com a chave 'files' (PLURAL)
                 batchItems.forEach(item => {
-                    fd.append('files', item.file); 
+                    fd.append('files', item.file);
                     fd.append('relative_paths', item.path);
                 });
 

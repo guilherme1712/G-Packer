@@ -1,5 +1,5 @@
 {# templates/db_view.html #}
-{% extends "layout.html" %}
+{% extends "layouts/layout.html" %}
 
 {% block title %}Visualizador do Banco de Dados · G-Packer{% endblock %}
 
@@ -449,7 +449,7 @@
             let historyHtml = '<span style="color:#666">-</span>';
             if (Array.isArray(t.history) && t.history.length > 0) {
                 historyHtml = `<pre>${t.history.slice(-100).join('\n')}</pre>`;
-                
+
             } else if (typeof t.history === 'string' && t.history.trim() !== '') {
                 let lines = t.history.split('\n');
                 historyHtml = `<pre>${lines.slice(-100).join('\n')}</pre>`;

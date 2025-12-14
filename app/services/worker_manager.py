@@ -13,7 +13,7 @@ class WorkerManager:
     MAX_UPLOAD_WORKERS = 100
     MAX_DOWNLOAD_WORKERS = 100
     MAX_MAPPING_WORKERS = 10
-    MAX_COMPRESSION_WORKERS = max(4, min(os.cpu_count() or 4, 8))
+    MAX_COMPRESSION_WORKERS = max(2, min(os.cpu_count() or 4, 8))
 
     _upload_executor = None
     _download_executor = None
