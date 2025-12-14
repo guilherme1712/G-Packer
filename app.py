@@ -2,6 +2,7 @@ from flask import Flask, request
 import os
 import logging
 
+from app.blueprints.tools import tools_bp
 from config import (
     SECRET_KEY,
     SQLALCHEMY_DATABASE_URI,
@@ -168,6 +169,7 @@ def create_app() -> Flask:
     app.register_blueprint(health_bp)
     app.register_blueprint(audit_bp)
     app.register_blueprint(upload_bp)
+    app.register_blueprint(tools_bp)
 
     # ------------------------------
     # BANCO + SCHEDULER

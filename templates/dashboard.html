@@ -379,7 +379,7 @@
                         <i class="fas fa-sync"></i> Frequência: {{ next_schedule.frequency }}
                     </div>
                 {% else %}
-                    <div class="text-center py-4 text-muted small">
+                    <div class="text-center py-4 text-muted small" style="color: #94a3b8;">
                         Nenhum agendamento ativo.
                     </div>
                     <button class="btn btn-outline-light btn-sm w-100 mt-2">Criar Agendamento</button>
@@ -389,7 +389,7 @@
             <div class="glass-panel">
                 <div class="widget-title"><i class="fas fa-heartbeat text-danger"></i> Saúde de Uploads</div>
                 
-                <div class="d-flex justify-content-between align-items-end mb-2">
+                <div class="d-flex justify-content-between align-items-end mb-2" style="color: #94a3b8;">
                     <span class="text-white fw-bold h4 m-0">{{ success_percent }}%</span>
                     <span class="text-muted small">Taxa de Sucesso</span>
                 </div>
@@ -398,7 +398,7 @@
                     <div class="progress-fill" style="width: {{ success_percent }}%; background: linear-gradient(90deg, #22c55e, #10b981);"></div>
                 </div>
 
-                <div class="row g-2 text-center">
+                <div class="row g-2 text-center" style="color: #94a3b8">
                     <div class="col-6">
                         <div class="p-2 rounded bg-dark border border-secondary border-opacity-25">
                             <span class="d-block text-success fw-bold">{{ uploads_success }}</span>
@@ -416,7 +416,7 @@
 
             <div class="glass-panel">
                 <div class="widget-title"><i class="fas fa-server text-primary"></i> Total Processado</div>
-                <div class="d-flex align-items-center gap-3 mb-3">
+                <div class="d-flex align-items-center gap-3 mb-3" style="color: #94a3b8;">
                     <div class="rounded-circle bg-primary bg-opacity-25 p-3 text-primary">
                         <i class="fas fa-database fa-lg"></i>
                     </div>
