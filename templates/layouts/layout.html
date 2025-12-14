@@ -6,7 +6,10 @@
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    {# CSS principal do projeto #}
+    {# 1. Bootstrap CSS: O caminho correto é 'css/nome_do_arquivo' (sem 'static/' no início) #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap/css/bootstrap.min.css') }}">
+
+    {# 2. CSS principal: Deve vir DEPOIS do Bootstrap para preservar seu tema escuro #}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
     {% block extra_head %}{% endblock %}
@@ -22,6 +25,9 @@
         {% block content %}{% endblock %}
     </div>
 </div>
+
+{# 3. Bootstrap JS Bundle: Caminho corrigido para 'js/nome_do_arquivo' #}
+<script src="{{ url_for('static', filename='bootstrap/js/bootstrap.bundle.min.js') }}"></script>
 
 {% block scripts %}{% endblock %}
 </body>

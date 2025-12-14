@@ -16,10 +16,10 @@ body {
 }
 
 .bg-gradient {
-    background: radial-gradient(circle at top, #4338ca 0, #020617 70%);
-    display: flex;
-    align-items: stretch;      /* ocupa toda a altura */
-    justify-content: center;   /* mantém conteúdo centralizado, mas largura 100% */
+    background: radial-gradient(circle at top, #4338ca 0, #020617 70%) !important;
+    display: flex !important;
+    align-items: stretch !important;      /* ocupa toda a altura */
+    justify-content: center !important;   /* mantém conteúdo centralizado, mas largura 100% */
 }
 
 /* layout principal da tela de pastas / páginas internas */
