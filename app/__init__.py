@@ -31,8 +31,6 @@ from app.blueprints.tools.packer import packer_bp
 from app.blueprints.graph_viz import graph_bp
 
 from app.services.scheduler import init_scheduler
-from app.extensions import socketio
-
 
 def create_app() -> Flask:
     # === TIMEZONE GLOBAL ===
@@ -77,9 +75,6 @@ def create_app() -> Flask:
 
     # Inicializa banco
     db.init_app(app)
-
-    # Inicializa SocketIO
-    socketio.init_app(app, max_http_buffer_size=1e8)
 
     # ------------------------------
     # LOG ESTRUTURADO (ANTES DE TUDO)

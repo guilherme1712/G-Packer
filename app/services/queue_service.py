@@ -7,7 +7,7 @@ from app.models import db, UploadHistoryModel, TaskModel
 from app.services.google.drive_upload import DriveUploadService
 from app.services.worker_manager import WorkerManager
 from app.services.google.drive_cache_service import cache_uploaded_item
-from app.services.auth import get_credentials
+from app.services.auth_service import get_credentials
 
 MAX_CONCURRENT_UPLOADS = WorkerManager.MAX_UPLOAD_WORKERS
 
