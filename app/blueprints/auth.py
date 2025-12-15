@@ -1,4 +1,4 @@
-# app/blueprints/auth.py
+# app/blueprints/auth_service.py
 import threading
 import time
 import uuid
@@ -11,7 +11,7 @@ from flask import (
     flash,
     current_app, render_template,
 )
-from app.services.auth import (
+from app.services.auth_service import (
     get_credentials,
     build_flow,
     save_credentials,

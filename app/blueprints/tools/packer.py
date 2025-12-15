@@ -10,7 +10,7 @@ from app.enum.task_type import TaskTypeEnum
 from app.services.storage import StorageService
 from app.services.worker_manager import WorkerManager
 from app.services.tools.packer_service import PackerService
-from app.services.auth import get_credentials
+from app.services.auth_service import get_credentials
 from app.services.google.drive_upload import DriveUploadService
 
 packer_bp = Blueprint("packer", __name__)

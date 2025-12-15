@@ -18,7 +18,7 @@ from flask import (
     current_app,
 )
 
-from app.services.auth import get_credentials
+from app.services.auth_service import get_credentials
 from app.services.google.drive_filters import build_filters_from_form
 from app.services.google.drive_tree import (
     get_file_metadata,

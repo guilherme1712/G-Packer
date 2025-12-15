@@ -7,17 +7,6 @@ from .db_instance import db
 class DriveItemCacheModel(db.Model):
     """
     Cache local de metadados de arquivos/pastas do Google Drive.
-
-    Campos principais:
-      - drive_id: ID original no Drive
-      - name: nome do item
-      - path: caminho "Meu Drive/..." calculado
-      - mime_type: MIME do arquivo/pasta
-      - is_folder: True se for pasta
-      - parent_id: ID do pai no Drive
-      - size_bytes: tamanho em bytes (0 para pastas)
-      - modified_time: string ISO do Drive (última modificação)
-      - trashed: se o item foi marcado como removido no cache
     """
     __tablename__ = "drive_cache"
 
@@ -27,10 +16,12 @@ class DriveItemCacheModel(db.Model):
     drive_id = db.Column(db.String(128), unique=True, nullable=False, index=True)
 
     # Nome visível
-    name = db.Column(db.String(1024), nullable=False, index=True)
+    # REMOVIDO index=True para evitar erro 1071 no MySQL (1024 chars é muito grande para índice)
+    name = db.Column(db.String(1024), nullable=False, index=False)
 
-    # Caminho completo calculado (Meu Drive/..., pode ser grande)
-    path = db.Column(db.String(4096), index=True)
+    # Caminho completo calculado
+    # REMOVIDO index=True para evitar erro 1071 no MySQL (4096 chars é muito grande para índice)
+    path = db.Column(db.String(4096), index=False)
 
     # Metadados do tipo
     mime_type = db.Column(db.String(255), index=True)

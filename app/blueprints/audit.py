@@ -9,7 +9,7 @@ from flask import (
 )
 from dateutil.parser import parse
 from app.services.audit import AuditService
-from app.services.auth import get_credentials
+from app.services.auth_service import get_credentials
 
 audit_bp = Blueprint("audit", __name__)
 

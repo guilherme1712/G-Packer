@@ -1,5 +1,4 @@
-# import logging
-
+# app/__init__.py
 from flask import Flask
 import os
 from app.blueprints.tools.conversor import tools_bp
@@ -32,9 +31,10 @@ from app.blueprints.tools.packer import packer_bp
 from app.blueprints.graph_viz import graph_bp
 
 from app.services.scheduler import init_scheduler
+from app.extensions import socketio
+
 
 def create_app() -> Flask:
-
     # === TIMEZONE GLOBAL ===
     os.environ["TZ"] = TIMEZONE
     try:
@@ -43,16 +43,29 @@ def create_app() -> Flask:
     except Exception:
         pass
 
-    app = Flask(__name__)
+    base_dir = os.path.abspath(os.path.dirname(__file__))  # Caminho da pasta 'app'
+    root_dir = os.path.dirname(base_dir)  # Caminho da raiz 'G-Packer'
+
+    template_dir = os.path.join(root_dir, 'templates')
+    static_dir = os.path.join(root_dir, 'static')
+
+    app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
     app.secret_key = SECRET_KEY
 
     # ------------------------------
     # CONFIG DO BANCO
     # ------------------------------
-    app.config["SQLALCHEMY_DATABASE_URI"] = (
-        SQLALCHEMY_DATABASE_URI + "?timeout=30&check_same_thread=False"
-    )
+    app.config["SQLALCHEMY_DATABASE_URI"] = SQLALCHEMY_DATABASE_URI
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = SQLALCHEMY_TRACK_MODIFICATIONS
+
+    # [CORREÇÃO CRÍTICA] Aumento do Pool para suportar Upload em Chunks
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "pool_recycle": 280,
+        "pool_pre_ping": True,
+        "pool_size": 90,  # Aumentado de 5 para 30
+        "max_overflow": 60,  # Aumentado de 10 para 60
+        "pool_timeout": 90  # Espera até 60s por uma conexão livre
+    }
 
     # BACKUP CONFIGS
     app.config["BACKUP_RETENTION_MAX_FILES"] = BACKUP_RETENTION_MAX_FILES
@@ -62,9 +75,11 @@ def create_app() -> Flask:
     app.config['MAX_CONTENT_LENGTH'] = None
     app.config["TIMEZONE"] = TIMEZONE
 
-
     # Inicializa banco
     db.init_app(app)
+
+    # Inicializa SocketIO
+    socketio.init_app(app, max_http_buffer_size=1e8)
 
     # ------------------------------
     # LOG ESTRUTURADO (ANTES DE TUDO)
@@ -98,6 +113,7 @@ def create_app() -> Flask:
     # BANCO + SCHEDULER
     # ------------------------------
     with app.app_context():
+        # Cria as tabelas no MySQL se não existirem
         db.create_all()
 
         # Scheduler só roda no processo principal
@@ -105,4 +121,3 @@ def create_app() -> Flask:
             init_scheduler(app)
 
     return app
-

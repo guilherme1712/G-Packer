@@ -6,7 +6,7 @@ from flask import (
     redirect,
     url_for,
 )
-from app.services.auth import get_credentials
+from app.services.auth_service import get_credentials
 from app.services.healthcheck import run_health_checks
 
 health_bp = Blueprint("health", __name__)

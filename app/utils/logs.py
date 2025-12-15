@@ -1,7 +1,7 @@
 # --------------------------------------------------------------------
 #  LOG DE ERROS DO FLASK
 # --------------------------------------------------------------------
-from app import log_event
+from app.utils.structured_logging import log_event
 from config import LOG_ENABLED
 from flask import request
 import logging

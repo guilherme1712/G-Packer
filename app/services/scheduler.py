@@ -13,7 +13,7 @@ from apscheduler.triggers.cron import CronTrigger
 from app.services.storage import StorageService
 
 from app.models import db, ScheduledTaskModel, BackupFileModel, BackupProfileModel, ScheduledRunModel
-from .auth import get_credentials
+from .auth_service import get_credentials
 from app.services.google.drive_download import download_items_bundle
 from .progress import PROGRESS, init_download_task
 

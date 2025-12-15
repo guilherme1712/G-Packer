@@ -188,7 +188,7 @@ body {
     margin-bottom: 16px;
     border: 1px solid rgba(248, 113, 113, 0.5);
     font-size: 0.95rem;
-    color: #fecaca;
+    color: #fecaca !important;
     font-weight: 500;
 }
 

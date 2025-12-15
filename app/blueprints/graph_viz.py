@@ -1,7 +1,7 @@
 # app/blueprints/graph_viz.py
 from flask import Blueprint, render_template, jsonify, request
 from app.models.drive_cache import DriveItemCacheModel
-from app.services.auth import get_credentials
+from app.services.auth_service import get_credentials
 
 graph_bp = Blueprint("graph_viz", __name__, url_prefix="/graph")
 
