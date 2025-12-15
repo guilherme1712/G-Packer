@@ -4,7 +4,7 @@ import uuid
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, current_app
 from werkzeug.utils import secure_filename
 from app.models import db, UploadHistoryModel, TaskModel
-from app.services.auth import get_credentials
+from app.services.auth_service import get_credentials
 # from app.services.google.drive_upload import DriveUploadService  <-- NÃO USAMOS MAIS PARA LISTAGEM
 from app.services.google.drive_cache_service import get_children_cached  # <--- NOVO IMPORT
 from app.services.queue_service import QueueService
