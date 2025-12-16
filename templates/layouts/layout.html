@@ -1,34 +1,31 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <title>{% block title %}G-Packer{% endblock %}</title>
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    {# 1. Bootstrap CSS: O caminho correto é 'css/nome_do_arquivo' (sem 'static/' no início) #}
     <link rel="stylesheet" href="{{ url_for('static', filename='/css/bootstrap/bootstrap.min.css') }}">
-
-    {# 2. CSS principal: Deve vir DEPOIS do Bootstrap para preservar seu tema escuro #}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
     {% block extra_head %}{% endblock %}
 </head>
+
 <body class="bg-gradient">
 
-<div class="app-shell">
-    {# MENU LATERAL GLOBAL #}
-    {% include 'layouts/menu.html' %}
+    <div class="app-shell">
+        {% include 'layouts/menu.html' %}
 
-    {# CONTEÚDO PRINCIPAL DAS PÁGINAS #}
-    <div class="app-main">
-        {% block content %}{% endblock %}
+        <div class="app-main">
+            {% block content %}{% endblock %}
+        </div>
     </div>
-</div>
 
-{# 3. Bootstrap JS Bundle: Caminho corrigido para 'js/nome_do_arquivo' #}
-<script src="{{ url_for('static', filename='js/bootstrap/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/bootstrap/bootstrap.bundle.min.js') }}"></script>
 
-{% block scripts %}{% endblock %}
+    {% block scripts %}{% endblock %}
 </body>
+
 </html>
