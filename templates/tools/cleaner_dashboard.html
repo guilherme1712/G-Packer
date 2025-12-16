@@ -1,0 +1,640 @@
+{% extends "layouts/layout.html" %}
+
+{% block title %}Smart Cleaner - G-Packer{% endblock %}
+
+{% block content %}
+<style>
+    /* CSS para Scroll Interno e Sticky Header */
+    .scrollable-container {
+        max-height: 60vh; /* Altura "normal" fixa */
+        overflow-y: auto;
+        position: relative;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        background-color: #fff;
+    }
+
+    /* Mantém o cabeçalho da tabela fixo no topo ao rolar */
+    .sticky-header th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa; /* Cor do bg-light */
+        z-index: 2;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
+    
+    /* Ajuste para o loading no final */
+    .loading-sentinel {
+        height: 20px;
+        margin: 10px 0;
+        text-align: center;
+    }
+
+    .card {
+        padding: 0 !important;
+    }
+</style>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h2 class="mb-1 text-white"><i class="fas fa-broom me-2"></i>Smart Cleaner</h2>
+            <p class="text-muted">Gerencie o espaço e organize seu Google Drive.</p>
+        </div>
+        <button class="btn btn-outline-secondary" onclick="loadAllData()">
+            <i class="fas fa-sync-alt me-1"></i> Atualizar Dados
+        </button>
+    </div>
+
+    <ul class="nav nav-pills mb-4" id="mainTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active px-4 py-2" id="overview-tab" data-bs-toggle="pill" data-bs-target="#overview" type="button" role="tab">
+                <i class="fas fa-chart-pie me-2"></i>Uso Geral do Drive
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link px-4 py-2" id="cleaning-tab" data-bs-toggle="pill" data-bs-target="#cleaning" type="button" role="tab">
+                <i class="fas fa-tools me-2"></i>Gerenciador de Limpeza
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="mainTabsContent">
+
+        <div class="tab-pane fade show active" id="overview" role="tabpanel">
+            
+            <div class="card shadow-sm mb-4 border-info">
+                <div class="card-body">
+                    <h5 class="card-title text-info mb-3">
+                        <i class="fas fa-cloud me-2"></i>Armazenamento do Google Drive
+                    </h5>
+                    
+                    <div class="row align-items-center">
+                        <div class="col-md-3 text-center mb-3 mb-md-0">
+                            <h2 class="display-6 mb-0" id="quotaUsed">0 GB</h2>
+                            <span class="text-muted small">Usado</span>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3 mb-md-0">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="small text-muted" id="quotaPercentText">0%</span>
+                                <span class="small text-muted">Total: <span id="quotaTotal">0 GB</span></span>
+                            </div>
+                            <div class="progress" style="height: 25px;">
+                                <div id="quotaProgress" class="progress-bar bg-info progress-bar-striped progress-bar-animated" 
+                                     role="progressbar" style="width: 0%">
+                                </div>
+                            </div>
+                            <div class="mt-2 text-end">
+                                <span class="badge bg-light text-dark border">
+                                    Livre: <span id="quotaFree">0 GB</span>
+                                </span>
+                                <span class="badge bg-warning text-dark border ms-2" title="Espaço ocupado na lixeira">
+                                    <i class="fas fa-trash-alt me-1"></i> Lixeira: <span id="quotaTrash">0 MB</span>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="col-md-3 text-center border-start">
+                            <h3 class="text-success mb-0" id="potentialSave">0 MB</h3>
+                            <p class="text-muted small mb-0">Detectado para Limpeza</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-header bg-white">
+                            <h6 class="m-0 font-weight-bold text-primary">Distribuição por Tipo de Arquivo</h6>
+                        </div>
+                        <div class="card-body">
+                            <div style="height: 300px; position: relative;">
+                                <canvas id="storageChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100 shadow-sm border-left-warning">
+                        <div class="card-body d-flex flex-column justify-content-center text-center">
+                            <div class="mb-4">
+                                <div class="icon-circle bg-warning text-white mx-auto mb-3" style="width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px;">
+                                    <i class="fas fa-clone"></i>
+                                </div>
+                                <h3 class="display-4 text-dark" id="duplicateCount">0</h3>
+                                <p class="text-muted">Grupos de Arquivos Duplicados Encontrados</p>
+                            </div>
+                            <button class="btn btn-primary w-50 mx-auto" onclick="document.getElementById('cleaning-tab').click()">
+                                Ir para Limpeza <i class="fas fa-arrow-right ms-2"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="cleaning" role="tabpanel">
+            
+            <div class="card shadow-sm">
+                <div class="card-header bg-light p-0">
+                    <ul class="nav nav-tabs card-header-tabs m-0" id="cleaningTabs" role="tablist">
+                        <li class="nav-item">
+                            <button class="nav-link active border-top-0 border-start-0 py-3 px-4" id="duplicates-tab" data-bs-toggle="tab" data-bs-target="#duplicates" type="button">
+                                <i class="fas fa-copy me-2 text-warning"></i>Duplicatas
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link border-top-0 py-3 px-4" id="large-files-tab" data-bs-toggle="tab" data-bs-target="#large-files" type="button">
+                                <i class="fas fa-weight-hanging me-2 text-danger"></i>Arquivos Grandes
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="card-body">
+                    <div class="tab-content" id="cleaningTabsContent">
+                        
+                        <div class="tab-pane fade show active" id="duplicates">
+                            <div class="d-flex justify-content-between align-items-center mb-3 p-3 bg-light rounded border">
+                                <div>
+                                    <h5 class="mb-1 text-dark">Gerenciar Duplicatas</h5>
+                                    <small class="text-muted">Selecione arquivos redundantes para mover para a lixeira.</small>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-success btn-sm" onclick="smartSelectDuplicates()">
+                                        <i class="fas fa-magic me-1"></i> Seleção Inteligente
+                                    </button>
+                                    <button class="btn btn-outline-secondary btn-sm" onclick="clearSelection()">
+                                        Limpar
+                                    </button>
+                                    <button class="btn btn-danger btn-sm" id="btnTrashDuplicates" onclick="trashSelectedFiles()" disabled>
+                                        <i class="fas fa-trash-alt me-1"></i> Lixeira (<span id="selectedCount">0</span>)
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="scrollable-container">
+                                <div id="duplicatesList" class="accordion accordion-flush">
+                                    </div>
+                                <div id="duplicatesSentinel" class="loading-sentinel text-muted small">
+                                    <i class="fas fa-spinner fa-spin me-2"></i>Carregando mais...
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="large-files">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0">Maiores Arquivos no Drive</h5>
+                                <span class="badge bg-secondary">Top 500+</span>
+                            </div>
+                            
+                            <div class="scrollable-container">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="sticky-header">
+                                        <tr>
+                                            <th class="ps-4">Nome do Arquivo</th>
+                                            <th>Caminho</th>
+                                            <th>Tamanho</th>
+                                            <th class="text-end pe-4">Ação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="largeFilesTable">
+                                        </tbody>
+                                </table>
+                                <div id="largeFilesSentinel" class="loading-sentinel text-muted small">
+                                    <i class="fas fa-spinner fa-spin me-2"></i>Carregando mais...
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    // --- Variáveis Globais para Lazy Load ---
+    let allDuplicateGroups = [];
+    let currentDupIndex = 0;
+    
+    let allLargeFiles = [];
+    let currentLargeIndex = 0;
+    
+    const BATCH_SIZE = 20; // Quantidade de itens por "scroll"
+    
+    let selectedFileIds = new Set();
+    let duplicatesObserver, largeFilesObserver;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadAllData();
+        setupObservers();
+    });
+
+    // --- Configuração do IntersectionObserver (Scroll Infinito) ---
+    function setupObservers() {
+        const options = {
+            root: null, // viewport ou container pai
+            rootMargin: '100px',
+            threshold: 0.1
+        };
+
+        // Observador Duplicatas
+        duplicatesObserver = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting) {
+                renderDuplicatesBatch();
+            }
+        }, options);
+
+        // Observador Arquivos Grandes
+        largeFilesObserver = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting) {
+                renderLargeFilesBatch();
+            }
+        }, options);
+    }
+
+    // --- Formatador de Bytes ---
+    function formatSize(bytes) {
+        if (!bytes || bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function loadAllData() {
+        fetchStats();
+        fetchDuplicates(); // Carrega tudo em memória, mas renderiza pouco
+        fetchLargeFiles(); // Carrega tudo em memória, mas renderiza pouco
+    }
+
+    // ==========================================
+    // 1. STATS & QUOTA
+    // ==========================================
+    async function fetchStats() {
+        try {
+            const res = await fetch('/cleaner/api/stats');
+            const json = await res.json();
+            if (json.ok) {
+                renderChart(json.data);
+                if (json.quota) renderQuota(json.quota);
+            }
+        } catch (e) { console.error("Erro stats:", e); }
+    }
+
+    function renderQuota(quota) {
+        const limit = parseInt(quota.limit || 0);
+        const usage = parseInt(quota.usage || 0);
+        const trash = parseInt(quota.usageInTrash || 0);
+        const free = Math.max(0, limit - usage);
+
+        document.getElementById('quotaUsed').textContent = formatSize(usage);
+        document.getElementById('quotaTotal').textContent = formatSize(limit);
+        document.getElementById('quotaFree').textContent = formatSize(free);
+        document.getElementById('quotaTrash').textContent = formatSize(trash);
+
+        let percent = limit > 0 ? (usage / limit) * 100 : 0;
+        const progressBar = document.getElementById('quotaProgress');
+        
+        progressBar.style.width = percent + '%';
+        document.getElementById('quotaPercentText').textContent = percent.toFixed(1) + '%';
+        
+        progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated ' + 
+            (percent > 90 ? 'bg-danger' : percent > 75 ? 'bg-warning' : 'bg-info');
+    }
+
+    function renderChart(data) {
+        const ctx = document.getElementById('storageChart').getContext('2d');
+        const labels = data.map(d => {
+            const parts = d.mime_type.split('/');
+            return parts.length > 1 ? parts[1].toUpperCase() : d.mime_type;
+        });
+        const values = data.map(d => d.total_size / (1024 * 1024)); 
+
+        if (window.myChart) window.myChart.destroy();
+
+        window.myChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{ 
+                    data: values, 
+                    backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796', '#5a5c69'],
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right', labels: { boxWidth: 15 } },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.label || '';
+                                if (label) label += ': ';
+                                label += formatSize(context.raw * 1024 * 1024);
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // ==========================================
+    // 2. LAZY LOAD DUPLICATAS
+    // ==========================================
+    async function fetchDuplicates() {
+        const listEl = document.getElementById('duplicatesList');
+        const sentinel = document.getElementById('duplicatesSentinel');
+        
+        // Estado de carregamento inicial
+        listEl.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>';
+        sentinel.style.display = 'none';
+
+        try {
+            const res = await fetch('/cleaner/api/duplicates');
+            const json = await res.json();
+            
+            if (json.ok) {
+                // Salva TODOS os dados na memória
+                allDuplicateGroups = json.data;
+                currentDupIndex = 0;
+                
+                // Limpa o loading inicial
+                listEl.innerHTML = '';
+                document.getElementById('duplicateCount').textContent = allDuplicateGroups.length;
+
+                if (allDuplicateGroups.length === 0) {
+                    listEl.innerHTML = `
+                        <div class="text-center py-5">
+                            <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                            <h5 class="text-muted">Nenhuma duplicata encontrada!</h5>
+                        </div>`;
+                } else {
+                    // Inicia o Lazy Load: renderiza o primeiro lote e ativa o sentinela
+                    renderDuplicatesBatch();
+                    sentinel.style.display = 'block';
+                    duplicatesObserver.observe(sentinel);
+                }
+                
+                calculatePotentialSave(allDuplicateGroups);
+            } else {
+                 listEl.innerHTML = `<div class="alert alert-warning">Erro: ${json.error || ''}</div>`;
+            }
+        } catch (e) { 
+            listEl.innerHTML = `<div class="alert alert-danger">Erro de conexão: ${e}</div>`; 
+        }
+    }
+
+    function renderDuplicatesBatch() {
+        const listEl = document.getElementById('duplicatesList');
+        const sentinel = document.getElementById('duplicatesSentinel');
+        
+        // Verifica se já renderizou tudo
+        if (currentDupIndex >= allDuplicateGroups.length) {
+            sentinel.style.display = 'none'; // Esconde loading
+            duplicatesObserver.unobserve(sentinel); // Para de observar
+            return;
+        }
+
+        // Pega o próximo lote (Chunk)
+        const chunk = allDuplicateGroups.slice(currentDupIndex, currentDupIndex + BATCH_SIZE);
+        currentDupIndex += BATCH_SIZE;
+
+        // Gera HTML
+        let htmlBuffer = '';
+        chunk.forEach((group, i) => {
+            // O índice real precisa ser único para o ID do accordion
+            const idx = currentDupIndex - BATCH_SIZE + i;
+            
+            htmlBuffer += `
+                <div class="accordion-item border mb-2 rounded shadow-sm">
+                    <h2 class="accordion-header" id="heading${idx}">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse${idx}">
+                            <div class="d-flex w-100 justify-content-between me-3 align-items-center">
+                                <div class="text-truncate" style="max-width: 60%;">
+                                    <span class="badge bg-warning text-dark me-2">${group.files.length} cópias</span>
+                                    <strong>${group.files[0].name}</strong>
+                                </div>
+                                <span class="text-muted small text-nowrap">
+                                    Lixo: ${formatSize((group.files.length - 1) * group.size_bytes)}
+                                </span>
+                            </div>
+                        </button>
+                    </h2>
+                    <div id="collapse${idx}" class="accordion-collapse collapse" data-bs-parent="#duplicatesList">
+                        <div class="accordion-body p-0">
+                            <table class="table table-sm mb-0 table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-center" style="width: 60px;">Del</th>
+                                        <th>Caminho</th>
+                                        <th class="text-end" style="width: 150px;">Modificado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${group.files.map(f => `
+                                        <tr>
+                                            <td class="text-center align-middle">
+                                                <input type="checkbox" class="form-check-input file-check" 
+                                                       value="${f.id}" 
+                                                       data-date="${f.modified_time}" 
+                                                       ${selectedFileIds.has(f.id) ? 'checked' : ''}
+                                                       onchange="updateSelection()">
+                                            </td>
+                                            <td class="small align-middle text-break text-muted">${f.path || '<i class="text-muted">Raiz</i>'}</td>
+                                            <td class="small align-middle text-end">${new Date(f.modified_time).toLocaleDateString()}</td>
+                                        </tr>`).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>`;
+        });
+
+        // Insere no DOM
+        listEl.insertAdjacentHTML('beforeend', htmlBuffer);
+    }
+
+    // ==========================================
+    // 3. LAZY LOAD ARQUIVOS GRANDES
+    // ==========================================
+    async function fetchLargeFiles() {
+        const tbody = document.getElementById('largeFilesTable');
+        const sentinel = document.getElementById('largeFilesSentinel');
+
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3">Carregando...</td></tr>';
+        sentinel.style.display = 'none';
+
+        try {
+            // Pede um limite maior (500) para permitir rolagem, mas renderiza em blocos no cliente
+            const res = await fetch('/cleaner/api/large-files?limit=500');
+            const json = await res.json();
+            
+            if (json.ok) {
+                allLargeFiles = json.data;
+                currentLargeIndex = 0;
+                
+                tbody.innerHTML = ''; // Limpa loading
+                
+                if (allLargeFiles.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3">Nenhum arquivo encontrado.</td></tr>';
+                } else {
+                    renderLargeFilesBatch();
+                    sentinel.style.display = 'block';
+                    largeFilesObserver.observe(sentinel);
+                }
+            }
+        } catch (e) { console.error(e); }
+    }
+
+    function renderLargeFilesBatch() {
+        const tbody = document.getElementById('largeFilesTable');
+        const sentinel = document.getElementById('largeFilesSentinel');
+
+        if (currentLargeIndex >= allLargeFiles.length) {
+            sentinel.style.display = 'none';
+            largeFilesObserver.unobserve(sentinel);
+            return;
+        }
+
+        const chunk = allLargeFiles.slice(currentLargeIndex, currentLargeIndex + BATCH_SIZE);
+        currentLargeIndex += BATCH_SIZE;
+
+        let htmlBuffer = '';
+        chunk.forEach(f => {
+            htmlBuffer += `
+                <tr>
+                    <td class="ps-4">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-file-alt text-secondary me-2"></i> 
+                            <span class="text-truncate" style="max-width: 250px;" title="${f.name}">${f.name}</span>
+                        </div>
+                    </td>
+                    <td class="small text-muted text-truncate" style="max-width: 200px;">${f.path || '/'}</td>
+                    <td><span class="badge bg-light text-dark border">${formatSize(f.size_bytes)}</span></td>
+                    <td class="text-end pe-4">
+                        <button class="btn btn-sm btn-outline-danger" onclick="trashSingleFile('${f.id}')" title="Mover para Lixeira">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>`;
+        });
+        
+        tbody.insertAdjacentHTML('beforeend', htmlBuffer);
+    }
+
+    // ==========================================
+    // 4. AÇÕES (Sem alterações na lógica)
+    // ==========================================
+    function calculatePotentialSave(groups) {
+        let saveBytes = 0;
+        groups.forEach(g => saveBytes += (g.files.length - 1) * g.size_bytes);
+        document.getElementById('potentialSave').textContent = formatSize(saveBytes);
+    }
+
+    function smartSelectDuplicates() {
+        // Agora precisamos percorrer ALL data, não apenas o HTML renderizado
+        selectedFileIds.clear();
+        
+        // Desmarca visuais
+        document.querySelectorAll('.file-check').forEach(cb => cb.checked = false);
+
+        allDuplicateGroups.forEach(group => {
+            const sorted = [...group.files].sort((a, b) => new Date(b.modified_time) - new Date(a.modified_time));
+            for (let i = 1; i < sorted.length; i++) {
+                selectedFileIds.add(sorted[i].id);
+            }
+        });
+
+        // Marca visuais se estiverem na tela
+        updateSelectionUI();
+        refreshVisibleCheckboxes(); // Função auxiliar para marcar os que já estão renderizados
+        
+        if(selectedFileIds.size > 0) alert(`${selectedFileIds.size} arquivos antigos selecionados (inclusive os não visíveis).`);
+    }
+
+    function clearSelection() {
+        selectedFileIds.clear();
+        document.querySelectorAll('.file-check').forEach(cb => cb.checked = false);
+        updateSelectionUI();
+    }
+
+    function updateSelection() {
+        // Evento disparado pelo clique manual
+        // Adiciona/Remove apenas o clicado
+        // (Nota: Como usamos onclick inline no HTML gerado, o 'this' não está disponível direto aqui, 
+        // mas o evento sim se passarmos, ou pegamos todos. Simplificando para pegar todos renderizados:)
+        document.querySelectorAll('.file-check').forEach(cb => {
+            if (cb.checked) selectedFileIds.add(cb.value);
+            else selectedFileIds.delete(cb.value);
+        });
+        updateSelectionUI();
+    }
+
+    function refreshVisibleCheckboxes() {
+        // Sincroniza o estado visual com o Set selectedFileIds
+        document.querySelectorAll('.file-check').forEach(cb => {
+            cb.checked = selectedFileIds.has(cb.value);
+        });
+    }
+
+    function updateSelectionUI() {
+        const count = selectedFileIds.size;
+        document.getElementById('selectedCount').textContent = count;
+        document.getElementById('btnTrashDuplicates').disabled = count === 0;
+    }
+
+    async function trashSelectedFiles() {
+        if (!confirm(`Tem certeza que deseja mover ${selectedFileIds.size} arquivos para a lixeira?`)) return;
+        
+        const btn = document.getElementById('btnTrashDuplicates');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+
+        try {
+            const res = await fetch('/cleaner/api/trash', {
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({file_ids: Array.from(selectedFileIds)})
+            });
+            const json = await res.json();
+            if(json.ok) { 
+                alert(`Sucesso! ${json.result.success.length} arquivos movidos.`); 
+                clearSelection();
+                loadAllData(); // Recarrega tudo (Reinicia o lazy load)
+            } else {
+                alert("Erro ao processar: " + (json.error || 'Erro desconhecido'));
+            }
+        } catch(e) { 
+            alert("Erro de conexão."); 
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    }
+
+    async function trashSingleFile(id) {
+        if(!confirm("Mover este arquivo para a lixeira?")) return;
+        try {
+            await fetch('/cleaner/api/trash', {
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({file_ids: [id]})
+            });
+            fetchLargeFiles(); // Reinicia lista
+            fetchStats();
+        } catch(e) { alert("Erro ao deletar arquivo."); }
+    }
+</script>
+{% endblock %}

@@ -1,8 +1,6 @@
 # app/models/drive_cache.py
 from datetime import datetime
-
 from .db_instance import db
-
 
 class DriveItemCacheModel(db.Model):
     """
@@ -16,11 +14,9 @@ class DriveItemCacheModel(db.Model):
     drive_id = db.Column(db.String(128), unique=True, nullable=False, index=True)
 
     # Nome visível
-    # REMOVIDO index=True para evitar erro 1071 no MySQL (1024 chars é muito grande para índice)
     name = db.Column(db.String(1024), nullable=False, index=False)
 
     # Caminho completo calculado
-    # REMOVIDO index=True para evitar erro 1071 no MySQL (4096 chars é muito grande para índice)
     path = db.Column(db.String(4096), index=False)
 
     # Metadados do tipo
@@ -32,8 +28,11 @@ class DriveItemCacheModel(db.Model):
 
     # Tamanho (arquivos)
     size_bytes = db.Column(db.BigInteger, default=0, index=True)
+    
+    # NOVO: Checksum MD5 para deduplicação (vem da API do Drive)
+    md5_checksum = db.Column(db.String(32), index=True, nullable=True)
 
-    # String ISO vinda do Drive (ex: 2025-12-07T12:34:56.000Z)
+    # String ISO vinda do Drive
     modified_time = db.Column(db.String(64), index=True)
 
     # Se esse item foi “descartado” no cache
@@ -50,9 +49,6 @@ class DriveItemCacheModel(db.Model):
     )
 
     def to_tree_node(self) -> dict:
-        """
-        Formato esperado pelo frontend da árvore (/api/folders/*).
-        """
         return {
             "id": self.drive_id,
             "name": self.name,
@@ -61,9 +57,6 @@ class DriveItemCacheModel(db.Model):
         }
 
     def to_dict(self) -> dict:
-        """
-        Formato mais completo para tela de busca ou debug.
-        """
         return {
             "id": self.drive_id,
             "name": self.name,
@@ -72,14 +65,13 @@ class DriveItemCacheModel(db.Model):
             "is_folder": self.is_folder,
             "parent_id": self.parent_id,
             "size_bytes": self.size_bytes,
+            "md5_checksum": self.md5_checksum, # Incluído no retorno
             "modified_time": self.modified_time,
             "trashed": self.trashed,
-            "last_seen_remote": self.last_seen_remote.isoformat()
-            if self.last_seen_remote
-            else None,
+            "last_seen_remote": self.last_seen_remote.isoformat() if self.last_seen_remote else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
-    def __repr__(self) -> str:  # pragma: no cover
+    def __repr__(self) -> str:
         return f"<DriveItemCache {self.drive_id} {self.path!r}>"

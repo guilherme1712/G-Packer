@@ -9,15 +9,16 @@ from flask import current_app
 from app.models.db_instance import db
 from app.models.drive_cache import DriveItemCacheModel
 from app.models.task import TaskModel
-from app.services.google.drive_tree import get_children
-from app.services.worker_manager import WorkerManager
 
-# Tempo padrão de expiração (não usado no modo Read-Only, mas mantido para referência)
+# REMOVIDOS IMPORTS DO TOPO QUE CAUSAVAM CICLO:
+# from app.services.google.drive_tree import get_children
+# from app.services.worker_manager import WorkerManager
+
+# Tempo padrão de expiração
 DEFAULT_MAX_AGE_SECONDS = 172800 #(24H)
 
-
 def _ensure_root_item():
-    """Garante que a pasta raiz exista no banco para evitar FK errors."""
+    """Garante que a pasta raiz exista no banco."""
     try:
         root = DriveItemCacheModel.query.filter_by(drive_id="root").first()
         if root: return root
@@ -32,19 +33,20 @@ def _ensure_root_item():
         return root
     except Exception as e:
         db.session.rollback()
-        # Não printa erro se for apenas concorrência de criação
         return None
 
 
 def _upsert_item_from_remote(parent_id, parent_path, item_data, seen_at):
     """
-    Insere ou atualiza item no banco (Usado pelos Workers).
-    Não faz commit, apenas adiciona à sessão.
+    Insere ou atualiza item no banco.
     """
     try:
         drive_id = item_data["id"]
         name = item_data["name"]
-        is_folder = (item_data["type"] == "folder")
+        # Verifica se é pasta pelo mimeType ou type
+        is_folder = (item_data.get("type") == "folder") or \
+                    (item_data.get("mimeType") == "application/vnd.google-apps.folder")
+        
         path = f"{parent_path}/{name}" if parent_path else name
 
         # Tenta achar existente
@@ -57,9 +59,14 @@ def _upsert_item_from_remote(parent_id, parent_path, item_data, seen_at):
         item.is_folder = is_folder
         item.parent_id = parent_id
         item.path = path
-        item.size_bytes = int(item_data.get("size_bytes") or 0)
+        item.size_bytes = int(item_data.get("size_bytes") or item_data.get("size") or 0)
         item.last_seen_remote = seen_at
         item.trashed = False
+
+        # Novos campos Smart Cleaner
+        item.mime_type = item_data.get("mimeType")
+        item.md5_checksum = item_data.get("md5Checksum")
+        item.modified_time = item_data.get("modified_time") or item_data.get("modifiedTime")
 
         db.session.add(item)
         return item
@@ -71,8 +78,10 @@ def _upsert_item_from_remote(parent_id, parent_path, item_data, seen_at):
 def _refresh_folder_from_remote(creds, folder_id: str, include_files: bool = True):
     """
     (BLOQUEANTE) Vai no Google, busca filhos e salva no banco.
-    Usado apenas se force_refresh=True.
     """
+    # IMPORT LOCAL PARA EVITAR CICLO
+    from app.services.google.drive_tree import get_children
+    
     _ensure_root_item()
 
     if folder_id == "root":
@@ -84,7 +93,6 @@ def _refresh_folder_from_remote(creds, folder_id: str, include_files: bool = Tru
     children = get_children(creds, folder_id, include_files=True)
     seen_at = datetime.utcnow()
 
-    # Remove antigos para garantir sincronia limpa
     try:
         DriveItemCacheModel.query.filter_by(parent_id=folder_id).delete()
         for child in children:
@@ -106,15 +114,11 @@ def get_children_cached(
 ):
     """
     Retorna filhos do cache.
-    MODO LEITURA: Prioriza o banco de dados. Não chama API do Google se não forçado.
     """
-    # 1. Garante Root (Leitura rápida)
     _ensure_root_item()
 
-    # 2. SE FORÇADO: Executa a operação de escrita (Cuidado com Locks)
     if force_refresh:
         children = _refresh_folder_from_remote(creds, folder_id, include_files=True)
-        # Converte dicionários puros para formato tree node
         result = []
         for child in children:
             if child["type"] == "file" and not include_files:
@@ -127,18 +131,11 @@ def get_children_cached(
             })
         return result
 
-    # 3. MODO PADRÃO: APENAS LEITURA (READ-ONLY)
-    # Confia que a Task de Background está populando os dados.
-    # Isso evita "Database Locked" durante a navegação.
-
+    # MODO LEITURA (READ-ONLY)
     query = DriveItemCacheModel.query.filter_by(parent_id=folder_id, trashed=False)
-
-    # Ordenação: Pastas primeiro, depois ordem alfabética
     query = query.order_by(DriveItemCacheModel.is_folder.desc(), DriveItemCacheModel.name.asc())
-
     cached_children = query.all()
 
-    # Converte retorno do banco para JSON da árvore
     return [
         c.to_tree_node()
         for c in cached_children
@@ -153,7 +150,6 @@ def search_cache(
         max_size: int | None = None,
         limit: int = 200,
 ) -> list[dict]:
-    """Busca apenas no banco local (Rápido)"""
     query = DriveItemCacheModel.query.filter_by(trashed=False)
 
     if text:
@@ -177,24 +173,22 @@ def search_cache(
 
 def cache_uploaded_item(creds, file_id: str):
     """
-    Atualiza UM ÚNICO item no cache após upload com estratégia OTIMIZADA.
-    1. Busca metadados básicos na API (só do arquivo).
-    2. Resolve o pai usando o banco local (sem API recursiva).
-    3. Insere/Atualiza no banco.
+    Atualiza UM ÚNICO item no cache após upload.
     """
     try:
+        # IMPORT LOCAL
         from app.services.google.drive_tree import get_thread_safe_service
         service = get_thread_safe_service(creds)
 
-        # 1. Busca metadados frescos do arquivo recém-upado
+        # 1. Busca metadados
         meta = service.files().get(
             fileId=file_id,
-            fields="id, name, mimeType, size, parents, modifiedTime"
+            fields="id, name, mimeType, size, parents, modifiedTime, md5Checksum"
         ).execute()
 
         parent_id = meta.get('parents', ['root'])[0]
 
-        # 2. Descobre o path do pai usando o CACHE LOCAL (Sem chamar API)
+        # 2. Descobre o path do pai
         parent_cache = DriveItemCacheModel.query.filter_by(drive_id=parent_id).first()
 
         if parent_cache and parent_cache.path:
@@ -202,22 +196,22 @@ def cache_uploaded_item(creds, file_id: str):
         elif parent_id == 'root':
             parent_path = "Meu Drive"
         else:
-            parent_path = ""  # Pai não mapeado ainda, fica sem path visual por enquanto
+            parent_path = "" 
 
-        # 3. Prepara dados para inserção
+        # 3. Prepara dados
         item_data = {
             "id": meta["id"],
             "name": meta["name"],
             "type": "folder" if meta["mimeType"] == "application/vnd.google-apps.folder" else "file",
             "mimeType": meta["mimeType"],
             "size_bytes": meta.get("size", 0),
-            "modified_time": meta.get("modifiedTime")
+            "modified_time": meta.get("modifiedTime"),
+            "md5Checksum": meta.get("md5Checksum")
         }
 
-        # Garante que a raiz exista
         _ensure_root_item()
 
-        # 4. Insere/Atualiza apenas este nó
+        # 4. Insere/Atualiza
         upserted = _upsert_item_from_remote(
             parent_id=parent_id,
             parent_path=parent_path,
@@ -235,24 +229,22 @@ def cache_uploaded_item(creds, file_id: str):
 
 
 # ==========================================
-# WORKER DE BACKGROUND (Com Retry para Locks)
+# WORKER DE BACKGROUND
 # ==========================================
 def _worker_process_folder_cache(app, creds, folder_id, folder_path, include_files):
+    # IMPORT LOCAL
+    from app.services.google.drive_tree import get_children
+    
     subfolders_found = []
     items_count = 0
     max_retries = 3
 
-    # Contexto ISOLADO
     with app.app_context():
-        # Lógica de Retry para Database Locked
         for attempt in range(max_retries):
             try:
-                # 1. Fetch remoto (Lento, mas não bloqueia banco)
                 children = get_children(creds, folder_id, include_files=include_files)
                 seen_at = datetime.utcnow()
 
-                # 2. Prepara objetos
-                items_to_add = []
                 for child in children:
                     item = _upsert_item_from_remote(folder_id, folder_path, child, seen_at)
                     if item:
@@ -260,14 +252,13 @@ def _worker_process_folder_cache(app, creds, folder_id, folder_path, include_fil
                         if item.is_folder:
                             subfolders_found.append((item.drive_id, item.path))
 
-                # 3. Commit (Ponto Crítico)
                 db.session.commit()
-                break  # Sucesso, sai do retry loop
+                break
 
             except OperationalError as e:
                 db.session.rollback()
                 if "locked" in str(e):
-                    time.sleep(random.uniform(0.2, 1.0))  # Espera aleatória
+                    time.sleep(random.uniform(0.2, 1.0))
                     continue
                 else:
                     print(f">>> [Worker Error] {folder_path}: {e}")
@@ -286,7 +277,9 @@ def rebuild_full_cache(creds, include_files: bool = True, task_id: str = None) -
     """
     Função principal chamada pela thread de Login.
     """
-    # Limpa sessão herdada
+    # IMPORT LOCAL PARA EVITAR CICLO
+    from app.services.worker_manager import WorkerManager
+    
     db.session.remove()
 
     if task_id:
@@ -310,8 +303,6 @@ def rebuild_full_cache(creds, include_files: bool = True, task_id: str = None) -
         app_obj = current_app._get_current_object()
 
         future_to_path = {}
-
-        # Começa pelo Root
         fut = executor.submit(_worker_process_folder_cache, app_obj, creds, "root", root.path, include_files)
         future_to_path[fut] = "root"
 
@@ -326,14 +317,13 @@ def rebuild_full_cache(creds, include_files: bool = True, task_id: str = None) -
                 try:
                     subs, count = future.result()
                     total_items += count
-
                     print(f" -> Mapeado: {path_processed} ({count} itens)")
 
                     if task_id:
                         try:
                             t = TaskModel.query.get(task_id)
                             t.files_found = total_items
-                            t.files_downloaded = total_items  # Visual
+                            t.files_downloaded = total_items
                             t.message = f"Lendo: {path_processed[:40]}..."
                             db.session.commit()
                         except:
@@ -346,7 +336,6 @@ def rebuild_full_cache(creds, include_files: bool = True, task_id: str = None) -
                 except Exception as e:
                     print(f"Erro path {path_processed}: {e}")
 
-        # Finaliza
         if task_id:
             try:
                 t = TaskModel.query.get(task_id)
