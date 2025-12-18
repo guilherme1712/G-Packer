@@ -1,0 +1,164 @@
+<!-- MODAL DE DOWNLOAD -->
+<div id="modal-backdrop-download" class="modal-backdrop hidden">
+    <div class="modal">
+        <div class="modal-header">
+            <div>
+                <h2 id="modal-dl-title" class="modal-title">
+                    <span class="icon">⬇️</span> Baixar Itens
+                </h2>
+                <p class="modal-subtitle" id="modal-dl-subtitle">
+                    Configure o nome do arquivo, estratégia de fluxo e filtros antes de iniciar.
+                </p>
+            </div>
+            <div class="modal-badge">Download</div>
+        </div>
+
+        <form id="download-form" onsubmit="return false;">
+            <input type="hidden" name="items_json" id="items_json">
+            <input type="hidden" name="task_id" id="task_id">
+
+            <div class="modal-body">
+                <div class="modal-grid">
+                    <!-- Configurações principais -->
+                    <div class="form-section modal-section-wide">
+                        <div class="form-section-title">Configurações de Download</div>
+
+                        <div class="form-group">
+                            <label for="zip_name">Nome do Arquivo</label>
+                            <div style="display:flex; gap:8px;" class="suggestion-wrapper">
+                                <input type="text" id="zip_name" name="zip_name" placeholder="Ex: backup_drive"
+                                    style="flex:1;">
+                                <button type="button" class="btn-ghost btn-xs" onclick="toggleSuggestionMenu()">
+                                    Sugestão ▼
+                                </button>
+                                <div id="suggestion-menu" class="suggestion-menu">
+                                    <div class="suggestion-item" onclick="applySuggestion('date')">Nome + Data</div>
+                                    <div class="suggestion-item" onclick="applySuggestion('clean')">Apenas Nome
+                                    </div>
+                                    <div class="suggestion-item" onclick="applySuggestion('random')">Aleatório</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group box-warning">
+                            <label style="margin-bottom:8px; display:block; font-weight:600; color:#fed7aa;">
+                                Estratégia de Fluxo
+                            </label>
+                            <div class="radio-group-vertical">
+                                <label class="radio-option">
+                                    <input type="radio" name="processing_mode" value="sequential" checked>
+                                    <div>
+                                        <strong>Sequencial (Padrão)</strong>
+                                        <span>Mapeia tudo primeiro, calcula total, depois baixa.</span>
+                                    </div>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="processing_mode" value="concurrent">
+                                    <div>
+                                        <strong>Concorrente (Turbo)</strong>
+                                        <span>Inicia o download imediatamente (Mapeamento simultâneo).</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group box-highlight">
+                            <label style="margin-bottom:8px; display:block; font-weight:600;">
+                                Modo de Execução
+                            </label>
+                            <div class="radio-group-vertical">
+                                <label class="radio-option">
+                                    <input type="radio" name="execution_mode" value="immediate" checked>
+                                    <div>
+                                        <strong>Baixar Agora</strong>
+                                        <span>Aguarda e baixa direto.</span>
+                                    </div>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="execution_mode" value="background">
+                                    <div>
+                                        <strong>Segundo Plano</strong>
+                                        <span>Processa no servidor e salva em "Meus Backups".</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="output_mode">Formato de Saída</label>
+                            <select id="output_mode" name="output_mode" onchange="updateOutputModeUI()">
+                                <option value="archive" selected>Arquivo Compactado (ZIP/Tar)</option>
+                                <option value="mirror">Espelho Local (Sync)</option>
+                            </select>
+                        </div>
+
+                        <div class="archive-only">
+                            <div class="form-group">
+                                <label for="archive_format">Formato</label>
+                                <select id="archive_format" name="archive_format">
+                                    <option value="zip">ZIP (.zip)</option>
+                                    <option value="tar.gz">Tar GZip (.tar.gz)</option>
+                                    <option value="7z">7-Zip (.7z)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="compression_level">Compressão</label>
+                                <select id="compression_level" name="compression_level">
+                                    <option value="fast">Rápida</option>
+                                    <option value="normal" selected>Normal</option>
+                                    <option value="max">Máxima</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group mirror-only" style="display:none;">
+                            <label for="local_mirror_path">Caminho Local</label>
+                            <input type="text" id="local_mirror_path" name="local_mirror_path"
+                                placeholder="/home/user/Backups">
+                        </div>
+                    </div>
+
+                    <!-- Filtros -->
+                    <div class="form-section">
+                        <div class="form-section-title">Filtros de Conteúdo</div>
+
+                        <div class="form-group">
+                            <label>Tipos de Arquivo</label>
+                            <div class="filter-types">
+                                <label><input type="checkbox" name="type_pdf" value="1" checked> PDF</label>
+                                <label><input type="checkbox" name="type_docs" value="1" checked> Docs</label>
+                                <label><input type="checkbox" name="type_sheets" value="1" checked>
+                                    Planilhas</label>
+                                <label><input type="checkbox" name="type_images" value="1" checked> Imagens</label>
+                                <label><input type="checkbox" name="type_videos" value="1" checked> Vídeos</label>
+                                <label><input type="checkbox" name="type_others" value="1" checked> Outros</label>
+                            </div>
+                        </div>
+
+                        <div class="form-section-title" style="margin-top: 10px;">Filtros Avançados</div>
+
+                        <div class="form-group">
+                            <label>Data</label>
+                            <div class="filter-dates">
+                                <label>Criado pós: <input type="date" name="created_after"></label>
+                                <label>Editado pós: <input type="date" name="modified_after"></label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="max_size_mb">Tam. Máx (MB)</label>
+                            <input type="number" id="max_size_mb" name="max_size_mb"
+                                placeholder="Ignorar arquivos maiores que X MB">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn-ghost" onclick="closeModal('download')">Cancelar</button>
+                <button type="button" class="btn-primary" onclick="startDownloadProcess()">Iniciar Download</button>
+            </div>
+        </form>
+    </div>
+</div>
+

@@ -1,0 +1,37 @@
+<div id="modal-backdrop-type-choice" class="modal-backdrop hidden">
+    <div class="modal" style="max-width: 450px;">
+        <div class="modal-header">
+            <h2 class="modal-title">Backup Existente Encontrado</h2>
+        </div>
+        <div class="modal-body">
+            <p style="color:#e5e7eb; margin-bottom:12px;">
+                Já existe uma série de backups para esta seleção (<strong id="choice-series-key"></strong>).
+            </p>
+            <p style="color:#9ca3af; font-size:0.9rem; margin-bottom:20px;">
+                O último backup foi feito em <span id="choice-last-date" style="color:#fff;"></span>.
+                Como deseja prosseguir?
+            </p>
+            <div class="radio-group-vertical">
+                <label class="radio-option">
+                    <input type="radio" name="backup_choice_type" value="incremental" checked>
+                    <div>
+                        <strong>Incremental (Recomendado)</strong>
+                        <span>Baixar apenas o que mudou desde o último backup.</span>
+                    </div>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="backup_choice_type" value="full">
+                    <div>
+                        <strong>Completo (Full)</strong>
+                        <span>Baixar tudo novamente.</span>
+                    </div>
+                </label>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-ghost" onclick="closeModal('type_choice')">Cancelar</button>
+            <button class="btn-primary" onclick="confirmBackupType()">Continuar</button>
+        </div>
+    </div>
+</div>
+

@@ -1,0 +1,165 @@
+<!-- MODAL DE PERFIL / MODELO -->
+<div id="modal-backdrop-profile" class="modal-backdrop hidden">
+    <div class="modal">
+        <div class="modal-header">
+            <div>
+                <h2 id="modal-prof-title" class="modal-title">
+                    <span class="icon">🧩</span> Criar Modelo de Backup
+                </h2>
+                <p class="modal-subtitle" id="modal-prof-subtitle">
+                    Salve todas as configurações de download para reaplicar com um clique.
+                </p>
+            </div>
+            <div class="modal-badge">Modelo</div>
+        </div>
+
+        <form id="profile-form" onsubmit="return false;">
+            <div class="modal-body">
+                <div class="modal-grid">
+                    <!-- Coluna esquerda -->
+                    <div class="form-section modal-section-wide">
+                        <div class="form-section-title">Dados do Modelo</div>
+
+                        <div class="form-group">
+                            <label for="prof_name">Nome do Modelo (Obrigatório)</label>
+                            <input type="text" id="prof_name" name="prof_name" placeholder="Ex: Backup Mensal"
+                                style="font-weight:bold;">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="prof_zip_pattern">Padrão de Nome do Arquivo</label>
+                            <input type="text" id="prof_zip_pattern" name="prof_zip_pattern"
+                                placeholder="Ex: backup-{YYYYMMDD}">
+                            <div class="form-hint">
+                                Tags disponíveis: {YYYYMMDD}, {YYYY}, {MM}, {DD}
+                            </div>
+                        </div>
+
+                        <div class="form-group box-warning">
+                            <label style="margin-bottom:8px; display:block; font-weight:600; color:#fed7aa;">
+                                Estratégia de Fluxo
+                            </label>
+                            <div class="radio-group-vertical">
+                                <label class="radio-option">
+                                    <input type="radio" name="prof_processing_mode" value="sequential" checked>
+                                    <div>
+                                        <strong>Sequencial</strong>
+                                        <span>Mapeamento preciso antes do download.</span>
+                                    </div>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="prof_processing_mode" value="concurrent">
+                                    <div>
+                                        <strong>Concorrente</strong>
+                                        <span>Mapeamento e download simultâneos.</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group box-highlight">
+                            <label style="margin-bottom:8px; display:block; font-weight:600;">
+                                Modo Padrão
+                            </label>
+                            <div class="radio-group-vertical">
+                                <label class="radio-option">
+                                    <input type="radio" name="prof_execution_mode" value="immediate" checked>
+                                    <div><strong>Baixar Agora</strong></div>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="prof_execution_mode" value="background">
+                                    <div><strong>Segundo Plano</strong></div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="prof_output_mode">Formato de Saída</label>
+                            <select id="prof_output_mode" name="prof_output_mode" onchange="updateProfileOutputUI()">
+                                <option value="archive" selected>Arquivo Compactado</option>
+                                <option value="mirror">Espelho Local</option>
+                            </select>
+                        </div>
+
+                        <div class="prof-archive-only">
+                            <div class="form-group">
+                                <label for="prof_archive_format">Formato</label>
+                                <select id="prof_archive_format" name="prof_archive_format">
+                                    <option value="zip">ZIP</option>
+                                    <option value="tar.gz">Tar GZip</option>
+                                    <option value="7z">7-Zip (.7z)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="prof_compression_level">Compressão</label>
+                                <select id="prof_compression_level" name="prof_compression_level">
+                                    <option value="fast">Rápida</option>
+                                    <option value="normal" selected>Normal</option>
+                                    <option value="max">Máxima</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group prof-mirror-only" style="display:none;">
+                            <label for="prof_local_mirror_path">Caminho Local</label>
+                            <input type="text" id="prof_local_mirror_path" name="prof_local_mirror_path"
+                                placeholder="/home/user/Backups">
+                        </div>
+                    </div>
+
+                    <!-- Coluna direita: filtros -->
+                    <div class="form-section">
+                        <div class="form-section-title">Filtros do Modelo</div>
+
+                        <div class="form-group">
+                            <label>Tipos</label>
+                            <div class="filter-types">
+                                <label><input type="checkbox" name="prof_type_pdf" value="1" checked> PDF</label>
+                                <label><input type="checkbox" name="prof_type_docs" value="1" checked> Docs</label>
+                                <label><input type="checkbox" name="prof_type_sheets" value="1" checked>
+                                    Planilhas</label>
+                                <label><input type="checkbox" name="prof_type_images" value="1" checked>
+                                    Imagens</label>
+                                <label><input type="checkbox" name="prof_type_videos" value="1" checked>
+                                    Vídeos</label>
+                                <label><input type="checkbox" name="prof_type_others" value="1" checked>
+                                    Outros</label>
+                            </div>
+                        </div>
+
+                        <div class="form-section-title" style="margin-top: 10px;">Filtros Avançados</div>
+
+                        <div class="form-group">
+                            <label>Data</label>
+                            <div class="filter-dates">
+                                <label>Criado pós:
+                                    <input type="date" name="prof_created_after" id="prof_created_after">
+                                </label>
+                                <label>Editado pós:
+                                    <input type="date" name="prof_modified_after" id="prof_modified_after">
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="prof_max_size_mb">Tam. Máx (MB)</label>
+                            <input type="number" id="prof_max_size_mb" name="prof_max_size_mb"
+                                placeholder="Ignorar > X MB">
+                        </div>
+
+                        <div id="profile-save-feedback" class="form-hint"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn-ghost" onclick="closeModal('profile')">Cancelar</button>
+                <button type="button" class="btn-primary" onclick="saveCurrentAsProfile()">
+                    Salvar modelo
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+

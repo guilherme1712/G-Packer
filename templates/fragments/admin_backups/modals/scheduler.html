@@ -1,0 +1,144 @@
+<div id="modal-backdrop-scheduler" class="modal-backdrop hidden">
+    <div class="modal">
+        <div class="modal-header">
+            <div>
+                <h2 class="modal-title">
+                    <span class="icon">⏱️</span> Agendar backup automático
+                </h2>
+                <p class="modal-subtitle">
+                    Defina a frequência e o horário para gerar backups com os itens selecionados.
+                </p>
+            </div>
+            <div class="modal-badge">Agendamento</div>
+        </div>
+
+        <form id="scheduler-form" onsubmit="return false;">
+            <input type="hidden" id="sched_items_json" name="items">
+
+            <div class="modal-body">
+                <div class="modal-grid">
+                    <!-- Coluna principal -->
+                    <div class="form-section modal-section-wide">
+                        <div class="form-section-title">Configurações do agendamento</div>
+
+                        <div class="form-group">
+                            <label for="sched_name">Nome do agendamento</label>
+                            <input type="text" id="sched_name" placeholder="Ex: Backup semanal do Drive">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="sched_zip_name">Nome base do arquivo gerado</label>
+                            <input type="text" id="sched_zip_name" placeholder="Ex: backup_agendado">
+                            <p class="form-hint">
+                                A data será incluída automaticamente no momento da execução.
+                            </p>
+                        </div>
+
+                        <!-- NOVO: Fonte do agendamento -->
+                        <div class="form-group">
+                            <label>Fonte do backup</label>
+                            <div class="radio-group-vertical">
+                                <label class="radio-option">
+                                    <input type="radio" name="sched_source" value="items" checked
+                                        onchange="updateSchedulerSourceUI()">
+                                    <div>
+                                        <strong>Usar itens atuais</strong>
+                                        <span>Agenda exatamente os itens selecionados na árvore.</span>
+                                    </div>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="sched_source" value="profile"
+                                        onchange="updateSchedulerSourceUI()">
+                                    <div>
+                                        <strong>Usar este Perfil de Backup</strong>
+                                        <span>Usa sempre a configuração mais recente do perfil escolhido.</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                        <!-- Coluna lateral: prévia dos itens -->
+                        <div class="form-section" id="sched-items-section">
+                            <div class="form-section-title">Itens incluídos</div>
+                            <div id="sched-items-count" class="form-hint">
+                                Nenhum item selecionado ainda.
+                            </div>
+                            <div id="sched-items-preview" class="sched-preview-list"></div>
+                        </div>
+                        <div class="form-group" id="sched-profile-group" style="display:none;">
+                            <label for="sched_profile_id">Perfil de backup</label>
+                            <select id="sched_profile_id" onchange="onSchedulerProfileChange()">
+                                <option value="">Selecione um perfil</option>
+                            </select>
+                            <p class="form-hint">
+                                Ao atualizar esse perfil depois, todos os agendamentos vinculados a ele herdam a
+                                nova configuração.
+                            </p>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Frequência</label>
+                            ...
+                        </div>
+
+
+                        <div class="form-group">
+                            <label>Frequência</label>
+                            <div class="radio-group-vertical">
+                                <label class="radio-option">
+                                    <input type="radio" name="sched_frequency" value="daily" checked>
+                                    <div>
+                                        <strong>Diária</strong>
+                                        <span>Executa todos os dias no horário escolhido.</span>
+                                    </div>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="sched_frequency" value="weekly">
+                                    <div>
+                                        <strong>Semanal</strong>
+                                        <span>Executa uma vez por semana.</span>
+                                    </div>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="sched_frequency" value="monthly">
+                                    <div>
+                                        <strong>Mensal</strong>
+                                        <span>Executa uma vez por mês.</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="sched_run_time">Horário</label>
+                            <input type="time" id="sched_run_time" value="03:00">
+                            <p class="form-hint">
+                                Use o horário do servidor (máquina onde o app roda).
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Coluna lateral: prévia dos itens -->
+                    <div class="form-section">
+                        <div class="form-section-title">Itens incluídos</div>
+                        <div id="sched-items-count" class="form-hint">
+                            Nenhum item selecionado ainda.
+                        </div>
+                        <div id="sched-items-preview" class="sched-preview-list"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-ghost" onclick="closeSchedulerModal()">
+                    Cancelar
+                </button>
+
+                <button type="button" id="sched-submit-btn" class="btn-primary" onclick="submitSchedulerForm()">
+                    Salvar agendamento
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
