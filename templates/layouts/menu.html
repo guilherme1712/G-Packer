@@ -1,0 +1,143 @@
+<aside class="app-sidebar">
+    <div class="sidebar-logo" title="G-Packer">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-package" style="width: 28px; height: 28px; color: #fff;">
+            <line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line>
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+        </svg>
+    </div>
+
+    <div class="sidebar-divider"></div>
+
+    <nav class="sidebar-nav">
+
+        <a href="{{ url_for('admin.dashboard') }}"
+           class="sidebar-link {% if active_page == 'dashboard' %}sidebar-link-active{% endif %}"
+           aria-label="Dashboard">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+            <span class="sidebar-tooltip">Dashboard</span>
+        </a>
+
+        <a href="{{ url_for('drive.folders') }}"
+           class="sidebar-link {% if active_page == 'drive' %}sidebar-link-active{% endif %}"
+           aria-label="Arquivos">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span class="sidebar-tooltip">Arquivos</span>
+        </a>
+
+        <a href="{{ url_for('upload.index') }}"
+           class="sidebar-link {% if 'upload' in request.endpoint %}sidebar-link-active{% endif %}"
+           aria-label="Upload">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span class="sidebar-tooltip">Upload</span>
+        </a>
+
+        <a href="{{ url_for('packer.index') }}"
+           class="sidebar-link {% if 'packer' in request.endpoint %}sidebar-link-active{% endif %}"
+           aria-label="Compactador">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+            </svg>
+            <span class="sidebar-tooltip">Compactador</span>
+        </a>
+
+        <a href="{{ url_for('tools.converter') }}"
+           class="sidebar-link {% if 'tools' in request.endpoint %}sidebar-link-active{% endif %}"
+           aria-label="Conversor">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            <span class="sidebar-tooltip">Conversor</span>
+        </a>
+
+        <a href="{{ url_for('cleaner.index') }}"
+           class="sidebar-link {% if 'cleaner' in request.endpoint %}sidebar-link-active{% endif %}"
+           aria-label="Smart Cleaner">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+            <span class="sidebar-tooltip">Smart Cleaner</span>
+        </a>
+
+        <a href="{{ url_for('admin.list_backups') }}"
+           class="sidebar-link {% if active_page == 'backups' %}sidebar-link-active{% endif %}"
+           aria-label="Backups">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                <polyline points="7 3 7 8 15 8"></polyline>
+            </svg>
+            <span class="sidebar-tooltip">Meus Backups</span>
+        </a>
+
+        <a href="{{ url_for('graph_viz.view_graph') }}"
+           class="sidebar-link {% if request.endpoint == 'graph_viz.view_graph' %}sidebar-link-active{% endif %}"
+           aria-label="Visão de Rede">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="18" cy="5" r="3"></circle>
+                <circle cx="6" cy="12" r="3"></circle>
+                <circle cx="18" cy="19" r="3"></circle>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+            </svg>
+            <span class="sidebar-tooltip">Visão de Rede</span>
+        </a>
+
+        <a href="{{ url_for('audit.index') }}"
+           class="sidebar-link {% if 'audit' in request.endpoint %}sidebar-link-active{% endif %}"
+           aria-label="Auditoria">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            <span class="sidebar-tooltip">Auditoria</span>
+        </a>
+
+        <a href="{{ url_for('admin.view_db') }}"
+           class="sidebar-link {% if active_page == 'admin_db' %}sidebar-link-active{% endif %}"
+           aria-label="Admin DB">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+            </svg>
+            <span class="sidebar-tooltip">Admin DB</span>
+        </a>
+
+        <a href="{{ url_for('health.status_page') }}"
+           class="sidebar-link {% if active_page == 'status' %}sidebar-link-active{% endif %}"
+           aria-label="Status">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+            </svg>
+            <span class="sidebar-tooltip">Status</span>
+        </a>
+
+    </nav>
+
+    <div class="sidebar-status">
+        <div class="sidebar-status-dot"></div>
+    </div>
+</aside>

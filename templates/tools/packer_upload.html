@@ -1,0 +1,168 @@
+{% extends "layouts/layout.html" %}
+
+{% block title %}Novo Pacote{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Reutilizando os estilos Glass/Glow */
+    .glass-panel {
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 24px;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        padding: 10px;
+    }
+    .packer-zone {
+        border: 2px dashed rgba(99, 102, 241, 0.3);
+        background: rgba(99, 102, 241, 0.02);
+        border-radius: 16px;
+        padding: 50px 20px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    .packer-zone:hover, .packer-zone.dragover {
+        background: rgba(99, 102, 241, 0.08);
+        border-color: #818cf8;
+        transform: scale(1.01);
+    }
+    .btn-glow {
+        background: linear-gradient(45deg, #4f46e5, #7c3aed, #ec4899);
+        background-size: 200% 200%;
+        animation: gradientMove 3s ease infinite;
+        color: white;
+        font-weight: 800;
+        text-transform: uppercase;
+        border: none;
+        border-radius: 50px;
+        padding: 18px 40px;
+        box-shadow: 0 10px 20px rgba(79, 70, 229, 0.4);
+        transition: all 0.3s;
+    }
+    .btn-glow:hover { transform: translateY(-3px); box-shadow: 0 20px 40px rgba(124, 58, 237, 0.6); }
+    @keyframes gradientMove { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+
+    .custom-input {
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #fff;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="min-height: 85vh;">
+    <div>
+
+        <div class="text-center mb-5">
+            <h1 class="">Criar Novo Pacote</h1>
+            <p class="text-secondary">Faça upload dos arquivos para começar.</p>
+        </div>
+
+        <div id="error-box" class="alert alert-danger" style="display:none; border-radius: 12px;"></div>
+
+        <div class="glass-panel p-4 p-md-5">
+
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <label class="text-white-50 small fw-bold mb-1">NOME DO PACOTE</label>
+                    <input type="text" id="zip_name" class="form-control custom-input" placeholder="Ex: backup_projeto">
+                </div>
+                <div class="col-md-3">
+                    <label class="text-white-50 small fw-bold mb-1">FORMATO</label>
+                    <select id="format" class="form-select custom-input">
+                        <option value="zip">.ZIP</option>
+                        <option value="7z">.7Z</option>
+                        <option value="tar.gz">.TAR.GZ</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="text-white-50 small fw-bold mb-1">COMPRESSÃO</label>
+                    <select id="level" class="form-select custom-input">
+                        <option value="normal">Normal</option>
+                        <option value="fast">Rápida</option>
+                        <option value="max">Máxima</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="packer-zone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+                <div style="font-size: 3rem; color: #818cf8; margin-bottom: 15px;"><i class="fas fa-cloud-upload-alt"></i></div>
+                <h4 class="text-white fw-bold">Arraste arquivos aqui</h4>
+                <p class="text-muted mb-0">Clique para selecionar</p>
+                <input type="file" id="fileInput" multiple style="display: none;" onchange="handleFiles(this.files)">
+            </div>
+
+            <div id="file-list" class="mt-4"></div>
+
+            <button id="btn-compress" class="btn-glow w-100 mt-5" style="display:none;" onclick="startUpload()">
+                <span id="btn-text"><i class="fas fa-rocket me-2"></i> INICIAR COMPRESSÃO</span>
+                <span id="btn-loader" style="display:none;"><i class="fas fa-spinner fa-spin me-2"></i> ENVIANDO...</span>
+            </button>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    let selectedFiles = [];
+    const csrfToken = "{{ csrf_token() if csrf_token else '' }}";
+
+    // Drag & Drop
+    const dropzone = document.getElementById('dropzone');
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => dropzone.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); }));
+    dropzone.addEventListener('dragover', () => dropzone.classList.add('dragover'));
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', (e) => { dropzone.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
+
+    function handleFiles(files) {
+        if (!files.length) return;
+        selectedFiles = files;
+        document.getElementById('file-list').innerHTML = `
+            <div class="alert alert-success border-0 bg-opacity-10 bg-success text-success d-flex align-items-center">
+                <i class="fas fa-check-circle me-2"></i> ${files.length} arquivos selecionados
+            </div>`;
+        document.getElementById('btn-compress').style.display = 'block';
+    }
+
+    async function startUpload() {
+        const btn = document.getElementById('btn-compress');
+        const btnText = document.getElementById('btn-text');
+        const btnLoader = document.getElementById('btn-loader');
+
+        btn.disabled = true;
+        btnText.style.display = 'none';
+        btnLoader.style.display = 'inline';
+
+        const formData = new FormData();
+        for (let i = 0; i < selectedFiles.length; i++) formData.append('files', selectedFiles[i]);
+        formData.append('zip_name', document.getElementById('zip_name').value);
+        formData.append('format', document.getElementById('format').value);
+        formData.append('level', document.getElementById('level').value);
+
+        try {
+            const res = await fetch('/packer/upload', {
+                method: 'POST',
+                headers: {'X-CSRFToken': csrfToken},
+                body: formData
+            });
+            const data = await res.json();
+
+            if (data.ok && data.redirect_url) {
+                // REDIRECIONAMENTO PARA PÁGINA 2
+                window.location.href = data.redirect_url;
+            } else {
+                throw new Error(data.error || "Erro desconhecido");
+            }
+        } catch (e) {
+            document.getElementById('error-box').style.display = 'block';
+            document.getElementById('error-box').innerText = "Erro: " + e.message;
+            btn.disabled = false;
+            btnText.style.display = 'inline';
+            btnLoader.style.display = 'none';
+        }
+    }
+</script>
+{% endblock %}

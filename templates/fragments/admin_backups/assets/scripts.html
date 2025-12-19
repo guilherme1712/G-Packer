@@ -1,0 +1,2595 @@
+<script>
+    /* ============================================
+       CONTEXT MENU — STATE
+    ===============================================*/
+    let ctxTarget = null;
+    const ctxMenu = document.getElementById("context-menu");
+
+    document.addEventListener("click", () => ctxMenu.style.display = "none");
+
+    document.addEventListener("contextmenu", (e) => {
+        const li = e.target.closest(".tree-node");
+        if (!li) return;
+
+        e.preventDefault();
+        ctxTarget = li;
+
+        ctxMenu.style.top = e.pageY + "px";
+        ctxMenu.style.left = e.pageX + "px";
+        ctxMenu.style.display = "block";
+    });
+
+
+    /* ============================================
+       RENOMEAR
+    ===============================================*/
+    function ctxRename() {
+        if (!ctxTarget) return;
+        const input = document.getElementById("rename-input");
+        input.value = ctxTarget.dataset.name;
+
+        document.getElementById("rename-modal").style.display = "block";
+        document.getElementById("rename-overlay").style.display = "block";
+    }
+
+    function closeRenameModal() {
+        document.getElementById("rename-modal").style.display = "none";
+        document.getElementById("rename-overlay").style.display = "none";
+    }
+
+    function confirmRename() {
+        const newName = document.getElementById("rename-input").value.trim();
+        if (!newName) return;
+
+        fetch("/api/file/rename", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: ctxTarget.dataset.id, name: newName })
+        })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    ctxTarget.dataset.name = newName;
+                    ctxTarget.querySelector(".tree-name").textContent = newName;
+                    closeRenameModal();
+                    showToast("Renomeado com sucesso!", "success");
+                } else showToast(d.error, "error");
+            });
+    }
+    /* ============================================
+       ADICIONAR PASTA
+    ===============================================*/
+    function ctxCreateFolder() {
+        if (!ctxTarget || ctxTarget.dataset.type !== "folder") {
+            showToast("Selecione uma pasta para criar subpasta.", "warning");
+            return;
+        }
+
+        document.getElementById("create-folder-input").value = "";
+        document.getElementById("create-folder-modal").style.display = "block";
+        document.getElementById("create-folder-overlay").style.display = "block";
+    }
+    function closeCreateFolderModal() {
+        document.getElementById("create-folder-modal").style.display = "none";
+        document.getElementById("create-folder-overlay").style.display = "none";
+    }
+    function confirmCreateFolder() {
+        const name = document.getElementById("create-folder-input").value.trim();
+        if (!name) return;
+
+        const parentId = ctxTarget.dataset.id;
+
+        fetch("/api/folder/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ parent_id: parentId, name })
+        })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    showToast("Pasta criada com sucesso!", "success");
+                    const folder = d.folder;
+
+                    // INSERIR NA ÁRVORE SEM RECARREGAR
+                    insertCreatedFolderIntoTree(ctxTarget, folder);
+
+                    closeCreateFolderModal();
+                } else {
+                    showToast("Erro: " + d.error, "error");
+                }
+            });
+    }
+
+    function insertCreatedFolderIntoTree(parentNode, folderData) {
+        const ul = parentNode.querySelector(".tree-children");
+
+        // Se nunca carregou filhos, força abrir a pasta
+        if (!ul) return;
+
+        // Se pasta estava fechada, agora abre
+        if (parentNode.classList.contains("collapsed")) {
+            parentNode.classList.remove("collapsed");
+            ul.style.display = "block";
+            const toggle = parentNode.querySelector(".tree-toggle");
+            if (toggle) toggle.textContent = "▾";
+        }
+
+        // Criar nó da nova pasta usando sua própria função existente
+        const li = createFolderNode({
+            id: folderData.id,
+            name: folderData.name,
+        });
+
+        ul.appendChild(li);
+    }
+
+
+    /* ============================================
+       EXCLUIR
+    ===============================================*/
+    function ctxTrash() {
+        if (!ctxTarget) return;
+        const id = ctxTarget.dataset.id;
+
+        if (!confirm("Enviar para a lixeira?")) return;
+
+        fetch("/api/file/trash", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id })
+        })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    deleteNodeRecursively(ctxTarget);
+                    showToast("Item enviado para lixeira", "success");
+                } else showToast(d.error, "error");
+            });
+    }
+
+
+    /* ============================================
+       PRÉ-VISUALIZAR
+    ===============================================*/
+    function ctxPreview() {
+        if (!ctxTarget) return;
+        const item = {
+            id: ctxTarget.dataset.id,
+            name: ctxTarget.dataset.name,
+            type: ctxTarget.dataset.type
+        };
+        showItemPreview(item, ctxTarget);
+    }
+
+    /* ============================================
+       MOVER (ABRE ÁRVORE PARA SELEÇÃO DE DESTINO)
+    ===============================================*/
+    function ctxMove() {
+        alert("Arraste o item para uma pasta destino.\nDrag & Drop já está ativo!");
+    }
+
+    /* ============================================
+       DRAG & DROP
+    ===============================================*/
+    document.addEventListener("dragstart", (e) => {
+        const li = e.target.closest(".tree-node");
+        if (!li) return;
+
+        e.dataTransfer.setData("item_id", li.dataset.id);
+        e.dataTransfer.setData("item_type", li.dataset.type);
+
+        li.classList.add("dragging");
+    });
+
+    document.addEventListener("dragend", (e) => {
+        const li = e.target.closest(".tree-node");
+        if (li) li.classList.remove("dragging");
+    });
+
+    /* Permitir soltar em pastas */
+    document.addEventListener("dragover", (e) => {
+        const li = e.target.closest(".tree-node");
+        if (!li) return;
+        if (li.dataset.type !== "folder") return;
+
+        e.preventDefault();
+        li.classList.add("drop-target");
+    });
+
+    document.addEventListener("dragleave", (e) => {
+        const li = e.target.closest(".tree-node");
+        if (li) li.classList.remove("drop-target");
+    });
+
+    document.addEventListener("drop", (e) => {
+        const li = e.target.closest(".tree-node");
+        if (!li) return;
+        li.classList.remove("drop-target");
+
+        const targetId = li.dataset.id;
+        const fileId = e.dataTransfer.getData("item_id");
+
+        if (!fileId || !targetId || fileId === targetId) return;
+
+        fetch("/api/file/move", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                file_id: fileId,
+                target_id: targetId
+            })
+        })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    showToast("Movido com sucesso!", "success");
+                    reloadTree();
+                } else showToast(d.error, "error");
+            });
+    });
+
+    let deleteCancelFlag = false;
+    let deleteCurrentRate = 4;   // começa com 4/s
+    let deleteStableCycles = 0;
+
+
+    let pendingPayload = null;
+
+    function updateSchedulerItemsPreviewFromSelection() {
+        const previewList = document.getElementById('sched-items-preview');
+        const countEl = document.getElementById('sched-items-count');
+
+        if (!previewList || !countEl) return;
+
+        if (!selectedItems.length) {
+            countEl.textContent = "Nenhum item selecionado ainda.";
+            previewList.innerHTML = "";
+            return;
+        }
+
+        const maxPreview = 20;
+        let html = '';
+        selectedItems.slice(0, maxPreview).forEach(it => {
+            html += `<div class="file-preview-item">${it.name || '(sem nome)'}</div>`;
+        });
+        if (selectedItems.length > maxPreview) {
+            html += `<div class="file-preview-item">+ ${selectedItems.length - maxPreview} item(ns) não exibidos...</div>`;
+        }
+        previewList.innerHTML = html;
+        countEl.textContent = `${selectedItems.length} item(ns) serão incluídos neste agendamento.`;
+    }
+
+    function updateSchedulerItemsPreviewFromProfile(profile) {
+        const previewList = document.getElementById('sched-items-preview');
+        const countEl = document.getElementById('sched-items-count');
+        if (!previewList || !countEl) return;
+
+        if (!profile) {
+            countEl.textContent = "Selecione um perfil para ver os itens.";
+            previewList.innerHTML = "";
+            return;
+        }
+
+        const items = profile.items || [];
+        const maxPreview = 20;
+        let html = '';
+        items.slice(0, maxPreview).forEach(it => {
+            const icon = it.type === 'folder' ? '📁' : '📄';
+            html += `<div class="file-preview-item">${icon} ${it.name || '(sem nome)'}</div>`;
+        });
+        if (items.length > maxPreview) {
+            html += `<div class="file-preview-item">+ ${items.length - maxPreview} item(ns) não exibidos...</div>`;
+        }
+        previewList.innerHTML = html;
+        countEl.textContent = `${items.length} item(ns) configurado(s) no perfil "${profile.name}".`;
+    }
+
+    function updateSchedulerSourceUI() {
+        const form = document.getElementById('scheduler-form');
+        if (!form) return;
+
+        const srcInput = form.querySelector('input[name="sched_source"]:checked');
+        const source = srcInput ? srcInput.value : 'items';
+
+        const itemsSection = document.getElementById('sched-items-section');
+        const profileGroup = document.getElementById('sched-profile-group');
+
+        if (source === 'profile') {
+            if (profileGroup) profileGroup.style.display = 'block';
+            if (itemsSection) itemsSection.style.display = 'block';
+
+            if (schedSelectedProfile) {
+                updateSchedulerItemsPreviewFromProfile(schedSelectedProfile);
+            } else {
+                updateSchedulerItemsPreviewFromProfile(null);
+            }
+        } else {
+            if (profileGroup) profileGroup.style.display = 'none';
+            if (itemsSection) itemsSection.style.display = 'block';
+            updateSchedulerItemsPreviewFromSelection();
+        }
+    }
+
+    function onSchedulerProfileChange() {
+        const profileSelect = document.getElementById('sched_profile_id');
+        if (!profileSelect) return;
+
+        const id = profileSelect.value;
+        if (!id) {
+            schedSelectedProfile = null;
+        } else {
+            schedSelectedProfile = backupProfiles.find(p => String(p.id) === String(id)) || null;
+        }
+        updateSchedulerItemsPreviewFromProfile(schedSelectedProfile);
+    }
+
+    function openSchedulerModal() {
+        const form = document.getElementById('scheduler-form');
+        if (form) form.reset();
+
+        // joga os itens selecionados no hidden (pode ser vazio)
+        const itemsField = document.getElementById('sched_items_json');
+        if (itemsField) itemsField.value = JSON.stringify(selectedItems);
+
+        // preenchimento padrão
+        const hoje = new Date();
+        const dataFmt = hoje.toLocaleDateString('pt-BR');
+        const nameInput = document.getElementById('sched_name');
+        if (nameInput) {
+            nameInput.value = `Backup agendado - ${dataFmt}`;
+        }
+
+        const zipInput = document.getElementById('sched_zip_name');
+        if (zipInput) {
+            zipInput.value = 'backup_agendado';
+        }
+
+        // popula select de perfis
+        const profileSelect = document.getElementById('sched_profile_id');
+        if (profileSelect) {
+            profileSelect.innerHTML = '<option value="">Selecione um perfil</option>';
+            (backupProfiles || []).forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.name || `(ID ${p.id})`;
+                profileSelect.appendChild(opt);
+            });
+            profileSelect.value = "";
+        }
+
+        schedSelectedProfile = null;
+
+        // fonte padrão: itens atuais
+        if (form) {
+            const srcItems = form.querySelector('input[name="sched_source"][value="items"]');
+            if (srcItems) srcItems.checked = true;
+        }
+
+        updateSchedulerSourceUI();
+
+        // preview dos itens (modo itens atuais)
+        updateSchedulerItemsPreviewFromSelection();
+
+        const mb = document.getElementById('modal-backdrop-scheduler');
+        if (mb) mb.classList.remove('hidden');
+    }
+
+    function submitSchedulerForm() {
+        const nameEl = document.getElementById('sched_name');
+        const zipEl = document.getElementById('sched_zip_name');
+        const timeEl = document.getElementById('sched_run_time');
+        const itemsEl = document.getElementById('sched_items_json');
+
+        if (!nameEl || !zipEl || !timeEl || !itemsEl) return;
+
+        const name = nameEl.value.trim();
+        const zipName = zipEl.value.trim() || 'backup_agendado';
+        const runTime = timeEl.value || '03:00';
+
+        if (!name) {
+            alert("Informe um nome para o agendamento.");
+            return;
+        }
+
+        const form = document.getElementById('scheduler-form');
+        if (!form) return;
+
+        const freqInput = form.querySelector('input[name="sched_frequency"]:checked');
+        const frequency = freqInput ? freqInput.value : 'weekly';
+
+        const srcInput = form.querySelector('input[name="sched_source"]:checked');
+        const source = srcInput ? srcInput.value : 'items';
+
+        const payload = {
+            name: name,
+            zip_name: zipName,
+            run_time: runTime,     // "HH:MM"
+            frequency: frequency,  // 'daily' | 'weekly' | 'monthly'
+            source: source
+        };
+
+        if (source === 'profile') {
+            const profileSelect = document.getElementById('sched_profile_id');
+            const profileId = profileSelect ? profileSelect.value : '';
+            if (!profileId) {
+                alert("Selecione um Perfil de Backup para este agendamento.");
+                return;
+            }
+            payload.profile_id = profileId;
+        } else {
+            if (!itemsEl.value) {
+                alert("Selecione pelo menos um item na árvore para agendar um backup.");
+                return;
+            }
+
+            let items;
+            try {
+                items = JSON.parse(itemsEl.value);
+            } catch (e) {
+                alert("Erro ao preparar lista de itens.");
+                return;
+            }
+
+            if (!items.length) {
+                alert("Selecione pelo menos um item na árvore para agendar um backup.");
+                return;
+            }
+
+            payload.items = items;
+        }
+
+        const btn = document.getElementById('sched-submit-btn');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerText = 'Salvando...';
+        }
+
+        fetch('/scheduler/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) {
+                    if (typeof showToast === 'function') {
+                        showToast("Agendamento criado com sucesso!");
+                    } else {
+                        alert("Agendamento criado com sucesso!");
+                    }
+                    closeSchedulerModal();
+                } else {
+                    alert(data.error || "Erro ao criar agendamento.");
+                }
+            })
+            .catch(() => {
+                alert("Erro na comunicação com o servidor ao criar o agendamento.");
+            })
+            .finally(() => {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerText = 'Salvar agendamento';
+                }
+            });
+    }
+
+
+    // =========================================================
+    // VARIÁVEIS GLOBAIS
+    // =========================================================
+    let currentTaskId = null;
+    let progressTimer = null;
+    let activeTasksTimer = null;
+    let includeFiles = false;
+    let selectedItems = [];   // Array de objetos {id, name, type}
+    let selectedNodeIds = new Set(); // Set de strings "type:id" para lookup rápido
+    let favorites = [];
+    let backupProfiles = [];
+    let lastLogCount = 0;
+    let isPausedForeground = false;
+
+    // CACHE DE METADADOS EM MEMÓRIA
+    const itemCache = new Map();
+
+    // =========================================================
+    // UTILITÁRIOS
+    // =========================================================
+
+    function humanSize(bytes) {
+        if (bytes === undefined || bytes === null || isNaN(bytes)) return '—';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let i = 0;
+        let v = parseInt(bytes);
+        while (v >= 1024 && i < units.length - 1) {
+            v /= 1024;
+            i++;
+        }
+        return (i === 0 ? v.toFixed(0) : v.toFixed(1)) + ' ' + units[i];
+    }
+
+    function computeBreadcrumb(li) {
+        const parts = [];
+        let node = li;
+        while (node) {
+            const name = node.dataset.name ||
+                (node.querySelector(':scope > .tree-row .tree-name')?.textContent || '').trim();
+            if (name) parts.unshift(name);
+            node = node.parentElement.closest('.tree-node');
+        }
+        return parts.join(' / ');
+    }
+
+    function updateBreadcrumbFromNode(li) {
+        const pathSpan = document.getElementById('breadcrumb-path');
+        if (!pathSpan || !li) return;
+        const crumb = computeBreadcrumb(li);
+        pathSpan.textContent = crumb || 'Meu Drive';
+    }
+
+    // =========================================================
+    // LÓGICA DE ABAS (TABS)
+    // =========================================================
+
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.getElementById(`tab-btn-${tabName}`).classList.add('active');
+        document.getElementById(`tab-${tabName}`).classList.add('active');
+    }
+
+    // =========================================================
+    // LÓGICA DE CACHE
+    // =========================================================
+
+    function updateItemCache(items, parentId) {
+        let totalBytes = 0;
+        let hasFiles = false;
+
+        items.forEach(item => {
+            itemCache.set(item.id, item);
+            if (item.size) {
+                totalBytes += parseInt(item.size);
+                hasFiles = true;
+            }
+        });
+
+        if (parentId && itemCache.has(parentId)) {
+            const parent = itemCache.get(parentId);
+            parent.estimatedSize = totalBytes;
+            parent.hasCalculatedSize = true;
+            itemCache.set(parentId, parent);
+
+            const currentPreviewId = document.getElementById('preview-panel').dataset.currentId;
+            if (currentPreviewId === parentId) {
+                showItemPreview(parent, null);
+            }
+        }
+    }
+
+    // =========================================================
+    // PAINEL DE TAREFAS
+    // =========================================================
+    function toggleTaskPanel() {
+        const panel = document.getElementById('task-manager-panel');
+        panel.classList.toggle('show');
+        document.getElementById('log-panel').classList.add('hidden');
+    }
+
+    // =========================================================
+    // PAINEL DE LOGS
+    // =========================================================
+    function toggleLogPanel() {
+        const panel = document.getElementById('log-panel');
+        if (panel.classList.contains('hidden')) {
+            panel.classList.remove('hidden');
+            document.getElementById('task-manager-panel').classList.remove('show');
+            const badge = document.getElementById('notification-badge');
+            badge.classList.add('hidden');
+            badge.innerText = '0';
+        } else {
+            panel.classList.add('hidden');
+        }
+    }
+
+    function updateLogPanel(history) {
+        if (!history || !Array.isArray(history)) return;
+
+        const listEl = document.getElementById('log-list');
+        const badge = document.getElementById('notification-badge');
+
+        if (history.length > lastLogCount) {
+            const diff = history.length - lastLogCount;
+            if (document.getElementById('log-panel').classList.contains('hidden')) {
+                badge.innerText = diff > 99 ? '99+' : diff;
+                badge.classList.remove('hidden');
+            }
+        }
+        lastLogCount = history.length;
+
+        if (history.length === 0) {
+            listEl.innerHTML = '<li class="log-empty">Nenhuma atividade recente.</li>';
+            return;
+        }
+
+        const recent = history.slice().reverse().slice(0, 50);
+        let html = '';
+        recent.forEach(msg => {
+            let icon = '•';
+            if (msg.includes('Mapeado')) icon = '🔍';
+            else if (msg.includes('Baixado')) icon = '⬇️';
+            else if (msg.includes('Compactando')) icon = '📦';
+            else if (msg.includes('ERRO')) icon = '❌';
+            else if (msg.includes('PAUSADO')) icon = '⏸';
+            else if (msg.includes('CANCELADO')) icon = '⛔';
+            else if (msg.includes('concluído')) icon = '✅';
+
+            html += `
+                <li class="log-item">
+                    <div class="log-icon">${icon}</div>
+                    <div>${msg}</div>
+                </li>
+            `;
+        });
+        listEl.innerHTML = html;
+    }
+
+    // =========================================================
+    // SUGESTÃO DE NOME
+    // =========================================================
+    function toggleSuggestionMenu() {
+        const menu = document.getElementById('suggestion-menu');
+        if (menu) menu.classList.toggle('show');
+    }
+
+    function applySuggestion(type) {
+        const now = new Date();
+        const dateStr = now.toISOString().slice(0, 10).replace(/-/g, "");
+        let base = "backup";
+        if (selectedItems.length > 0) base = selectedItems[0].name.replace(/[^\w\s-]/gi, '_');
+
+        let finalName = "";
+        if (type === 'date') finalName = `${base}_${dateStr}`;
+        else if (type === 'clean') finalName = base;
+        else if (type === 'random') finalName = `${base}_${Math.random().toString(36).substring(7)}`;
+
+        const zipInput = document.getElementById('zip_name');
+        if (zipInput) zipInput.value = finalName;
+        const menu = document.getElementById('suggestion-menu');
+        if (menu) menu.classList.remove('show');
+    }
+
+    // =========================================================
+    // FAVORITOS
+    // =========================================================
+
+    function loadFavorites() {
+        fetch('/api/favorites')
+            .then(r => r.json())
+            .then(data => {
+                favorites = data.favorites || [];
+                renderFavorites();
+                favorites.forEach(fav => {
+                    const node = document.querySelector(`.tree-node[data-id="${fav.id}"]`);
+                    if (node) {
+                        const btn = node.querySelector('.fav-btn');
+                        if (btn) btn.classList.add('fav-on');
+                    }
+                });
+            })
+            .catch(err => {
+                console.error("Erro ao carregar favoritos:", err);
+                const list = document.getElementById('favorites-list');
+                if (list) list.textContent = 'Erro ao carregar.';
+            });
+    }
+
+    function isFavorite(id) {
+        return favorites.some(f => f.id === id);
+    }
+
+    function renderFavorites() {
+        const box = document.getElementById('favorites-list');
+        if (!box) return;
+        box.innerHTML = '';
+
+        if (!favorites.length) {
+            box.textContent = 'Nenhum favorito salvo.';
+            return;
+        }
+
+        favorites.forEach(fav => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'favorite-item';
+            btn.textContent = '⭐ ' + fav.name;
+            btn.title = fav.path || fav.name;
+            btn.addEventListener('click', () => {
+                focusNodeById(fav.id);
+            });
+            box.appendChild(btn);
+        });
+    }
+
+    function toggleFavorite(item, li, favBtn) {
+        const path = computeBreadcrumb(li);
+        if (isFavorite(item.id)) {
+            fetch('/api/favorites/' + encodeURIComponent(item.id), { method: 'DELETE' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.ok) {
+                        favorites = favorites.filter(f => f.id !== item.id);
+                        favBtn.classList.remove('fav-on');
+                        renderFavorites();
+                    } else {
+                        alert("Erro ao remover favorito.");
+                    }
+                })
+                .catch(console.error);
+        } else {
+            const payload = {
+                id: item.id,
+                name: item.name,
+                path: path,
+                type: item.type
+            };
+
+            fetch('/api/favorites', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.ok) {
+                        const exists = favorites.find(f => f.id === item.id);
+                        if (!exists) favorites.push(payload);
+                        favBtn.classList.add('fav-on');
+                        renderFavorites();
+                    } else {
+                        alert("Erro ao salvar favorito.");
+                    }
+                })
+                .catch(console.error);
+        }
+    }
+
+    // -------------------------------------------------------------
+    // NAVEGAÇÃO PROFUNDA (DEEP LINKING)
+    // -------------------------------------------------------------
+    async function focusNodeById(targetId) {
+        let node = document.querySelector(`.tree-node[data-id="${targetId}"]`);
+        if (node) {
+            revealNode(node);
+            const item = {
+                id: node.dataset.id,
+                name: node.dataset.name,
+                type: node.dataset.type
+            };
+            showItemPreview(item, node);
+            return;
+        }
+
+        const originalTitle = document.title;
+        document.title = "Localizando pasta...";
+        document.body.style.cursor = 'wait';
+
+        try {
+            const resp = await fetch(`/api/path/${targetId}`);
+            const data = await resp.json();
+
+            if (!data.path || !Array.isArray(data.path)) {
+                alert("Não foi possível localizar o caminho desta pasta.");
+                return;
+            }
+
+            const pathIds = data.path;
+
+            for (const id of pathIds) {
+                let currentNode = document.querySelector(`.tree-node[data-id="${id}"]`);
+                if (currentNode) {
+                    if (id !== targetId) {
+                        await ensureNodeExpanded(currentNode);
+                    }
+                } else {
+                    console.warn(`Nó intermediário ${id} não encontrado na árvore.`);
+                }
+            }
+
+            node = document.querySelector(`.tree-node[data-id="${targetId}"]`);
+            if (node) {
+                revealNode(node);
+                const item = {
+                    id: node.dataset.id,
+                    name: node.dataset.name,
+                    type: node.dataset.type
+                };
+                showItemPreview(item, node);
+            } else {
+                alert("Pasta não encontrada após expansão.");
+            }
+
+        } catch (err) {
+            console.error(err);
+            alert("Erro ao buscar caminho da pasta.");
+        } finally {
+            document.body.style.cursor = 'default';
+            document.title = originalTitle;
+        }
+    }
+
+    function ensureNodeExpanded(node) {
+        return new Promise((resolve) => {
+            if (!node.classList.contains('collapsed')) {
+                resolve();
+                return;
+            }
+            const toggle = node.querySelector(':scope > .tree-row .tree-toggle');
+            if (toggle) {
+                if (node.dataset.loaded === 'true') {
+                    toggle.click();
+                    resolve();
+                } else {
+                    const parentId = node.dataset.id;
+                    const childrenUl = node.querySelector(':scope > .tree-children');
+                    node.classList.remove('collapsed');
+                    childrenUl.style.display = 'block';
+                    toggle.textContent = '▾';
+                    loadChildren(parentId, childrenUl, node, toggle).then(() => {
+                        resolve();
+                    });
+                }
+            } else {
+                resolve();
+            }
+        });
+    }
+
+    function revealNode(node) {
+        let current = node.parentElement.closest('.tree-node');
+        while (current) {
+            const toggle = current.querySelector(':scope > .tree-row .tree-toggle');
+            if (toggle && current.classList.contains('collapsed')) {
+                current.classList.remove('collapsed');
+                const ul = current.querySelector(':scope > .tree-children');
+                if (ul) ul.style.display = 'block';
+                toggle.textContent = '▾';
+            }
+            current = current.parentElement.closest('.tree-node');
+        }
+
+        setTimeout(() => {
+            node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            node.classList.add('tree-node-highlight');
+            setTimeout(() => node.classList.remove('tree-node-highlight'), 2000);
+        }, 100);
+    }
+
+    // =========================================================
+    // PERFIS DE BACKUP
+    // =========================================================
+    function applyZipPattern(pattern) {
+        if (!pattern) pattern = "backup-{YYYYMMDD}";
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const yy = String(yyyy).slice(-2);
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+
+        let name = pattern;
+        name = name.replace(/\{YYYYMMDD\}/g, `${yyyy}${mm}${dd}`);
+        name = name.replace(/\{YYYYMM\}/g, `${yyyy}${mm}`);
+        name = name.replace(/\{YYYY\}/g, String(yyyy));
+        name = name.replace(/\{YY\}/g, yy);
+        name = name.replace(/\{MM\}/g, mm);
+        name = name.replace(/\{DD\}/g, dd);
+        name = name.replace(/[\\/:*?"<>|]/g, "_");
+        return name;
+    }
+
+    function loadProfiles() {
+        fetch('/api/profiles')
+            .then(resp => resp.json())
+            .then(data => {
+                backupProfiles = data.profiles || [];
+                renderProfiles();
+            })
+            .catch(err => {
+                console.error('Erro ao carregar perfis:', err);
+                const box = document.getElementById('profiles-list');
+                if (box) box.textContent = 'Erro ao carregar.';
+            });
+    }
+
+    function renderProfiles() {
+        const box = document.getElementById('profiles-list');
+        if (!box) return;
+        box.innerHTML = '';
+
+        if (!backupProfiles.length) {
+            box.textContent = 'Nenhum perfil salvo.';
+            return;
+        }
+
+        backupProfiles.forEach(profile => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'profile-item';
+
+            const title = document.createElement('div');
+            title.className = 'profile-title';
+            title.textContent = profile.name || '(sem nome)';
+
+            const subtitle = document.createElement('div');
+            subtitle.className = 'profile-subtitle';
+            const pattern = profile.zip_pattern || '';
+            const displayName = profile.zip_name
+                || (pattern ? applyZipPattern(pattern) : 'backup');
+            subtitle.textContent = `Arquivo: ${displayName}`;
+
+            if (profile.items && profile.items.length > 0) {
+                const itemsContainer = document.createElement('div');
+                itemsContainer.className = 'profile-items-preview';
+                const header = document.createElement('div');
+                header.className = 'profile-items-title';
+                header.textContent = `Itens (${profile.items.length})`;
+                itemsContainer.appendChild(header);
+
+                profile.items.forEach(it => {
+                    const row = document.createElement('div');
+                    row.className = 'profile-item-row';
+                    const icon = it.type === 'folder' ? '📁' : '📄';
+                    row.innerHTML = `<span style="font-size:10px;">${icon}</span> <span>${it.name}</span>`;
+                    itemsContainer.appendChild(row);
+                });
+                wrapper.appendChild(itemsContainer);
+            }
+
+            const actions = document.createElement('div');
+            actions.className = 'profile-actions';
+
+            const runButton = document.createElement('button');
+            runButton.className = 'btn-primary btn-xs';
+            runButton.textContent = 'Rodar';
+            runButton.addEventListener('click', () => {
+                runBackupProfile(profile.id, true);
+            });
+
+            const detailsButton = document.createElement('button');
+            detailsButton.className = 'btn-ghost btn-xs';
+            detailsButton.textContent = 'Detalhes';
+            detailsButton.addEventListener('click', () => {
+                openProfileDetails(profile.id);
+            });
+
+            const deleteButton = document.createElement('button');
+            deleteButton.className = 'btn-ghost btn-xs';
+            deleteButton.textContent = 'Excluir';
+            deleteButton.addEventListener('click', () => {
+                if (confirm(`Remover "${profile.name}"?`)) deleteProfile(profile.id);
+            });
+
+            actions.appendChild(runButton);
+            actions.appendChild(detailsButton);
+            actions.appendChild(deleteButton);
+
+            wrapper.appendChild(title);
+            wrapper.appendChild(subtitle);
+            wrapper.appendChild(actions);
+
+            box.appendChild(wrapper);
+        });
+    }
+
+    function deleteProfile(id) {
+        fetch('/api/profiles/' + encodeURIComponent(id), { method: 'DELETE' })
+            .then(resp => resp.json())
+            .then(data => {
+                if (data.ok) {
+                    backupProfiles = backupProfiles.filter(p => p.id !== id);
+                    renderProfiles();
+                } else {
+                    alert("Erro ao excluir.");
+                }
+            });
+    }
+
+    // filtros do DOWNLOAD (mantido caso queira reaproveitar)
+    function collectCurrentFiltersFromForm() {
+        const groups = [];
+        if (document.querySelector('input[name="type_pdf"]')?.checked) groups.push('pdf');
+        if (document.querySelector('input[name="type_docs"]')?.checked) groups.push('docs');
+        if (document.querySelector('input[name="type_sheets"]')?.checked) groups.push('sheets');
+        if (document.querySelector('input[name="type_images"]')?.checked) groups.push('images');
+        if (document.querySelector('input[name="type_videos"]')?.checked) groups.push('videos');
+        if (document.querySelector('input[name="type_others"]')?.checked) groups.push('others');
+
+        const createdAfter = document.querySelector('input[name="created_after"]')?.value || null;
+        const modifiedAfter = document.querySelector('input[name="modified_after"]')?.value || null;
+        const maxSizeStr = document.getElementById('max_size_mb')?.value || '';
+        const outputMode = document.getElementById('output_mode')?.value || 'archive';
+        const localPath = document.getElementById('local_mirror_path')?.value || '';
+        const archiveFormat = document.getElementById('archive_format')?.value || 'zip';
+        const compressionLevel = document.getElementById('compression_level')?.value || 'normal';
+
+        const execRadio = document.querySelector('input[name="execution_mode"]:checked');
+        const executionMode = execRadio ? execRadio.value : 'immediate';
+
+        const procRadio = document.querySelector('input[name="processing_mode"]:checked');
+        const processingMode = procRadio ? procRadio.value : 'sequential';
+
+        let maxSizeMb = null;
+        if (maxSizeStr) {
+            const parsed = parseInt(maxSizeStr, 10);
+            if (!Number.isNaN(parsed)) maxSizeMb = parsed;
+        }
+
+        return {
+            groups,
+            created_after: createdAfter,
+            modified_after: modifiedAfter,
+            max_size_mb: maxSizeMb,
+            output_mode: outputMode,
+            local_mirror_path: localPath,
+            archive_format: archiveFormat,
+            compression_level: compressionLevel,
+            execution_mode: executionMode,
+            processing_mode: processingMode,
+        };
+    }
+
+    // filtros do PERFIL (usado ao SALVAR MODELO)
+    function collectProfileFiltersFromForm() {
+        const groups = [];
+        if (document.querySelector('input[name="prof_type_pdf"]')?.checked) groups.push('pdf');
+        if (document.querySelector('input[name="prof_type_docs"]')?.checked) groups.push('docs');
+        if (document.querySelector('input[name="prof_type_sheets"]')?.checked) groups.push('sheets');
+        if (document.querySelector('input[name="prof_type_images"]')?.checked) groups.push('images');
+        if (document.querySelector('input[name="prof_type_videos"]')?.checked) groups.push('videos');
+        if (document.querySelector('input[name="prof_type_others"]')?.checked) groups.push('others');
+
+        const createdAfter = document.getElementById('prof_created_after')?.value || null;
+        const modifiedAfter = document.getElementById('prof_modified_after')?.value || null;
+        const maxSizeStr = document.getElementById('prof_max_size_mb')?.value || '';
+
+        const outputMode = document.getElementById('prof_output_mode')?.value || 'archive';
+        const localPath = document.getElementById('prof_local_mirror_path')?.value || '';
+        const archiveFormat = document.getElementById('prof_archive_format')?.value || 'zip';
+        const compressionLevel = document.getElementById('prof_compression_level')?.value || 'normal';
+
+        const execRadio = document.querySelector('input[name="prof_execution_mode"]:checked');
+        const executionMode = execRadio ? execRadio.value : 'immediate';
+
+        const procRadio = document.querySelector('input[name="prof_processing_mode"]:checked');
+        const processingMode = procRadio ? procRadio.value : 'sequential';
+
+        let maxSizeMb = null;
+        if (maxSizeStr) {
+            const parsed = parseInt(maxSizeStr, 10);
+            if (!Number.isNaN(parsed)) maxSizeMb = parsed;
+        }
+
+        return {
+            groups,
+            created_after: createdAfter,
+            modified_after: modifiedAfter,
+            max_size_mb: maxSizeMb,
+            output_mode: outputMode,
+            local_mirror_path: localPath,
+            archive_format: archiveFormat,
+            compression_level: compressionLevel,
+            execution_mode: executionMode,
+            processing_mode: processingMode,
+        };
+    }
+
+    function saveCurrentAsProfile() {
+        const feedbackEl = document.getElementById('profile-save-feedback');
+        if (feedbackEl) {
+            feedbackEl.textContent = '';
+            feedbackEl.className = 'form-hint';
+        }
+
+        if (!selectedItems.length) {
+            if (feedbackEl) {
+                feedbackEl.textContent = 'Selecione pelo menos um item na árvore para salvar como modelo.';
+                feedbackEl.className = 'form-error';
+            }
+            return;
+        }
+
+        const nameInput = document.getElementById('prof_name');
+        const name = (nameInput?.value || '').trim();
+        if (!name) {
+            if (feedbackEl) {
+                feedbackEl.textContent = 'Informe um nome para o modelo.';
+                feedbackEl.className = 'form-error';
+            }
+            if (nameInput) nameInput.focus();
+            return;
+        }
+
+        const patInput = document.getElementById('prof_zip_pattern');
+        let zipPattern = (patInput?.value || '').trim();
+        if (!zipPattern) {
+            zipPattern = 'backup-{YYYYMMDD}';
+            if (patInput) patInput.value = zipPattern;
+        }
+
+        const filters = collectProfileFiltersFromForm();
+        const payload = {
+            name: name,
+            zip_name: applyZipPattern(zipPattern),
+            zip_pattern: zipPattern,
+            items: selectedItems,
+            ...filters
+        };
+
+        fetch('/api/profiles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) {
+                    loadProfiles();
+                    if (feedbackEl) {
+                        feedbackEl.textContent = 'Modelo salvo com sucesso.';
+                        feedbackEl.className = 'form-success';
+                    }
+                } else {
+                    if (feedbackEl) {
+                        feedbackEl.textContent = 'Erro ao salvar: ' + (data.error || 'Desconhecido');
+                        feedbackEl.className = 'form-error';
+                    }
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                if (feedbackEl) {
+                    feedbackEl.textContent = 'Erro de conexão ao salvar modelo.';
+                    feedbackEl.className = 'form-error';
+                }
+            });
+    }
+
+    function applyFiltersToFormFromProfile(profile) {
+        const allTypes = ['pdf', 'docs', 'sheets', 'images', 'videos', 'others'];
+        const groups = profile.groups || [];
+        allTypes.forEach(g => {
+            const el = document.querySelector(`input[name="type_${g}"]`);
+            if (el) el.checked = !groups.length || groups.includes(g);
+        });
+
+        if (profile.created_after) {
+            const el = document.querySelector('input[name="created_after"]');
+            if (el) el.value = profile.created_after;
+        }
+
+        if (profile.modified_after) {
+            const el = document.querySelector('input[name="modified_after"]');
+            if (el) el.value = profile.modified_after;
+        }
+
+        if (profile.max_size_mb) {
+            const el = document.getElementById('max_size_mb');
+            if (el) el.value = profile.max_size_mb;
+        }
+
+        if (profile.output_mode) {
+            const el = document.getElementById('output_mode');
+            if (el) el.value = profile.output_mode;
+        }
+
+        if (profile.local_mirror_path) {
+            const el = document.getElementById('local_mirror_path');
+            if (el) el.value = profile.local_mirror_path;
+        }
+
+        if (profile.archive_format) {
+            const el = document.getElementById('archive_format');
+            if (el) el.value = profile.archive_format;
+        }
+
+        if (profile.compression_level) {
+            const el = document.getElementById('compression_level');
+            if (el) el.value = profile.compression_level;
+        }
+
+        const procMode = profile.processing_mode || 'sequential';
+        const procRadio = document.querySelector(`input[name="processing_mode"][value="${procMode}"]`);
+        if (procRadio) procRadio.checked = true;
+
+        const execMode = profile.execution_mode || 'immediate';
+        const execRadio = document.querySelector(`input[name="execution_mode"][value="${execMode}"]`);
+        if (execRadio) execRadio.checked = true;
+
+        updateOutputModeUI();
+    }
+
+    function applyFiltersToProfileForm(profile) {
+        const allTypes = ['pdf', 'docs', 'sheets', 'images', 'videos', 'others'];
+        const groups = profile.groups || [];
+        allTypes.forEach(g => {
+            const el = document.querySelector(`input[name="prof_type_${g}"]`);
+            if (el) el.checked = !groups.length || groups.includes(g);
+        });
+
+        if (profile.created_after) {
+            const el = document.getElementById('prof_created_after');
+            if (el) el.value = profile.created_after;
+        }
+
+        if (profile.modified_after) {
+            const el = document.getElementById('prof_modified_after');
+            if (el) el.value = profile.modified_after;
+        }
+
+        if (profile.max_size_mb) {
+            const el = document.getElementById('prof_max_size_mb');
+            if (el) el.value = profile.max_size_mb;
+        }
+
+        if (profile.output_mode) {
+            const el = document.getElementById('prof_output_mode');
+            if (el) el.value = profile.output_mode;
+        }
+
+        if (profile.local_mirror_path) {
+            const el = document.getElementById('prof_local_mirror_path');
+            if (el) el.value = profile.local_mirror_path;
+        }
+
+        if (profile.archive_format) {
+            const el = document.getElementById('prof_archive_format');
+            if (el) el.value = profile.archive_format;
+        }
+
+        if (profile.compression_level) {
+            const el = document.getElementById('prof_compression_level');
+            if (el) el.value = profile.compression_level;
+        }
+
+        const procMode = profile.processing_mode || 'sequential';
+        const procRadio = document.querySelector(`input[name="prof_processing_mode"][value="${procMode}"]`);
+        if (procRadio) procRadio.checked = true;
+
+        const execMode = profile.execution_mode || 'immediate';
+        const execRadio = document.querySelector(`input[name="prof_execution_mode"][value="${execMode}"]`);
+        if (execRadio) execRadio.checked = true;
+
+        updateProfileOutputUI();
+    }
+
+    function runBackupProfile(profileId, autoRun) {
+        const profile = backupProfiles.find(p => p.id === profileId);
+        if (!profile) return;
+
+        selectedItems = profile.items || [];
+        selectedNodeIds = new Set();
+        selectedItems.forEach(it => selectedNodeIds.add(`${it.type}:${it.id}`));
+        updateSelectionInfo();
+
+        const itemsField = document.getElementById('items_json');
+        if (itemsField) itemsField.value = JSON.stringify(selectedItems);
+
+        const pat = profile.zip_pattern || 'backup-{YYYYMMDD}';
+        const zipInput = document.getElementById('zip_name');
+        if (zipInput) zipInput.value = profile.zip_name || applyZipPattern(pat);
+
+        applyFiltersToFormFromProfile(profile);
+
+        if (autoRun) {
+            startDownloadProcess();
+        } else {
+            openDownloadModal();
+        }
+    }
+
+    function openProfileDetails(profileId) {
+        const profile = backupProfiles.find(p => p.id === profileId);
+        if (!profile) return;
+
+        selectedItems = profile.items || [];
+        selectedNodeIds = new Set();
+        selectedItems.forEach(it => selectedNodeIds.add(`${it.type}:${it.id}`));
+        updateSelectionInfo();
+
+        const feedbackEl = document.getElementById('profile-save-feedback');
+        if (feedbackEl) {
+            feedbackEl.textContent = '';
+            feedbackEl.className = 'form-hint';
+        }
+
+        const nameInput = document.getElementById('prof_name');
+        if (nameInput) nameInput.value = profile.name || '';
+
+        const patInput = document.getElementById('prof_zip_pattern');
+        if (patInput) patInput.value = profile.zip_pattern || 'backup-{YYYYMMDD}';
+
+        applyFiltersToProfileForm(profile);
+
+        const titleEl = document.getElementById('modal-prof-title');
+        const subEl = document.getElementById('modal-prof-subtitle');
+        if (titleEl) titleEl.innerText = `Modelo: ${profile.name || ''}`;
+        if (subEl) subEl.innerText = `${selectedItems.length} item(ns) configurado(s) neste modelo.`;
+
+        const mb = document.getElementById('modal-backdrop-profile');
+        if (mb) mb.classList.remove('hidden');
+    }
+
+    // =========================================================
+    // UI & DOWNLOAD (MODAL + AJAX)
+    // =========================================================
+
+    function updateOutputModeUI() {
+        const modeEl = document.getElementById('output_mode');
+        const mode = modeEl ? modeEl.value : 'archive';
+        const archiveFields = document.querySelectorAll('.archive-only');
+        const mirrorFields = document.querySelectorAll('.mirror-only');
+        archiveFields.forEach(el => el.style.display = mode === 'archive' ? 'block' : 'none');
+        mirrorFields.forEach(el => el.style.display = mode === 'mirror' ? 'block' : 'none');
+    }
+
+    function updateProfileOutputUI() {
+        const modeEl = document.getElementById('prof_output_mode');
+        const mode = modeEl ? modeEl.value : 'archive';
+        const archiveFields = document.querySelectorAll('.prof-archive-only');
+        const mirrorFields = document.querySelectorAll('.prof-mirror-only');
+        archiveFields.forEach(el => el.style.display = mode === 'archive' ? 'block' : 'none');
+        mirrorFields.forEach(el => el.style.display = mode === 'mirror' ? 'block' : 'none');
+    }
+
+    function openDownloadModal() {
+        if (!selectedItems.length) {
+            alert("Selecione pelo menos um item na árvore para baixar.");
+            return;
+        }
+
+        const form = document.getElementById('download-form');
+        if (form) form.reset();
+
+        const itemsField = document.getElementById('items_json');
+        if (itemsField) itemsField.value = JSON.stringify(selectedItems);
+
+        const titleEl = document.getElementById('modal-dl-title');
+        const subEl = document.getElementById('modal-dl-subtitle');
+        if (titleEl) titleEl.innerText = "Baixar Itens";
+        if (subEl) subEl.innerText = `${selectedItems.length} item(ns) selecionado(s).`;
+
+        applySuggestion('date');
+        updateOutputModeUI();
+
+        const mb = document.getElementById('modal-backdrop-download');
+        if (mb) mb.classList.remove('hidden');
+    }
+
+    function openProfileModal() {
+        const feedbackEl = document.getElementById('profile-save-feedback');
+        if (feedbackEl) {
+            feedbackEl.textContent = '';
+            feedbackEl.className = 'form-hint';
+        }
+
+        if (!selectedItems.length) {
+            if (feedbackEl) {
+                feedbackEl.textContent = 'Selecione pelo menos um item na árvore antes de criar um modelo.';
+                feedbackEl.className = 'form-error';
+            } else {
+                alert("Selecione pelo menos um item na árvore antes de criar um modelo.");
+            }
+            return;
+        }
+
+        const form = document.getElementById('profile-form');
+        if (form) form.reset();
+
+        const titleEl = document.getElementById('modal-prof-title');
+        const subEl = document.getElementById('modal-prof-subtitle');
+        if (titleEl) titleEl.innerText = "Criar Modelo de Backup";
+        if (subEl) subEl.innerText = `${selectedItems.length} item(ns) serão incluídos neste modelo.`;
+
+        const patInput = document.getElementById('prof_zip_pattern');
+        if (patInput && !patInput.value) patInput.value = 'backup-{YYYYMMDD}';
+
+        updateProfileOutputUI();
+
+        const mb = document.getElementById('modal-backdrop-profile');
+        if (mb) mb.classList.remove('hidden');
+    }
+
+    const mbChoice = document.getElementById('modal-backdrop-type-choice');
+    if (mbChoice) {
+        mbChoice.addEventListener('click', (e) => { if (e.target === mbChoice) closeModal('type_choice'); });
+    }
+    const mbSummary = document.getElementById('modal-backdrop-summary');
+    if (mbSummary) {
+        mbSummary.addEventListener('click', (e) => { if (e.target === mbSummary) closeModal('summary'); });
+    }
+
+    function startDownloadProcess() {
+        const form = document.getElementById('download-form');
+        if (!form) return;
+
+        const formData = new FormData(form);
+        const payload = Object.fromEntries(formData.entries());
+
+        // Checkboxes manuais
+        ['type_pdf', 'type_docs', 'type_sheets', 'type_images', 'type_videos', 'type_others'].forEach(k => {
+            const el = form.querySelector(`input[name="${k}"]`);
+            if (el && el.checked) payload[k] = "1";
+            else delete payload[k];
+        });
+
+        // Adiciona itens se não vieram do form hidden
+        if (!payload.items_json && selectedItems.length > 0) {
+            payload.items_json = JSON.stringify(selectedItems);
+        }
+
+        // Salva na variável global correta
+        pendingDownloadPayload = payload;
+        closeModal('download');
+
+        // Se for espelho local, vai direto (sem incremental)
+        if (payload.output_mode === 'mirror') {
+            openSummaryModal();
+            return;
+        }
+
+        // --- VERIFICAÇÃO DE SÉRIE ---
+        let items = [];
+        try { items = JSON.parse(payload.items_json); } catch (e) { }
+
+        fetch('/api/backup/check-series', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                items: items,
+                zip_name: payload.zip_name
+            })
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok && data.exists) {
+                    // SÉRIE EXISTE: Pergunta ao usuário
+                    showTypeChoiceModal(data);
+                } else {
+                    // NÃO EXISTE: Segue como Full
+                    pendingDownloadPayload.backup_type = 'full';
+                    openSummaryModal();
+                }
+            })
+            .catch(err => {
+                console.error("Erro check-series:", err);
+                // Fallback: abre resumo direto
+                openSummaryModal();
+            });
+    }
+
+    function showTypeChoiceModal(data) {
+        const keyEl = document.getElementById('choice-series-key');
+        if (keyEl) keyEl.innerText = data.series_key.split(':')[0];
+
+        let dateStr = 'Desconhecida';
+        if (data.last_date) {
+            try { dateStr = new Date(data.last_date).toLocaleString(); } catch (e) { }
+        }
+        const dateEl = document.getElementById('choice-last-date');
+        if (dateEl) dateEl.innerText = dateStr;
+
+        const mb = document.getElementById('modal-backdrop-type-choice');
+        if (mb) mb.classList.remove('hidden');
+    }
+
+    function confirmBackupType() {
+        const typeEl = document.querySelector('input[name="backup_choice_type"]:checked');
+        const type = typeEl ? typeEl.value : 'full';
+
+        if (pendingDownloadPayload) {
+            pendingDownloadPayload.backup_type = type;
+        }
+        closeModal('type_choice');
+        openSummaryModal();
+    }
+
+    function openSummaryModal() {
+        const mb = document.getElementById('modal-backdrop-summary');
+        mb.classList.remove('hidden');
+
+        document.getElementById('summary-loading').classList.remove('hidden');
+        document.getElementById('summary-content').classList.add('hidden');
+        document.getElementById('btn-confirm-download').disabled = true;
+
+        fetch('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: selectedItems })
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) {
+                    fillSummaryData(data.stats);
+                } else {
+                    showToast('Erro ao calcular: ' + data.error, 'error');
+                    closeModal('summary');
+                }
+            })
+            .catch(err => {
+                showToast('Erro de conexão.', 'error');
+                closeModal('summary');
+            });
+    }
+
+    function fillSummaryData(stats) {
+        document.getElementById('summary-loading').classList.add('hidden');
+        document.getElementById('summary-content').classList.remove('hidden');
+        document.getElementById('btn-confirm-download').disabled = false;
+
+        const suffix = stats.is_partial ? "+" : "";
+        document.getElementById('sum-files').innerText = stats.files_count + suffix;
+        document.getElementById('sum-folders').innerText = stats.folders_count + suffix;
+
+        const sizeEl = document.getElementById('sum-size');
+        sizeEl.innerText = (stats.size_formatted || "0 B") + suffix;
+        sizeEl.style.color = stats.is_partial ? "#f39c12" : "#2ecc71";
+
+        const listEl = document.getElementById('sum-preview-list');
+        listEl.innerHTML = '';
+        if (stats.preview_files && stats.preview_files.length > 0) {
+            stats.preview_files.forEach(name => {
+                const div = document.createElement('div');
+                div.className = 'file-preview-item';
+                div.innerText = '📄 ' + name;
+                listEl.appendChild(div);
+            });
+        }
+    }
+
+    function confirmAndDownload() {
+        if (!pendingDownloadPayload) return;
+
+        closeModal('summary');
+        const executionMode = pendingDownloadPayload.execution_mode || 'immediate';
+
+        if (executionMode === 'background') {
+            showToast("Tarefa em segundo plano! 🚀", 'success');
+        } else {
+            showProgressUI();
+            showToast("Iniciando...", 'info');
+        }
+
+        fetch('/download', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(pendingDownloadPayload)
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) {
+                    if (executionMode === 'immediate') {
+                        currentTaskId = data.task_id;
+                        startPollingForeground();
+                    } else {
+                        pollActiveTasks();
+                    }
+                } else {
+                    showToast("Erro: " + data.error, 'error');
+                    hideProgressUI();
+                }
+            })
+            .catch(err => {
+                showToast("Erro de conexão.", 'error');
+                hideProgressUI();
+            });
+    }
+
+    function closeModal(which) {
+        if (which === 'download') {
+            document.getElementById('modal-backdrop-download').classList.add('hidden');
+            document.getElementById('suggestion-menu')?.classList.remove('show');
+        } else if (which === 'profile') {
+            document.getElementById('modal-backdrop-profile').classList.add('hidden');
+        } else if (which === 'scheduler') {
+            document.getElementById('modal-backdrop-scheduler').classList.add('hidden');
+        } else if (which === 'summary') {
+            document.getElementById('modal-backdrop-summary').classList.add('hidden');
+        } else if (which === 'type_choice') {
+            document.getElementById('modal-backdrop-type-choice').classList.add('hidden');
+        }
+    }
+
+    // --- PROGRESSO FOREGROUND ---
+    function showProgressUI() {
+        const c = document.getElementById('progress-container');
+        c.classList.remove('hidden');
+        document.getElementById('progress-bar').style.width = '0%';
+        document.getElementById('progress-bar').classList.remove('error');
+        document.getElementById('progress-percent').innerText = '0%';
+        document.getElementById('progress-phase').innerText = 'INICIANDO';
+        document.getElementById('progress-text').innerText = 'Conectando...';
+        document.getElementById('btn-pause-fg').innerText = "⏸ Pausar";
+        isPausedForeground = false;
+        lastLogCount = 0;
+        document.getElementById('log-list').innerHTML = '<li class="log-empty">Iniciando...</li>';
+    }
+
+    function hideProgressUI() {
+        document.getElementById('progress-container').classList.add('hidden');
+    }
+
+    function startPollingForeground() {
+        if (progressTimer) clearInterval(progressTimer);
+        progressTimer = setInterval(() => {
+            if (!currentTaskId) return;
+            fetch('/progress/' + currentTaskId)
+                .then(r => r.json())
+                .then(data => {
+                    updateProgressBar(data);
+                    if (data.history) updateLogPanel(data.history);
+
+                    if (data.phase === 'concluido') {
+                        clearInterval(progressTimer);
+                        document.getElementById('progress-phase').innerText = "CONCLUÍDO";
+                        if (data.download_url) {
+                            document.getElementById('progress-text').innerText = "Baixando arquivo...";
+                            window.location.href = data.download_url;
+                            setTimeout(hideProgressUI, 3000);
+                        } else {
+                            document.getElementById('progress-text').innerText = "Finalizado.";
+                        }
+                    } else if (data.phase === 'erro' || data.phase === 'cancelado') {
+                        clearInterval(progressTimer);
+                        document.getElementById('progress-bar').classList.add('error');
+                        document.getElementById('progress-text').innerText = data.message;
+                    }
+                })
+                .catch(console.error);
+        }, 1000);
+    }
+
+    function updateProgressBar(data) {
+        let percent = 0;
+        const phase = data.phase || 'processando';
+        if (phase === 'mapeando') {
+            const f = data.files_found || 0;
+            percent = Math.min(20, f * 0.1);
+        } else if (phase === 'baixando') {
+            if (data.files_total > 0) {
+                percent = 20 + ((data.files_downloaded / data.files_total) * 70);
+            } else {
+                percent = 30;
+            }
+        } else if (phase === 'compactando') {
+            percent = 90;
+        } else if (phase === 'concluido') {
+            percent = 100;
+        }
+        document.getElementById('progress-bar').style.width = percent + '%';
+        document.getElementById('progress-percent').innerText = Math.round(percent) + '%';
+        document.getElementById('progress-phase').innerText = phase.toUpperCase();
+        if (phase !== 'concluido') {
+            document.getElementById('progress-text').innerText = data.message || '';
+        }
+    }
+
+    function togglePauseForeground() {
+        if (!currentTaskId) return;
+        const url = isPausedForeground ? `/api/tasks/resume/${currentTaskId}` : `/api/tasks/pause/${currentTaskId}`;
+        fetch(url, { method: 'POST' }).then(r => r.json()).then(d => {
+            if (d.ok) {
+                isPausedForeground = !isPausedForeground;
+                document.getElementById('btn-pause-fg').innerText = isPausedForeground ? "▶ Continuar" : "⏸ Pausar";
+            }
+        });
+    }
+
+    function cancelTask() {
+        if (!currentTaskId) return;
+        if (!confirm("Cancelar tarefa?")) return;
+        fetch('/cancel/' + currentTaskId, { method: 'POST' })
+            .then(r => r.json())
+            .then(() => {
+                document.getElementById('progress-text').innerText = "Cancelando...";
+            });
+    }
+
+    // =========================================================
+    // GERENCIADOR DE TAREFAS (BACKGROUND/GLOBAL)
+    // =========================================================
+    function startActiveTasksPoller() {
+        if (activeTasksTimer) clearInterval(activeTasksTimer);
+        activeTasksTimer = setInterval(pollActiveTasks, 500);
+        pollActiveTasks();
+    }
+
+    function pollActiveTasks() {
+        fetch('/api/tasks/active').then(r => r.json()).then(data => {
+            const tasks = data.tasks || [];
+            const list = document.getElementById('task-manager-list');
+            const badge = document.getElementById('task-badge');
+
+            if (tasks.length > 0) {
+                badge.innerText = tasks.length;
+                badge.classList.remove('hidden');
+            } else {
+                badge.innerText = '0';
+                badge.classList.add('hidden');
+            }
+
+            if (!currentTaskId && tasks.length > 0) {
+                const activeId = tasks[0].id;
+                fetch('/progress/' + activeId)
+                    .then(r => r.json())
+                    .then(d => {
+                        if (d.history) updateLogPanel(d.history);
+                    })
+                    .catch(console.error);
+            }
+
+            if (tasks.length === 0) {
+                list.innerHTML = '<div class="task-empty-state">Nenhuma tarefa ativa no momento.</div>';
+                return;
+            }
+
+            list.innerHTML = tasks.map(t => {
+                let phaseDisplay = t.phase.toUpperCase();
+                let isMapping = false;
+
+                if (t.phase === 'mapeando') {
+                    isMapping = true;
+                    if (t.files_found && t.files_found > 0) {
+                        phaseDisplay = `MAPEANDO (${t.files_found})`;
+                    }
+                }
+
+                let progressClass = '';
+                if (isMapping) progressClass = 'mapping';
+                else if (t.paused) progressClass = 'paused';
+
+                return `
+                <div class="task-item">
+                    <div class="task-info">
+                        <span>${phaseDisplay}</span>
+                        <span style="font-weight:normal; font-size:11px; color:#999;">${t.id.split('-').pop()}</span>
+                    </div>
+                    <div class="task-meta">${t.message}</div>
+                    <div class="task-progress-bg">
+                        <div class="task-progress-fill ${progressClass}" style="width: ${t.percent}%"></div>
+                    </div>
+                    <div class="task-controls">
+                        ${!t.paused ?
+                        `<button class="btn-mini pause" onclick="apiTaskAction('${t.id}', 'pause')">PAUSAR</button>` :
+                        `<button class="btn-mini resume" onclick="apiTaskAction('${t.id}', 'resume')">RESUMIR</button>`
+                    }
+                        <button class="btn-mini cancel" onclick="apiTaskAction('${t.id}', 'cancel')">CANCELAR</button>
+                    </div>
+                </div>
+            `}).join('');
+        });
+    }
+
+    window.apiTaskAction = function (tid, action) {
+        let url = '';
+        if (action === 'pause') url = `/api/tasks/pause/${tid}`;
+        if (action === 'resume') url = `/api/tasks/resume/${tid}`;
+        if (action === 'cancel') url = `/cancel/${tid}`;
+
+        fetch(url, { method: 'POST' })
+            .then(r => r.json())
+            .then(d => {
+                pollActiveTasks();
+            });
+    }
+
+    // =========================================================
+    // TREE VIEW (ÁRVORE DE PASTAS)
+    // =========================================================
+
+    function createFolderNode(folder) {
+        const li = document.createElement('li');
+        li.className = 'tree-node collapsed';
+        li.dataset.id = folder.id;
+        li.dataset.name = folder.name;
+        li.dataset.type = 'folder';
+        li.draggable = true;
+
+        const row = document.createElement('div');
+        row.className = 'tree-row';
+
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'tree-toggle';
+        toggleBtn.textContent = '▸';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'select-checkbox';
+
+        const favBtn = document.createElement('button');
+        favBtn.className = 'fav-btn';
+        favBtn.textContent = '☆';
+
+        const icon = document.createElement('span');
+        icon.className = 'tree-folder-icon';
+        icon.textContent = '📁';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'tree-name';
+        nameSpan.textContent = folder.name;
+
+        // botão ⋮
+        const actionBtn = document.createElement("span");
+        actionBtn.className = "tree-action-btn";
+        actionBtn.textContent = "⋮";
+        actionBtn.onclick = (ev) => {
+            ev.stopPropagation();
+            ctxTarget = li;
+            openContextMenu(ev.pageX, ev.pageY);
+        };
+
+        row.append(toggleBtn, checkbox, favBtn, icon, nameSpan, actionBtn);
+        li.append(row);
+
+        const childrenUl = document.createElement('ul');
+        childrenUl.className = 'tree-children';
+        childrenUl.style.display = 'none';
+        li.appendChild(childrenUl);
+
+        const item = { id: folder.id, name: folder.name, type: 'folder' };
+        if (isFavorite(item.id)) favBtn.classList.add('fav-on');
+
+        favBtn.onclick = (e) => {
+            e.stopPropagation();
+            toggleFavorite(item, li, favBtn);
+        };
+
+        checkbox.onchange = (e) => {
+            e.stopPropagation();
+            handleCheckboxChange(checkbox, li, item);
+            propagateSelectionDown(li, checkbox.checked);
+        };
+
+        row.onclick = (e) => {
+            if ([toggleBtn, checkbox, favBtn, actionBtn].includes(e.target)) return;
+            showItemPreview(item, li);
+        };
+
+        toggleBtn.onclick = async (e) => {
+            e.stopPropagation();
+            const isCollapsed = li.classList.contains('collapsed');
+            if (isCollapsed && !li.dataset.loaded) {
+                await loadChildren(folder.id, childrenUl, li, toggleBtn);
+            }
+            setCollapsedState(li, !isCollapsed);
+            toggleBtn.textContent = li.classList.contains('collapsed') ? '▸' : '▾';
+        };
+
+        return li;
+    }
+
+    function openContextMenu(x, y) {
+        ctxMenu.style.top = y + "px";
+        ctxMenu.style.left = x + "px";
+        ctxMenu.style.display = "block";
+    }
+
+    function deleteNodeRecursively(nodeElement) {
+        if (!nodeElement) return;
+
+        // 1. Remover seleção deste nó
+        const id = nodeElement.dataset.id;
+        const type = nodeElement.dataset.type;
+        const key = `${type}:${id}`;
+
+        selectedNodeIds.delete(key);
+        selectedItems = selectedItems.filter(x => !(x.id === id && x.type === type));
+
+        // 2. Remover seleção dos filhos (se for pasta)
+        const descendants = nodeElement.querySelectorAll('.tree-node');
+        descendants.forEach(child => {
+            const cid = child.dataset.id;
+            const ctype = child.dataset.type;
+            const ckey = `${ctype}:${cid}`;
+
+            selectedNodeIds.delete(ckey);
+            selectedItems = selectedItems.filter(x => !(x.id === cid && x.type === ctype));
+        });
+
+        // 3. Remover do DOM
+        nodeElement.remove();
+
+        // 4. Atualiza contador de seleção
+        updateSelectionInfo();
+    }
+
+
+    async function deleteSelectedItems() {
+        if (!selectedItems || selectedItems.length === 0) {
+            showToast("Nenhum item selecionado.", "warning");
+            return;
+        }
+
+        const total = selectedItems.length;
+
+        if (!confirm(`Excluir ${total} item(ns)? Isso não poderá ser desfeito.`))
+            return;
+
+        // PREPARAÇÃO
+        deleteCancelFlag = false;
+        deleteCurrentRate = 4;
+        deleteStableCycles = 0;
+
+        const items = [...selectedItems];
+        let index = 0;
+        let errors = 0;
+
+        // EXIBIR UI
+        const ui = document.getElementById("delete-progress");
+        const bar = document.getElementById("delete-bar");
+        const status = document.getElementById("delete-status");
+        ui.classList.remove("hidden");
+
+        document.getElementById("delete-cancel-btn").onclick = () => {
+            deleteCancelFlag = true;
+            status.textContent = "Cancelando operação...";
+        };
+
+        // LOOP PRINCIPAL (RATE-LIMIT DINÂMICO)
+        while (index < items.length && !deleteCancelFlag) {
+
+            const CHUNK_SIZE = deleteCurrentRate;         // 4 ou 2 dependendo
+            const INTERVAL_MS = 1000;                     // 1 segundo entre blocos
+            const block = items.slice(index, index + CHUNK_SIZE);
+
+            status.textContent = `Excluindo ${index + 1} até ${index + block.length} de ${total}...`;
+
+            // PROCESSAR BLOCO EM PARALELO
+            const results = await Promise.all(block.map(item =>
+                fetch("/api/file/trash", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id: item.id })
+                })
+                    .then(r => r.json())
+                    .catch(err => ({ ok: false, err }))
+            ));
+
+            let hadRateLimit = false;
+
+            // TRATAR RESULTADOS
+            results.forEach((res, i) => {
+                const item = block[i];
+                if (res.ok) {
+                    const node = document.querySelector(`.tree-node[data-id="${item.id}"]`);
+                    if (node) deleteNodeRecursively(node);
+
+                    selectedNodeIds.delete(`${item.type}:${item.id}`);
+                    selectedItems = selectedItems.filter(x => x.id !== item.id);
+                } else {
+                    errors++;
+
+                    // SE DRIVE RETORNAR RATE LIMIT
+                    if (String(res.error || "").includes("Rate Limit") ||
+                        String(res.error || "").includes("403") ||
+                        String(res.error || "").includes("429")) {
+                        hadRateLimit = true;
+                    }
+                }
+            });
+
+            // FEEDBACK DE PROGRESSO
+            const percent = Math.round(((index + block.length) / total) * 100);
+            bar.style.width = percent + "%";
+
+            // ADAPTAR VELOCIDADE
+            if (hadRateLimit) {
+                deleteCurrentRate = 2;   // reduz
+                deleteStableCycles = 0;
+                status.textContent = "Google Drive limitou → reduzindo velocidade para 2/s.";
+            } else {
+                deleteStableCycles++;
+                if (deleteCurrentRate === 2 && deleteStableCycles >= 5) {
+                    deleteCurrentRate = 4;  // volta ao normal
+                    status.textContent = "Estável → aumentando velocidade para 4/s.";
+                }
+            }
+
+            index += block.length;
+
+            // ESPERAR
+            if (index < items.length && !deleteCancelFlag) {
+                await new Promise(r => setTimeout(r, INTERVAL_MS));
+            }
+        }
+
+        // FINALIZAÇÃO
+        ui.classList.add("hidden");
+
+        if (deleteCancelFlag) {
+            showToast("Exclusão cancelada pelo usuário.", "warning");
+            return;
+        }
+
+        updateSelectionInfo();
+
+        if (errors === 0) {
+            showToast("Todos os itens foram excluídos com sucesso.", "success");
+        } else {
+            showToast(`${errors} item(ns) falharam ao excluir.`, "error");
+        }
+    }
+
+    /* =====================================================
+       ARQUIVOS
+    ===================================================== */
+    function createFileNode(file) {
+        const li = document.createElement('li');
+        li.className = 'tree-node file-node';
+        li.dataset.id = file.id;
+        li.dataset.name = file.name;
+        li.dataset.type = 'file';
+        li.draggable = true;
+
+        const row = document.createElement('div');
+        row.className = 'tree-row';
+
+        const spacer = document.createElement('span');
+        spacer.className = 'tree-spacer';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'select-checkbox';
+
+        const icon = document.createElement('span');
+        icon.className = 'tree-folder-icon';
+        icon.textContent = '📄';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'tree-name';
+        nameSpan.textContent = file.name;
+
+        const actionBtn = document.createElement("span");
+        actionBtn.className = "tree-action-btn";
+        actionBtn.textContent = "⋮";
+        actionBtn.onclick = (ev) => {
+            ev.stopPropagation();
+            ctxTarget = li;
+            openContextMenu(ev.pageX, ev.pageY);
+        };
+
+        row.append(spacer, checkbox, icon, nameSpan, actionBtn);
+        li.append(row);
+
+        const item = { id: file.id, name: file.name, type: 'file' };
+
+        checkbox.onchange = (e) => {
+            e.stopPropagation();
+            handleCheckboxChange(checkbox, li, item);
+            propagateSelectionUp(li);
+        };
+
+        row.onclick = (e) => {
+            if ([checkbox, actionBtn].includes(e.target)) return;
+            showItemPreview(item, li);
+        };
+
+        return li;
+    }
+
+
+
+    function loadChildren(parentId, containerUl, li, toggleBtn) {
+        const filesParam = includeFiles ? '1' : '0';
+        const url = parentId === 'root'
+            ? `/api/folders/root?files=${filesParam}`
+            : `/api/folders/children/${encodeURIComponent(parentId)}?files=${filesParam}`;
+
+        containerUl.innerHTML = '<li class="tree-node"><div class="tree-row"><span>Carregando...</span></div></li>';
+
+        return fetch(url)
+            .then(r => r.json())
+            .then(data => {
+                containerUl.innerHTML = '';
+                const items = data.items || [];
+
+                updateItemCache(items, parentId);
+
+                if (!items.length) {
+                    toggleBtn.textContent = '';
+                    toggleBtn.classList.add('placeholder');
+                    toggleBtn.disabled = true;
+                    return;
+                }
+
+                const parentCheckbox = li.querySelector(':scope > .tree-row .select-checkbox');
+                const parentChecked = parentCheckbox && parentCheckbox.checked && !parentCheckbox.indeterminate;
+
+                items.forEach(it => {
+                    const node = (it.type === 'folder') ? createFolderNode(it) : createFileNode(it);
+                    containerUl.appendChild(node);
+                    if (parentChecked) setNodeCheckedDeep(node, true);
+                });
+
+                li.dataset.loaded = 'true';
+            })
+            .catch(err => {
+                console.error(err);
+                containerUl.innerHTML = '<li class="tree-node">Erro.</li>';
+            });
+    }
+
+    function setCollapsedState(li, collapsed) {
+        const ul = li.querySelector(':scope > .tree-children');
+        if (!ul) return;
+        if (collapsed) {
+            li.classList.add('collapsed');
+            ul.style.display = 'none';
+        } else {
+            li.classList.remove('collapsed');
+            ul.style.display = 'block';
+        }
+    }
+
+    // =========================================================
+    // LÓGICA DE SELEÇÃO
+    // =========================================================
+
+    function handleCheckboxChange(checkbox, li, item, updateParents = true) {
+        const key = `${item.type}:${item.id}`;
+
+        if (checkbox && checkbox.checked) {
+            if (!selectedNodeIds.has(key)) {
+                selectedNodeIds.add(key);
+                selectedItems.push(item);
+            }
+            li.classList.add('tree-node-selected');
+            updateBreadcrumbFromNode(li);
+        } else {
+            if (selectedNodeIds.has(key)) {
+                selectedNodeIds.delete(key);
+                selectedItems = selectedItems.filter(x => !(x.id === item.id && x.type === item.type));
+            }
+            li.classList.remove('tree-node-selected');
+        }
+
+        updateSelectionInfo();
+        if (updateParents) propagateSelectionUp(li);
+    }
+
+    function updateSelectionInfo() {
+        const lbl = document.getElementById('selected-folder-label');
+        const cnt = document.getElementById('selection-counter');
+
+        if (!selectedItems.length) {
+            if (lbl) lbl.textContent = 'nenhum';
+            if (cnt) cnt.textContent = 'Nenhum item selecionado.';
+            return;
+        }
+
+        const fld = selectedItems.filter(i => i.type === 'folder').length;
+        const fls = selectedItems.filter(i => i.type === 'file').length;
+
+        const txt = `${fld} pastas e ${fls} arquivos`;
+        if (lbl) lbl.textContent = txt;
+        if (cnt) cnt.textContent = txt + ' selecionados.';
+    }
+
+    function setNodeCheckedDeep(li, checked) {
+        const cb = li.querySelector(':scope > .tree-row .select-checkbox');
+        if (cb) {
+            cb.checked = checked;
+            cb.indeterminate = false;
+        }
+        const item = {
+            id: li.dataset.id,
+            name: li.dataset.name,
+            type: li.dataset.type
+        };
+        handleCheckboxChange(cb, li, item, false);
+        const children = li.querySelectorAll(':scope > .tree-children > .tree-node');
+        children.forEach(c => setNodeCheckedDeep(c, checked));
+    }
+
+    function propagateSelectionDown(li, checked) {
+        setNodeCheckedDeep(li, checked);
+    }
+
+    function propagateSelectionUp(li) {
+        const parent = li.parentElement.closest('.tree-node');
+        if (!parent) return;
+        const childrenCB = parent.querySelectorAll(':scope > .tree-children > .tree-node > .tree-row .select-checkbox');
+        const all = Array.from(childrenCB);
+        if (!all.length) return;
+
+        const allChecked = all.every(c => c.checked);
+        const someChecked = all.some(c => c.checked || c.indeterminate);
+
+        const pCB = parent.querySelector(':scope > .tree-row .select-checkbox');
+        if (pCB) {
+            pCB.checked = allChecked;
+            pCB.indeterminate = !allChecked && someChecked;
+            const pItem = { id: parent.dataset.id, name: parent.dataset.name, type: parent.dataset.type };
+            handleCheckboxChange(pCB, parent, pItem, false);
+        }
+        propagateSelectionUp(parent);
+    }
+
+    // =========================================================
+    // ATIVIDADE (FETCH & RENDER)
+    // =========================================================
+    function fetchAndRenderActivity(itemId) {
+        const listEl = document.getElementById('activity-list');
+        const loader = document.getElementById('activity-loading');
+
+        listEl.innerHTML = '';
+        loader.classList.remove('hidden');
+
+        fetch(`/api/activity/${itemId}`)
+            .then(r => r.json())
+            .then(data => {
+                loader.classList.add('hidden');
+                const activities = data.activity || [];
+
+                if (activities.length === 0) {
+                    listEl.innerHTML = '<li class="preview-empty-state">Sem atividade recente.</li>';
+                    return;
+                }
+
+                let html = '';
+                activities.forEach(act => {
+                    let icon = '📝';
+                    if (act.action === 'CRIAR') icon = '✨';
+                    if (act.action === 'MOVER') icon = '🚚';
+                    if (act.action === 'EXCLUIR') icon = '🗑️';
+                    if (act.action === 'RENOMEAR') icon = '🏷️';
+                    if (act.action === 'EDITAR') icon = '✏️';
+
+                    html += `
+                    <li class="activity-item">
+                        <div class="act-icon">${icon}</div>
+                        <div class="act-details">
+                            <div class="act-action">${act.action}</div>
+                            <div class="act-meta">por ${act.actor}</div>
+                        </div>
+                        <div class="act-date">${act.date}</div>
+                    </li>`;
+                });
+                listEl.innerHTML = html;
+            })
+            .catch(err => {
+                console.error("Erro ao buscar atividade:", err);
+                loader.classList.add('hidden');
+                listEl.innerHTML = '<li class="form-error">Erro ao carregar atividade.</li>';
+            });
+    }
+
+    // =========================================================
+    // PREVIEW E DETALHES
+    // =========================================================
+
+    function showItemPreview(item, li) {
+        const empty = document.getElementById('preview-empty');
+        const wrapper = document.getElementById('preview-wrapper');
+        const container = document.getElementById('preview-panel');
+
+        container.dataset.currentId = item.id;
+
+        empty.classList.add('hidden');
+        wrapper.classList.remove('hidden');
+
+        document.getElementById('preview-type').textContent = '...';
+        document.getElementById('preview-size').textContent = '...';
+        document.getElementById('preview-modified').textContent = '...';
+        document.getElementById('preview-thumbnail-wrapper').classList.add('hidden');
+
+        const linkBtn = document.getElementById('preview-open-link');
+        linkBtn.classList.add('disabled');
+        linkBtn.href = '#';
+
+        if (li) updateBreadcrumbFromNode(li);
+
+        const detailsInner = document.getElementById('details-content-inner');
+        const detailsMsg = document.getElementById('details-folder-message');
+
+        if (item.type === 'folder') {
+            detailsInner.classList.add('hidden');
+            detailsMsg.classList.remove('hidden');
+        } else {
+            detailsInner.classList.remove('hidden');
+            detailsMsg.classList.add('hidden');
+
+            const cached = itemCache.get(item.id);
+            const hasDeepData = cached && (cached.webViewLink || cached.size !== undefined);
+
+            if (hasDeepData) {
+                renderPreviewData(cached, item.type);
+            } else {
+                document.getElementById('preview-type').textContent = "Buscando detalhes...";
+
+                fetch('/api/file/' + encodeURIComponent(item.id))
+                    .then(r => r.json())
+                    .then(meta => {
+                        if (meta.error) {
+                            document.getElementById('preview-type').textContent = "Erro ao carregar info";
+                            return;
+                        }
+
+                        const newData = { ...item, ...meta };
+                        itemCache.set(item.id, newData);
+
+                        if (container.dataset.currentId === item.id) {
+                            renderPreviewData(newData, item.type);
+                        }
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        if (container.dataset.currentId === item.id) {
+                            document.getElementById('preview-type').textContent = "Erro de conexão";
+                        }
+                    });
+            }
+        }
+
+        fetchAndRenderActivity(item.id);
+    }
+
+    function renderPreviewData(meta, type) {
+        const typeEl = document.getElementById('preview-type');
+        if (typeEl) {
+            if (meta.mimeType === 'application/vnd.google-apps.folder' || type === 'folder') {
+                typeEl.textContent = 'Pasta do Google Drive';
+            } else {
+                typeEl.textContent = meta.mimeType || 'Arquivo';
+            }
+        }
+
+        const sizeEl = document.getElementById('preview-size');
+        if (sizeEl) {
+            if (meta.mimeType === 'application/vnd.google-apps.folder' || type === 'folder') {
+                if (meta.hasCalculatedSize) {
+                    sizeEl.textContent = humanSize(meta.estimatedSize) + ' (estimado)';
+                } else {
+                    sizeEl.textContent = '—';
+                }
+            } else {
+                if (meta.size !== undefined && meta.size !== null) {
+                    sizeEl.textContent = humanSize(parseInt(meta.size));
+                } else {
+                    sizeEl.textContent = 'Indisponível';
+                }
+            }
+        }
+
+        const modEl = document.getElementById('preview-modified');
+        if (modEl) {
+            if (meta.modifiedTime) {
+                try {
+                    modEl.textContent = new Date(meta.modifiedTime).toLocaleString('pt-BR');
+                } catch (e) { modEl.textContent = meta.modifiedTime; }
+            } else {
+                modEl.textContent = '-';
+            }
+        }
+
+        const link = document.getElementById('preview-open-link');
+        if (link) {
+            if (meta.webViewLink) {
+                link.href = meta.webViewLink;
+                link.classList.remove('disabled');
+                link.style.pointerEvents = 'auto';
+            } else {
+                link.classList.add('disabled');
+                link.removeAttribute('href');
+            }
+        }
+
+        const thumbWrapper = document.getElementById('preview-thumbnail-wrapper');
+        const img = document.getElementById('preview-thumbnail');
+
+        if (thumbWrapper && img) {
+            if (meta.thumbnailLink) {
+                img.onerror = function () {
+                    if (this.src.includes('=s600')) {
+                        this.src = meta.thumbnailLink;
+                    } else {
+                        thumbWrapper.classList.add('hidden');
+                    }
+                };
+
+                img.onload = function () {
+                    thumbWrapper.classList.remove('hidden');
+                };
+
+                let hdLink = meta.thumbnailLink;
+                if (hdLink.match(/=s\d+/)) {
+                    hdLink = hdLink.replace(/=s\d+/, '=s600');
+                } else {
+                    hdLink += '=s600';
+                }
+
+                img.src = hdLink;
+                thumbWrapper.classList.remove('hidden');
+            } else {
+                thumbWrapper.classList.add('hidden');
+            }
+        }
+    }
+
+    // =========================================================
+    // INICIALIZAÇÃO DA ÁRVORE (ROOT)
+    // =========================================================
+
+    function initTree() {
+        const ul = document.getElementById('tree-root');
+        ul.innerHTML = '';
+
+        const rootLi = document.createElement('li');
+        rootLi.className = 'tree-node';
+        rootLi.dataset.id = 'root';
+        rootLi.dataset.name = 'Meu Drive';
+        rootLi.dataset.type = 'folder';
+
+        const row = document.createElement('div');
+        row.className = 'tree-row';
+
+        const toggle = document.createElement('button');
+        toggle.className = 'tree-toggle';
+        toggle.textContent = '▾';
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'select-checkbox';
+
+        const fav = document.createElement('button');
+        fav.className = 'fav-btn';
+        fav.textContent = '☆';
+
+        const icon = document.createElement('span');
+        icon.className = 'tree-folder-icon';
+        icon.textContent = '📁';
+
+        const span = document.createElement('span');
+        span.className = 'tree-name';
+        span.textContent = 'Meu Drive';
+
+        row.append(toggle, cb, fav, icon, span);
+        const childrenUl = document.createElement('ul');
+        childrenUl.className = 'tree-children';
+
+        rootLi.append(row, childrenUl);
+        ul.appendChild(rootLi);
+
+        const item = { id: 'root', name: 'Meu Drive', type: 'folder' };
+
+        itemCache.set('root', {
+            id: 'root',
+            name: 'Meu Drive',
+            mimeType: 'application/vnd.google-apps.folder',
+            webViewLink: 'https://drive.google.com'
+        });
+
+        if (isFavorite('root')) fav.classList.add('fav-on');
+
+        fav.onclick = (e) => { e.stopPropagation(); toggleFavorite(item, rootLi, fav); };
+
+        cb.onchange = (e) => {
+            e.stopPropagation();
+            handleCheckboxChange(cb, rootLi, item);
+            propagateSelectionDown(rootLi, cb.checked);
+        };
+
+        row.onclick = (e) => {
+            if (![toggle, cb, fav].includes(e.target)) {
+                showItemPreview(item, rootLi);
+            }
+        };
+
+        toggle.onclick = (e) => {
+            e.stopPropagation();
+            const isC = rootLi.classList.contains('collapsed');
+            if (isC && !rootLi.dataset.loaded) loadChildren('root', childrenUl, rootLi, toggle);
+            setCollapsedState(rootLi, !isC);
+            toggle.textContent = rootLi.classList.contains('collapsed') ? '▸' : '▾';
+        };
+
+        loadChildren('root', childrenUl, rootLi, toggle);
+        setCollapsedState(rootLi, false);
+    }
+
+    function reloadTree() {
+        selectedItems = [];
+        selectedNodeIds = new Set();
+        updateSelectionInfo();
+        document.getElementById('breadcrumb-path').textContent = 'Meu Drive';
+        initTree();
+    }
+
+    // =========================================================
+    // DOMContentLoaded
+    // =========================================================
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadFavorites();
+        loadProfiles();
+        startActiveTasksPoller();
+
+        const tf = document.getElementById('toggle-files');
+        if (tf) {
+            tf.addEventListener('change', () => {
+                includeFiles = tf.checked;
+                reloadTree();
+            });
+        }
+
+        const om = document.getElementById('output_mode');
+        if (om) om.addEventListener('change', updateOutputModeUI);
+        const pom = document.getElementById('prof_output_mode');
+        if (pom) pom.addEventListener('change', updateProfileOutputUI);
+
+        const mbDownload = document.getElementById('modal-backdrop-download');
+        if (mbDownload) {
+            mbDownload.addEventListener('click', (e) => {
+                if (e.target === mbDownload) closeModal('download');
+            });
+        }
+        const mbProfile = document.getElementById('modal-backdrop-profile');
+        if (mbProfile) {
+            mbProfile.addEventListener('click', (e) => {
+                if (e.target === mbProfile) closeModal('profile');
+            });
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeModal('download');
+                closeModal('profile');
+            }
+        });
+
+        initTree();
+    });
+
+    function showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+
+        const toast = document.createElement('div');
+        toast.className = `custom-toast toast-${type}`;
+
+        let icon = 'ℹ️';
+        if (type === 'success') icon = '✅';
+        if (type === 'error') icon = '❌';
+        if (type === 'warning') icon = '⚠️';
+
+        toast.innerHTML = `
+                <div class="toast-icon">${icon}</div>
+                <div class="toast-body">${message}</div>
+                <div class="toast-close" onclick="this.parentElement.remove()">×</div>
+            `;
+
+        container.appendChild(toast);
+
+        // Animação de entrada
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
+        });
+
+        // Auto remover
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 300);
+        }, 5000);
+    }
+
+    // =========================================================
+    // LÓGICA DO MODAL DE RESUMO
+    // =========================================================
+
+    // Variável temporária para guardar o payload do formulário enquanto o resumo é exibido
+    let pendingDownloadPayload = null;
+
+    function closeSchedulerModal() {
+        const backdrop = document.getElementById('modal-backdrop-scheduler');
+        if (backdrop) {
+            backdrop.classList.add('hidden');
+        }
+    }
+
+</script>

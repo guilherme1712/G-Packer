@@ -1,0 +1,45 @@
+<div id="modal-backdrop-summary" class="modal-backdrop hidden">
+    <div class="modal" style="max-width: 500px;">
+        <h2 id="summary-title">Resumo da Seleção</h2>
+        <p class="subtitle">Verifique os dados antes de confirmar o download.</p>
+
+        <div id="summary-loading" class="hidden" style="text-align:center; padding: 30px;">
+            <div class="spinner"
+                style="border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto;">
+            </div>
+            <p style="margin-top:10px; color:#666;">Calculando tamanho total...</p>
+        </div>
+
+        <div id="summary-content">
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <span class="summary-value" id="sum-files">0</span>
+                    <span class="summary-label">Arquivos</span>
+                </div>
+                <div class="summary-card">
+                    <span class="summary-value" id="sum-folders">0</span>
+                    <span class="summary-label">Pastas</span>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-bottom: 20px;">
+                <span style="font-size: 14px; color: #555;">Tamanho Estimado:</span>
+                <div style="font-size: 28px; font-weight: 800; color: #2ecc71;" id="sum-size">0 MB</div>
+            </div>
+
+            <details>
+                <summary style="cursor:pointer; color:#1a73e8; font-size:13px; font-weight:600;">Ver exemplos de
+                    arquivos</summary>
+                <div id="sum-preview-list" class="file-preview-list"></div>
+            </details>
+        </div>
+
+        <div class="modal-footer" style="margin-top: 20px;">
+            <button type="button" class="btn-ghost" onclick="closeModal('summary')">Voltar</button>
+            <button type="button" class="btn-primary" id="btn-confirm-download" onclick="confirmAndDownload()">
+                ✅ Confirmar e Baixar
+            </button>
+        </div>
+    </div>
+</div>
+

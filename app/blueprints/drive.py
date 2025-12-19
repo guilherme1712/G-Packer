@@ -18,22 +18,23 @@ from flask import (
     current_app,
 )
 
-from app.services.auth import get_credentials
-from app.services.Google.drive_filters import build_filters_from_form
-from app.services.Google.drive_tree import (
+from app.services.auth_service import get_credentials
+from app.services.google.drive_filters import build_filters_from_form
+from app.services.google.drive_tree import (
     get_file_metadata,
     calculate_selection_stats,
     get_ancestors_path,
 )
-from app.services.Google.drive_cache import (
+from app.services.google.drive_cache_service import (
     get_children_cached,
     rebuild_full_cache,
     search_cache,
 )
-
-from app.services.Google.drive_download import download_items_bundle, mirror_items_to_local
-from app.services.Google.drive_activity import fetch_activity_log
+from app.services.audit import AuditService
+from app.services.google.drive_download import download_items_bundle, mirror_items_to_local
+from app.services.google.drive_activity import fetch_activity_log
 from app.services.storage import StorageService
+from app.services.google.drive_ops import DriveOperationsService
 from app.services.progress import (
     PROGRESS,
     init_download_task,
@@ -114,6 +115,9 @@ def _background_backup_task(
     archive_format,
     filters,
     processing_mode,
+    backup_type="full",  # 'full' ou 'incremental'
+    client_ip=None,   # [NOVO]
+    user_email=None   # [NOVO]
 ):
     with app_context:
         try:
@@ -132,10 +136,31 @@ def _background_backup_task(
                     filters=filters,
                     processing_mode=processing_mode,
                 )
-
+                # Mirror não gera registro de BackupFileModel snapshot por enquanto
             else:
-                # Modo "archive" - gera um pacote (zip / tar.xz / etc.)
-                temp_zip_path = download_items_bundle(
+                # Modo Archive (ZIP/TAR) com suporte a FULL/INCREMENTAL
+                # download_items_bundle agora retorna (path, current_manifest)
+                 # 1. Determina a Série ANTES de processar
+                 # Precisamos disso para achar o manifesto anterior se for incremental
+                try:
+                    series_key = BackupFileModel.build_series_key(zip_file_name, items)
+                    if not series_key:
+                        series_key = BackupFileModel._normalize_series_key(None, origin_task_id=task_id)
+                except:
+                    series_key = BackupFileModel._normalize_series_key(None, origin_task_id=task_id)
+
+                last_snapshot = BackupFileModel.get_last_snapshot(series_key)
+
+                # Se pediu incremental mas não tem pai, vira Full forçado
+                if backup_type == "incremental" and not last_snapshot:
+                    print(f"Task {task_id}: Incremental solicitado, mas sem backup anterior. Forçando FULL.")
+                    backup_type = "full"
+
+                previous_manifest = None
+                if backup_type == "incremental" and last_snapshot and last_snapshot.metadata_json:
+                    previous_manifest = last_snapshot.metadata_json.get("manifest")
+
+                result = download_items_bundle(
                     creds,
                     items,
                     base_name=zip_file_name,
@@ -145,65 +170,121 @@ def _background_backup_task(
                     task_id=task_id,
                     filters=filters,
                     processing_mode=processing_mode,
+                    previous_manifest=previous_manifest
                 )
 
-                generated_filename = os.path.basename(temp_zip_path)
-                final_dest_path = os.path.join(storage_root_path, generated_filename)
+                # Desempacota retorno (suporta versão antiga que retornava só string)
+                if isinstance(result, tuple):
+                    temp_zip_path, current_manifest = result
+                else:
+                    temp_zip_path, current_manifest = result, {}
 
-                # move do tmp para a pasta definitiva de backups
+                # -----------------------------------------
+                # Define próxima versão
+                # -----------------------------------------
+                next_version = ((last_snapshot.version_index or 0) + 1) if last_snapshot else 1
+
+                # Define se é Full ou Inc baseado no que de fato ocorreu
+                # (Se não passou previous_manifest, foi Full)
+                is_full = (previous_manifest is None)
+
+                # Gera nome físico
+                original_name = os.path.basename(temp_zip_path)
+                lower = original_name.lower()
+                if lower.endswith(".tar.gz"):
+                    base, ext = original_name[:-7], ".tar.gz"
+                else:
+                    base, ext = os.path.splitext(original_name)
+
+                # Sufixo do arquivo
+                type_tag = "INC" if not is_full else "FULL"
+                task_suffix = str(task_id).replace(":", "")[-6:]
+                versioned_name = f"{base}_v{next_version}_{type_tag}_{task_suffix}{ext}"
+                final_dest_path = os.path.join(storage_root_path, versioned_name)
+
                 shutil.move(temp_zip_path, final_dest_path)
 
-                PROGRESS[task_id]["final_filename"] = generated_filename
-                PROGRESS[task_id]["message"] = "Arquivo gerado e salvo com sucesso."
+                PROGRESS[task_id]["final_filename"] = versioned_name
+                PROGRESS[task_id]["message"] = "Arquivo salvo com sucesso."
 
-                # Registra/atualiza o BackupFileModel
+                # -----------------------------------------
+                # Registro no Banco
+                # -----------------------------------------
                 try:
-                    stat = os.stat(final_dest_path)
-                    size_mb = round(stat.st_size / (1024 * 1024), 2)
-                    items_count = PROGRESS.get(task_id, {}).get("files_total", 0)
+                    stat_info = os.stat(final_dest_path)
+                    size_mb = round(stat_info.st_size / (1024 * 1024), 2)
 
-                    existing = BackupFileModel.query.filter_by(
-                        filename=generated_filename
-                    ).first()
+                    # Se foi incremental, items_count é quantos baixou no ZIP
+                    # Mas o 'manifest' guardamos O ESTADO COMPLETO da pasta para o próximo diff
+                    items_downloaded = PROGRESS.get(task_id, {}).get("files_downloaded", 0)
 
-                    if not existing:
-                        bf = BackupFileModel(
-                            filename=generated_filename,
-                            path=final_dest_path,
-                            size_mb=size_mb,
-                            items_count=items_count,
-                            origin_task_id=task_id,
-                        )
-                        db.session.add(bf)
-                    else:
-                        existing.path = final_dest_path
-                        existing.size_mb = size_mb
-                        existing.items_count = items_count
-                        existing.origin_task_id = task_id
-                        existing.created_at = datetime.utcnow()
+                    parent_id = last_snapshot.id if (not is_full and last_snapshot) else None
 
-                    db.session.commit()
+                    metadata = {
+                        "archive_format": archive_format,
+                        "filters": filters or {},
+                        "processing_mode": processing_mode,
+                        "manifest": current_manifest  # Guarda estado atual completo
+                    }
+
+                    BackupFileModel.register_snapshot(
+                        filename=versioned_name,
+                        path=final_dest_path,
+                        size_mb=size_mb,
+                        items_count=items_downloaded,
+                        origin_task_id=task_id,
+                        series_key=series_key,
+                        is_full=is_full,
+                        parent_id=parent_id,
+                        metadata=metadata,
+                    )
 
                     _apply_retention_policy(storage_root_path)
 
-                except Exception as db_err:
-                    db.session.rollback()
-                    PROGRESS[task_id]["phase"] = "erro"
-                    PROGRESS[task_id]["message"] = (
-                        f"Erro ao registrar backup no banco: {db_err}"
+                    final_target = local_mirror_path if output_mode == "mirror" else versioned_name
+                    final_size = "N/A"
+
+                    if output_mode != "mirror":
+                        try:
+                            stat_info = os.stat(final_dest_path)
+                            final_size = f"{round(stat_info.st_size / (1024 * 1024), 2)} MB"
+                        except: pass
+
+                    details_json = json.dumps({
+                        "size_mb": size_mb,
+                        "items": items_downloaded,
+                        "type": type_tag,
+                        "mode": output_mode
+                    })
+
+                    AuditService.log(
+                        action_type="DOWNLOAD_COMPLETE",
+                        target=versioned_name,
+                        ip_address=client_ip,
+                        user_email=user_email,
+                        details=details_json
                     )
 
-            # Sincroniza o estado final com a tabela tasks (TaskModel)
+                except Exception as db_err:
+                    db.session.rollback()
+                    print(f"Erro DB snapshot: {db_err}")
+                    PROGRESS[task_id]["phase"] = "erro"
+                    PROGRESS[task_id]["message"] = f"Erro ao registrar: {db_err}"
+
             sync_task_to_db(task_id)
 
         except Exception as e:
-            # Qualquer erro que escapar da lógica acima cai aqui.
             PROGRESS[task_id]["phase"] = "erro"
-            PROGRESS[task_id]["message"] = f"Falha no processo de backup: {e}"
-            try:
-                db.session.rollback()
-            except Exception:
-                pass
+            PROGRESS[task_id]["message"] = f"Falha: {e}"
+
+            AuditService.log(
+                action_type="DOWNLOAD_ERROR",
+                target=zip_file_name,
+                ip_address=client_ip,
+                user_email=user_email,
+                details=str(e)
+            )
+
             sync_task_to_db(task_id)
 
 
@@ -369,6 +450,8 @@ def add_favorite():
 
     try:
         db.session.commit()
+        AuditService.log("FAVORITE_ADD", data.get('name'), details=data.get('path'))
+
         return jsonify({"ok": True})
     except Exception as e:
         db.session.rollback()
@@ -395,35 +478,34 @@ def download():
         return jsonify({"ok": False, "error": "Sessão expirada"}), 401
 
     data = request.get_json() or {}
+
+    # ... (Lógica de items e zip_name mantida igual) ...
     items_raw = data.get("items_json")
     if isinstance(items_raw, str):
-        try:
-            items = json.loads(items_raw)
-        except Exception:
-            items = []
-    else:
-        items = items_raw or []
+        try: items = json.loads(items_raw)
+        except: items = []
+    else: items = items_raw or []
 
-    if not items:
-        return jsonify({"ok": False, "error": "Nenhum item selecionado"}), 400
+    if not items: return jsonify({"ok": False, "error": "Nenhum item selecionado"}), 400
 
     zip_name = (data.get("zip_name") or "backup").strip()
-    if zip_name.lower().endswith(".zip"):
-        zip_name = zip_name[:-4]
+    if zip_name.lower().endswith(".zip"): zip_name = zip_name[:-4]
 
     archive_format = data.get("archive_format") or "zip"
     compression_level = data.get("compression_level") or "normal"
     output_mode = data.get("output_mode") or "archive"
     local_mirror_path = (data.get("local_mirror_path") or "").strip()
-
-    execution_mode = data.get("execution_mode") or "immediate"
     processing_mode = data.get("processing_mode") or "sequential"
 
-    # Caminho físico onde os backups são armazenados
-    storage_root_path = StorageService.backups_dir()
+    # --- CORREÇÃO AQUI: Captura a escolha do usuário ---
+    backup_type = data.get("backup_type", "full")
 
+    storage_root_path = StorageService.backups_dir()
     task_id = data.get("task_id") or f"task-{int(time.time())}"
     init_download_task(task_id)
+
+    client_ip = request.remote_addr
+    user_email = AuditService.get_current_user_email()
 
     thread = Thread(
         target=_background_backup_task,
@@ -440,6 +522,9 @@ def download():
             archive_format,
             build_filters_from_form(data),
             processing_mode,
+            backup_type,
+            client_ip,
+            user_email
         ),
         daemon=True,
     )
@@ -516,3 +601,83 @@ def analyze_selection():
         return jsonify({"ok": True, "stats": stats})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# -------------------------------------------------------------------------
+#  NOVO ENDPOINT: CHECAR SE JÁ EXISTE SÉRIE (Para perguntar Full/Inc)
+# -------------------------------------------------------------------------
+@drive_bp.route("/api/backup/check-series", methods=["POST"])
+def check_backup_series():
+    creds = get_credentials()
+    if not creds:
+        return jsonify({"ok": False, "error": "Sessão expirada"}), 401
+
+    data = request.get_json() or {}
+    items = data.get("items") or []
+    zip_name = data.get("zip_name", "backup")
+
+    # Calcula a chave da série
+    series_key = BackupFileModel.build_series_key(zip_name, items)
+
+    # Verifica se já existe algum backup dessa série
+    last = BackupFileModel.get_last_snapshot(series_key)
+
+    if last:
+        return jsonify({
+            "ok": True,
+            "exists": True,
+            "series_key": series_key,
+            "last_version": last.version_index,
+            "last_date": last.created_at.isoformat() if last.created_at else None,
+            "is_full": last.is_full
+        })
+    else:
+        return jsonify({
+            "ok": True,
+            "exists": False,
+            "series_key": series_key
+        })
+
+@drive_bp.route("/api/file/rename", methods=["POST"])
+def api_rename():
+    creds = get_credentials()
+    if not creds: return jsonify({"ok": False, "error": "Auth required"}), 401
+    
+    data = request.json or {}
+    result = DriveOperationsService.rename_file(creds, data.get('id'), data.get('name'))
+    return jsonify(result)
+
+@drive_bp.route("/api/file/move", methods=["POST"])
+def api_move():
+    creds = get_credentials()
+    if not creds: return jsonify({"ok": False, "error": "Auth required"}), 401
+    
+    data = request.json or {}
+    # Aceita drag & drop: file_id (item) -> target_id (pasta destino)
+    result = DriveOperationsService.move_file(creds, data.get('file_id'), data.get('target_id'))
+    return jsonify(result)
+
+@drive_bp.route("/api/file/trash", methods=["POST"])
+def api_trash():
+    creds = get_credentials()
+    if not creds: return jsonify({"ok": False, "error": "Auth required"}), 401
+    
+    data = request.json or {}
+    result = DriveOperationsService.trash_file(creds, data.get('id'))
+    return jsonify(result)
+
+@drive_bp.route("/api/folder/create", methods=["POST"])
+def api_create_folder():
+    creds = get_credentials()
+    if not creds:
+        return jsonify({"ok": False, "error": "Auth required"}), 401
+
+    data = request.json or {}
+    parent_id = data.get("parent_id")
+    name = data.get("name")
+
+    if not parent_id or not name:
+        return jsonify({"ok": False, "error": "Missing parent_id or name"}), 400
+
+    result = DriveOperationsService.create_folder(creds, parent_id, name)
+    return jsonify(result)

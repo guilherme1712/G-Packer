@@ -16,10 +16,10 @@ body {
 }
 
 .bg-gradient {
-    background: radial-gradient(circle at top, #4338ca 0, #020617 70%);
-    display: flex;
-    align-items: stretch;      /* ocupa toda a altura */
-    justify-content: center;   /* mantém conteúdo centralizado, mas largura 100% */
+    background: radial-gradient(circle at top, #4338ca 0, #020617 70%) !important;
+    display: flex !important;
+    align-items: stretch !important;      /* ocupa toda a altura */
+    justify-content: center !important;   /* mantém conteúdo centralizado, mas largura 100% */
 }
 
 /* layout principal da tela de pastas / páginas internas */
@@ -188,7 +188,7 @@ body {
     margin-bottom: 16px;
     border: 1px solid rgba(248, 113, 113, 0.5);
     font-size: 0.95rem;
-    color: #fecaca;
+    color: #fecaca !important;
     font-weight: 500;
 }
 

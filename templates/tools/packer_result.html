@@ -1,0 +1,180 @@
+{% extends "layouts/layout.html" %}
+
+{% block title %}Processando Pacote{% endblock %}
+
+{% block extra_head %}
+<style>
+    .glass-panel {
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 24px;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+    /* Animação de Carregamento */
+    .progress-ring {
+        width: 100px;
+        height: 100px;
+        border: 4px solid rgba(255,255,255,0.1);
+        border-top: 4px solid #6366f1;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 30px;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    /* Cards de Ação */
+    .action-tile {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 16px;
+        padding: 25px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    .action-tile:hover {
+        background: rgba(255, 255, 255, 0.07);
+        transform: translateY(-5px);
+        border-color: rgba(255,255,255,0.2);
+    }
+    .tile-drive:hover { border-color: #10b981; box-shadow: 0 10px 30px rgba(16, 185, 129, 0.15); }
+    .tile-download:hover { border-color: #3b82f6; box-shadow: 0 10px 30px rgba(59, 130, 246, 0.15); }
+    .tile-server:hover { border-color: #f59e0b; box-shadow: 0 10px 30px rgba(245, 158, 11, 0.15); }
+
+    .tile-icon { font-size: 2.5rem; margin-bottom: 15px; display: block; }
+    .tile-title { font-weight: 700; display: block; color: #f1f5f9; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container d-flex align-items-center justify-content-center" style="min-height: 85vh;">
+    <div class="w-100" style="max-width: 800px;">
+
+        <div class="glass-panel p-5">
+
+            <div id="progress-phase" class="text-center">
+                <div class="progress-ring"></div>
+                <h3 class="text-white fw-bold">Processando Arquivos</h3>
+                <p class="text-muted mb-4" id="status-msg">Iniciando worker...</p>
+
+                <div class="progress mx-auto" style="height: 6px; width: 60%; background: rgba(255,255,255,0.1);">
+                    <div class="progress-bar bg-primary" id="progress-bar" style="width: 0%"></div>
+                </div>
+                <div class="mt-3 text-secondary small font-monospace">Job ID: {{ job_id }}</div>
+            </div>
+
+            <div id="decision-phase" style="display: none;">
+                <div class="text-center mb-5">
+                    <div class="badge bg-success px-3 py-2 mb-3 rounded-pill">CONCLUÍDO</div>
+                    <h2 class="text-white fw-bold mb-1">Pacote Gerado!</h2>
+                    <p class="text-secondary" id="final-size">Tamanho: Calculando...</p>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="action-tile tile-drive" onclick="executeAction('upload_drive')">
+                            <i class="fab fa-google-drive tile-icon" style="color: #34d399;"></i>
+                            <span class="tile-title">Salvar no Drive</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="action-tile tile-download" onclick="executeAction('download_pc')">
+                            <i class="fas fa-download tile-icon" style="color: #60a5fa;"></i>
+                            <span class="tile-title">Baixar Agora</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="action-tile tile-server" onclick="executeAction('save_local')">
+                            <i class="fas fa-server tile-icon" style="color: #fbbf24;"></i>
+                            <span class="tile-title">Arquivar (Backup)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-center mt-5">
+                    <a href="{{ url_for('packer.index') }}" class="btn btn-link text-muted text-decoration-none">
+                        <i class="fas fa-arrow-left me-1"></i> Criar Novo Pacote
+                    </a>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    const jobId = "{{ job_id }}";
+    const csrfToken = "{{ csrf_token() if csrf_token else '' }}";
+    let pollInterval;
+
+    // Inicia Polling ao carregar
+    document.addEventListener("DOMContentLoaded", () => {
+        pollStatus();
+        pollInterval = setInterval(pollStatus, 1500);
+    });
+
+    async function pollStatus() {
+        try {
+            const res = await fetch(`/packer/status/${jobId}`);
+            const data = await res.json();
+
+            if (data.ok) {
+                // Atualiza UI de progresso
+                document.getElementById('status-msg').innerText = data.message || "Processando...";
+
+                // Se concluído
+                if (data.phase === 'COMPLETED') {
+                    clearInterval(pollInterval);
+                    showResult(data);
+                } else if (data.phase === 'ERROR') {
+                    clearInterval(pollInterval);
+                    alert("Erro no processamento: " + data.message);
+                    window.location.href = "{{ url_for('packer.index') }}";
+                }
+            }
+        } catch (e) {
+            console.error("Polling error", e);
+        }
+    }
+
+    function showResult(data) {
+        document.getElementById('progress-phase').style.display = 'none';
+        document.getElementById('decision-phase').style.display = 'block';
+        document.getElementById('decision-phase').classList.add('animate__animated', 'animate__fadeIn');
+
+        if(data.size_mb) {
+            document.getElementById('final-size').innerText = `Tamanho Final: ${data.size_mb} MB`;
+        }
+    }
+
+    async function executeAction(action) {
+        document.body.style.cursor = 'wait';
+        try {
+            const res = await fetch('/packer/action', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({ action: action, job_id: jobId })
+            });
+            const data = await res.json();
+
+            if (data.redirect_url) {
+                window.location.href = data.redirect_url;
+            } else if (data.ok) {
+                alert("✅ " + data.message);
+                if(action !== 'download_pc') window.location.href = "{{ url_for('packer.index') }}";
+            } else {
+                alert("❌ " + data.error);
+            }
+        } catch (e) {
+            alert("Erro de conexão.");
+        } finally {
+            document.body.style.cursor = 'default';
+        }
+    }
+</script>
+{% endblock %}

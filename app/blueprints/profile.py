@@ -1,7 +1,8 @@
 # controllers/profile_controller.py
 from flask import Blueprint, request, jsonify
 
-from app.services.auth import get_credentials
+from app.services.auth_service import get_credentials
+from app.services.audit import AuditService
 from app.services.profile import (
     load_backup_profiles,
     create_profile,
@@ -30,6 +31,12 @@ def api_profiles():
     if error:
         return jsonify({"ok": False, "error": error}), 400
 
+    AuditService.log(
+        action_type="PROFILE_CREATE",
+        target=profile.get("name", "Sem Nome"),
+        details=f"Filtros: {len(profile.get('filters', {}))}"
+    )
+
     return jsonify({"ok": True, "profile": profile})
 
 
@@ -47,4 +54,12 @@ def api_profile_detail(profile_id):
         return jsonify(profile)
 
     ok = delete_profile(profile_id)
+
+    if ok:
+        AuditService.log(
+            action_type="PROFILE_DELETE",
+            target=f"ID: {profile_id}",
+            details=f"Nome anterior: {profile.get('name')}"
+        )
+        
     return jsonify({"ok": ok})

@@ -1,5 +1,5 @@
 {# templates/admin_backups.html #}
-{% extends "layout.html" %}
+{% extends "layouts/layout.html" %}
 
 {% block title %}Meus Backups Salvos – G-Packer{% endblock %}
 
@@ -10,8 +10,7 @@
         margin: 0 auto;
     }
 
-    .table-responsive {
-        overflow-x: auto;
+    .table-responsive  {
         border-radius: 12px;
     }
 
@@ -244,6 +243,103 @@
         margin-left: 4px;
         opacity: 0.8;
     }
+
+    /* Dropdown de versões (linha do tempo de snapshots) */
+    .version-dropdown {
+        position: relative;
+        display: inline-block;
+    }
+
+    .version-dropdown-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        white-space: nowrap;
+    }
+
+    .version-dropdown-menu {
+        position: absolute;
+        top: 110%;
+        left: 0;
+        background: #020617;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: 10px;
+        padding: 8px;
+        min-width: 260px;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.75);
+        z-index: 40;
+        display: none;
+    }
+
+    .version-dropdown-menu.show {
+        display: block;
+    }
+
+    .version-dropdown-item {
+        padding: 6px 6px 8px 6px;
+        border-radius: 8px;
+        transition: background 0.15s ease;
+    }
+
+    .version-dropdown-item:hover {
+        background: rgba(15, 23, 42, 0.9);
+    }
+
+    .version-dropdown-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 4px;
+        margin-bottom: 4px;
+        font-size: 0.78rem;
+    }
+
+    .version-badge {
+        font-size: 0.75rem;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.18);
+        border: 1px solid rgba(148, 163, 184, 0.4);
+    }
+
+    .version-type {
+        font-size: 0.7rem;
+        padding: 2px 6px;
+        border-radius: 999px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .version-type-full {
+        background: rgba(34, 197, 94, 0.18);
+        border: 1px solid rgba(34, 197, 94, 0.6);
+        color: #bbf7d0;
+    }
+
+    .version-type-inc {
+        background: rgba(59, 130, 246, 0.18);
+        border: 1px solid rgba(59, 130, 246, 0.6);
+        color: #bfdbfe;
+    }
+
+    .version-date {
+        margin-left: auto;
+        font-size: 0.7rem;
+        color: #9ca3af;
+        white-space: nowrap;
+    }
+
+    .version-dropdown-actions {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+    }
+
+    .btn-xxs {
+        font-size: 0.7rem;
+        padding: 2px 6px;
+        border-radius: 999px;
+    }
 </style>
 {% endblock %}
 
@@ -263,7 +359,7 @@
         {% if messages %}
         <div class="page-flash" style="margin-bottom: 24px;">
             <div class="alert"
-                 style="background: rgba(234, 179, 8, 0.15); border-color: rgba(234, 179, 8, 0.3); color: #fde047;">
+                style="background: rgba(234, 179, 8, 0.15); border-color: rgba(234, 179, 8, 0.3); color: #fde047;">
                 {% for msg in messages %}
                 <div>{{ msg }}</div>
                 {% endfor %}
@@ -275,88 +371,134 @@
         <div class="table-responsive">
             <table class="backup-table">
                 <thead>
-                <tr>
-                    <th>Nome do Arquivo</th>
-                    <th>Arquivos</th>
-                    <th>Tamanho</th>
-                    <th>Criado em</th>
-                    <th style="text-align:center">Ações</th>
-                </tr>
+                    <tr>
+                        <th>Nome do Arquivo</th>
+                        <th>Série / Versão</th>
+                        <th>Arquivos (última versão)</th>
+                        <th>Tamanho</th>
+                        <th>Criado em</th>
+                        <th style="text-align:center">Ações</th>
+                    </tr>
                 </thead>
+
                 <tbody>
-                {% for file in files %}
-                <tr>
-                    <td>
-                        <div class="file-name">
-                            <div class="file-icon">
-                                {% if file.name.lower().endswith('.zip') %}
-                                ⬛
-                                {% else %}
-                                📦
-                                {% endif %}
-                            </div>
-                            <div>
-                                <div>
-                                    {{ file.name }}
-                                    {% if file.encrypted %}
-                                    <span class="lock-icon">🔒</span>
+                    {% for series in series_list %}
+                    {% set latest = series.latest %}
+                    <tr>
+                        <td>
+                            <div class="file-name">
+                                <div class="file-icon">
+                                    {% if latest.name.lower().endswith('.zip') %}
+                                    ⬛
+                                    {% else %}
+                                    📦
                                     {% endif %}
                                 </div>
-                                <div class="text-muted">
-                                    Origem:
-                                    {{ file.origin_task_id or 'Manual / desconhecida' }}
+                                <div>
+                                    <div>
+                                        {{ latest.name }}
+                                        {% if latest.encrypted %}
+                                        <span class="lock-icon">🔒</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="text-muted">
+                                        Série: {{ series.series_key }} · Última versão: v{{ latest.version_index }}
+                                    </div>
+                                    <div class="text-muted">
+                                        Origem: {{ latest.origin_task_id or 'Manual / desconhecida' }}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </td>
-                    <td>
-                        <span class="badge-count">
-                            {{ file.items_count }} arquivo(s)
-                        </span>
-                    </td>
-                    <td>
-                        <span class="badge-size">
-                            {{ '%.2f'|format(file.size_mb) }} MB
-                        </span>
-                    </td>
-                    <td>
-                        <span class="text-muted">
-                            {{ file.created_at }}
-                        </span>
-                    </td>
-                    <td class="actions-cel align-items-center">
-                        <button type="button" class="btn-ghost btn-xs"
-                                onclick="openBackupExplorer({{ file.id }}, '{{ file.name }}')">
-                            🔎 Explorar conteúdo
-                        </button>
+                        </td>
 
-                        <a href="{{ url_for('admin.download_backup_file', backup_id=file.id) }}"
-                           class="btn-secondary btn-xs">
-                            ⬇️ Baixar arquivo
-                        </a>
+                        <!-- COLUNA: dropdown de versões -->
+                        <td>
+                            <div class="version-dropdown">
+                                <button type="button" class="btn-secondary btn-xs version-dropdown-toggle">
+                                    📜 Versões ({{ series.versions|length }})
+                                </button>
+                                <div class="version-dropdown-menu">
+                                    {% for v in series.versions %}
+                                    <div class="version-dropdown-item">
+                                        <div class="version-dropdown-header">
+                                            <span class="version-badge">v{{ v.version_index }}</span>
+                                            {% if v.is_full %}
+                                            <span class="version-type version-type-full">FULL</span>
+                                            {% else %}
+                                            <span class="version-type version-type-inc">INC</span>
+                                            {% endif %}
+                                            <span class="version-date">{{ v.created_at }}</span>
+                                        </div>
+                                        <div class="version-dropdown-actions">
+                                            <!-- EXPLORAR = usar o explorer da versão específica -->
+                                            <button type="button" class="btn-ghost btn-xxs"
+                                                onclick="openBackupExplorer({{ v.id }}, '{{ v.name }}')">
+                                                🔎 Explorar
+                                            </button>
+                                            <!-- BAIXAR ZIP DAQUELA VERSÃO -->
+                                            <a href="{{ url_for('admin.download_backup_file', backup_id=v.id) }}"
+                                                class="btn-secondary btn-xxs">
+                                                ⬇️ Baixar ZIP
+                                            </a>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </td>
 
-                        <a href="{{ url_for('admin.delete_backup', backup_id=file.id) }}"
-                           class="btn-danger btn-xs"
-                           onclick="return confirm('Tem certeza que deseja excluir este backup?');">
-                            🗑 Excluir
-                        </a>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="5">
-                        <div class="empty-state">
-                            <span class="empty-icon">📭</span>
-                            <h3 style="margin:0 0 8px 0; color:#e2e8f0;">Nenhum backup encontrado</h3>
-                            <p style="margin:0; font-size:0.9rem;">
-                                Os arquivos gerados no modo "Segundo Plano" aparecerão aqui.<br>
-                                Vá até a seleção de pastas para criar um novo backup.
-                            </p>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
+                        <!-- Arquivos / info da ÚLTIMA versão -->
+                        <td>
+                            <span class="badge-count">
+                                {{ latest.items_count }} arquivo(s)
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge-size">
+                                {{ '%.2f'|format(latest.size_mb) }} MB
+                            </span>
+                        </td>
+                        <td>
+                            <span class="text-muted">
+                                {{ latest.created_at }}
+                            </span>
+                        </td>
+
+                        <!-- Ações rápidas: sempre sobre a ÚLTIMA versão -->
+                        <td class="actions-cel align-items-center">
+                            <button type="button" class="btn-ghost btn-xs"
+                                onclick="openBackupExplorer({{ latest.id }}, '{{ latest.name }}')">
+                                🔎 Explorar última versão
+                            </button>
+
+                            <a href="{{ url_for('admin.download_backup_file', backup_id=latest.id) }}"
+                                class="btn-secondary btn-xs">
+                                ⬇️ Baixar última versão
+                            </a>
+
+                            <a href="{{ url_for('admin.delete_backup', backup_id=latest.id) }}"
+                                class="btn-danger btn-xs"
+                                onclick="return confirm('Tem certeza que deseja excluir este backup?\\nIsso NÃO remove as outras versões desta série.');">
+                                🗑 Excluir última versão
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6">
+                            <div class="empty-state">
+                                <span class="empty-icon">📭</span>
+                                <h3 style="margin:0 0 8px 0; color:#e2e8f0;">Nenhum backup encontrado</h3>
+                                <p style="margin:0; font-size:0.9rem;">
+                                    Os arquivos gerados no modo "Segundo Plano" aparecerão aqui.<br>
+                                    Vá até a seleção de pastas para criar um novo backup.
+                                </p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
                 </tbody>
+
             </table>
         </div>
     </div>
@@ -492,9 +634,9 @@
                 </div>
                 <div class="explorer-meta">
                     ${node.type === "file" && node.size != null
-                        ? `<span class="explorer-size">${formatBytes(node.size)}</span>`
-                        : ""
-                    }
+                    ? `<span class="explorer-size">${formatBytes(node.size)}</span>`
+                    : ""
+                }
                 </div>
             `;
 
@@ -700,30 +842,56 @@
                 paths: paths
             }),
         })
-        .then(r => r.json())
-        .then(data => {
-            if (!data.ok) {
-                alert("Erro ao iniciar: " + (data.error || "Falha desconhecida."));
+            .then(r => r.json())
+            .then(data => {
+                if (!data.ok) {
+                    alert("Erro ao iniciar: " + (data.error || "Falha desconhecida."));
+                    btn.textContent = "📂 Extrair no PC";
+                    btn.disabled = false;
+                } else {
+                    // SUCESSO IMEDIATO
+                    alert(`✅ Extração iniciada em segundo plano!\n\nOs arquivos estão sendo enviados para:\n${targetPath}\n\nVocê pode fechar esta janela e continuar usando o sistema.`);
+
+                    // Opcional: Fechar o modal automaticamente
+                    closeBackupExplorer();
+
+                    // Restaura o botão caso reabra o modal depois
+                    btn.textContent = "📂 Extrair no PC";
+                    btn.disabled = false;
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert("Erro de comunicação com o servidor.");
                 btn.textContent = "📂 Extrair no PC";
                 btn.disabled = false;
-            } else {
-                // SUCESSO IMEDIATO
-                alert(`✅ Extração iniciada em segundo plano!\n\nOs arquivos estão sendo enviados para:\n${targetPath}\n\nVocê pode fechar esta janela e continuar usando o sistema.`);
-
-                // Opcional: Fechar o modal automaticamente
-                closeBackupExplorer();
-
-                // Restaura o botão caso reabra o modal depois
-                btn.textContent = "📂 Extrair no PC";
-                btn.disabled = false;
-            }
-        })
-        .catch(err => {
-            console.error(err);
-            alert("Erro de comunicação com o servidor.");
-            btn.textContent = "📂 Extrair no PC";
-            btn.disabled = false;
-        });
+            });
     }
+
+    // -------------------------------
+    // Dropdown de versões de backup
+    // -------------------------------
+    document.addEventListener("click", function (ev) {
+        const toggle = ev.target.closest(".version-dropdown-toggle");
+        const dropdowns = document.querySelectorAll(".version-dropdown-menu");
+
+        if (toggle) {
+            const container = toggle.closest(".version-dropdown");
+            const menu = container.querySelector(".version-dropdown-menu");
+            const isOpen = menu.classList.contains("show");
+
+            // Fecha todos
+            dropdowns.forEach(m => m.classList.remove("show"));
+
+            // Abre somente o clicado, se estiver fechado
+            if (!isOpen) {
+                menu.classList.add("show");
+            }
+        } else {
+            // Clique fora fecha todos
+            dropdowns.forEach(m => m.classList.remove("show"));
+        }
+    });
+
 </script>
 {% endblock %}

@@ -1,0 +1,334 @@
+{% extends "layouts/layout.html" %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="card shadow-lg" style="height: 85vh; overflow: hidden;">
+
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="fa-solid fa-circle-nodes me-2"></i>Visão de Rede Avançada
+            </h5>
+            <div>
+                <span id="nodeCountBadge" class="badge bg-primary me-2">0 Nós</span>
+                <small class="text-white-50 d-none d-md-inline">Duplo clique para expandir</small>
+            </div>
+        </div>
+
+        <div class="card-body p-0 d-flex" style="height: 100%; width: 100%;">
+
+            <div id="sidebarControls" class="border-end d-flex flex-column" style="width: 320px; min-width: 320px; height: 100%; z-index: 10; transition: margin-left 0.3s ease;">
+
+                <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
+                    <strong class="text-secondary"><i class="fa-solid fa-sliders me-1"></i> Configurações</strong>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="toggleSidebar()" title="Recolher Menu">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                </div>
+
+                <div class="p-3 overflow-auto" style="flex-grow: 1;">
+
+                    <h6 class="fw-bold text-primary mb-2 border-bottom pb-1">Layout & Estrutura</h6>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Modo:</label>
+                        <select id="layoutMode" class="form-select form-select-sm" onchange="updateConfig()">
+                            <option value="treeUD" selected>Hierárquico (Vertical)</option>
+                            <option value="treeLR">Hierárquico (Horizontal)</option>
+                            <option value="organic">Orgânico (Física)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">Espaçamento: <span id="val_spacing">250</span></label>
+                        <input type="range" class="form-range" id="nodeSpacing" min="50" max="600" value="250" oninput="updateConfig()">
+                    </div>
+                    <div class="mb-3" id="levelSepContainer">
+                        <label class="form-label small">Distância Níveis: <span id="val_level">200</span></label>
+                        <input type="range" class="form-range" id="levelSeparation" min="50" max="500" value="200" oninput="updateConfig()">
+                    </div>
+
+                    <h6 class="fw-bold text-success mb-2 border-bottom pb-1 mt-4">Nós (Pastas/Arquivos)</h6>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label small">Tamanho</label>
+                            <input type="number" class="form-control form-control-sm" id="nodeSize" value="25" onchange="updateConfig()">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small">Fonte</label>
+                            <input type="number" class="form-control form-control-sm" id="fontSize" value="14" onchange="updateConfig()">
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                         <label class="form-label small">Formato:</label>
+                         <select id="nodeShape" class="form-select form-select-sm" onchange="updateConfig()">
+                             <option value="dot" selected>Bolinha (Dot)</option>
+                             <option value="box">Caixa (Box)</option>
+                             <option value="database">Banco de Dados</option>
+                         </select>
+                    </div>
+
+                    <h6 class="fw-bold text-danger mb-2 border-bottom pb-1 mt-4">Conexões</h6>
+                    <div class="mb-2">
+                        <label class="form-label small">Estilo da Linha:</label>
+                        <select id="edgeSmooth" class="form-select form-select-sm" onchange="updateConfig()">
+                            <option value="cubicBezier" selected>Curva Suave</option>
+                            <option value="straightCross">Reta</option>
+                        </select>
+                    </div>
+
+                    <h6 class="fw-bold text-warning mb-2 border-bottom pb-1 mt-4">Física</h6>
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="physicsToggle" checked onchange="togglePhysics()">
+                        <label class="form-check-label small" for="physicsToggle">Ativar Simulação</label>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Repulsão: <span id="val_repulsion">250</span></label>
+                        <input type="range" class="form-range" id="repulsionForce" min="50" max="2000" value="250" oninput="updateConfig()">
+                    </div>
+                </div>
+
+                <div class="p-3 border-top">
+                    <div class="d-grid gap-2">
+                        <button onclick="fitCamera()" class="btn btn-sm btn-primary">
+                            <i class="fa-solid fa-compress me-1"></i> Centralizar
+                        </button>
+                        <button onclick="clearGraph()" class="btn btn-sm btn-outline-danger">
+                            <i class="fa-solid fa-trash me-1"></i> Limpar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="position-relative flex-grow-1" style="height: 100%;">
+
+                <button id="btnOpenSidebar" class="btn btn-light shadow-sm position-absolute top-0 start-0 m-3" style="display: none; z-index: 5;" onclick="toggleSidebar()">
+                    <i class="fa-solid fa-bars"></i>
+                </button>
+
+                <div id="mynetwork" style="width: 100%; height: 100%;"></div>
+
+                <div id="loadingOverlay" class="position-absolute top-50 start-50 translate-middle" style="display: none; z-index: 9999;">
+                    <div class="p-3 rounded shadow text-center border">
+                        <div class="spinner-border text-primary mb-2" role="status"></div>
+                        <div class="small fw-bold text-dark">Carregando dados...</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+
+<script type="text/javascript">
+    var network = null;
+    var nodes = new vis.DataSet([]);
+    var edges = new vis.DataSet([]);
+
+    document.addEventListener("DOMContentLoaded", function() {
+        var container = document.getElementById('mynetwork');
+        var data = { nodes: nodes, edges: edges };
+
+        // Opções Iniciais
+        var options = {
+            interaction: {
+                hover: true,
+                navigationButtons: true, // Botões de seta aparecem aqui
+                keyboard: true,
+                zoomView: true
+            },
+            physics: {
+                stabilization: { iterations: 150 }
+            }
+        };
+
+        network = new vis.Network(container, data, options);
+
+        // Adiciona ROOT
+        addNodeSafe({
+            id: 'root',
+            label: 'Meu Drive',
+            group: 'root',
+            level: 0,
+            title: "Raiz"
+        });
+
+        // Eventos
+        network.on("doubleClick", function (params) {
+            if (params.nodes.length > 0) {
+                var nodeId = params.nodes[0];
+                var node = nodes.get(nodeId);
+                if (node && (node.group === 'folder' || node.group === 'root')) {
+                    expandFolder(nodeId);
+                }
+            }
+        });
+
+        updateConfig();
+        expandFolder('root');
+    });
+
+    // --- LÓGICA DE UI DA SIDEBAR ---
+    function toggleSidebar() {
+        const sidebar = document.getElementById('sidebarControls');
+        const btnOpen = document.getElementById('btnOpenSidebar');
+
+        // Verifica se está visível (margin-left 0) ou oculto (margin-left -320px)
+        if (sidebar.style.marginLeft === '-320px') {
+            sidebar.style.marginLeft = '0';
+            btnOpen.style.display = 'none';
+        } else {
+            sidebar.style.marginLeft = '-320px';
+            setTimeout(() => btnOpen.style.display = 'block', 300); // Mostra botão após animação
+        }
+    }
+
+    // --- FUNÇÕES DE CONFIGURAÇÃO (Mantidas iguais) ---
+    function updateConfig() {
+        const mode = document.getElementById('layoutMode').value;
+        const spacing = parseInt(document.getElementById('nodeSpacing').value);
+        const levelSep = parseInt(document.getElementById('levelSeparation').value);
+        const nodeSize = parseInt(document.getElementById('nodeSize').value);
+        const fontSize = parseInt(document.getElementById('fontSize').value);
+        const nodeShape = document.getElementById('nodeShape').value;
+        const edgeSmoothType = document.getElementById('edgeSmooth').value;
+        const repulsion = parseInt(document.getElementById('repulsionForce').value);
+
+        // Labels
+        document.getElementById('val_spacing').innerText = spacing;
+        document.getElementById('val_level').innerText = levelSep;
+        document.getElementById('val_repulsion').innerText = repulsion;
+
+        const isTree = (mode === 'treeUD' || mode === 'treeLR');
+        document.getElementById('levelSepContainer').style.display = isTree ? 'block' : 'none';
+
+        let options = {
+            nodes: {
+                shape: nodeShape,
+                size: nodeSize,
+                font: { size: fontSize, face: 'arial' },
+                borderWidth: 2,
+                shadow: true
+            },
+            edges: {
+                smooth: { type: edgeSmoothType, forceDirection: 'none' },
+                color: { inherit: 'from' },
+                arrows: { to: { enabled: true, scaleFactor: 0.5 } }
+            },
+            physics: {
+                enabled: document.getElementById('physicsToggle').checked
+            }
+        };
+
+        if (isTree) {
+            const direction = (mode === 'treeUD') ? 'UD' : 'LR';
+            options.layout = {
+                hierarchical: {
+                    enabled: true,
+                    direction: direction,
+                    sortMethod: 'directed',
+                    nodeSpacing: spacing,
+                    levelSeparation: levelSep,
+                    blockShifting: true,
+                    edgeMinimization: true,
+                    parentCentralization: true
+                }
+            };
+            options.physics.hierarchicalRepulsion = {
+                nodeDistance: spacing,
+                avoidOverlap: 1
+            };
+            options.edges.smooth.forceDirection = (direction === 'UD' ? 'vertical' : 'horizontal');
+
+            if(edgeSmoothType === 'straightCross') {
+                 options.edges.smooth.enabled = false;
+            } else {
+                 options.edges.smooth.enabled = true;
+            }
+
+        } else {
+            options.layout = { hierarchical: { enabled: false } };
+            options.physics.solver = 'forceAtlas2Based';
+            options.physics.forceAtlas2Based = {
+                gravitationalConstant: -repulsion,
+                centralGravity: 0.01,
+                springLength: spacing / 2,
+                springConstant: 0.08,
+                avoidOverlap: 0.5
+            };
+            options.edges.smooth.forceDirection = 'none';
+        }
+
+        network.setOptions(options);
+    }
+
+    function togglePhysics() { updateConfig(); }
+    function fitCamera() { network.fit({ animation: true }); }
+
+    function clearGraph() {
+        nodes.clear();
+        edges.clear();
+        addNodeSafe({ id: 'root', label: 'Meu Drive', group: 'root', level: 0 });
+        updateCounter();
+        network.fit();
+    }
+
+    // --- LÓGICA DE DADOS ---
+    function addNodeSafe(nodeData) {
+        try {
+            if (!nodes.get(nodeData.id)) {
+                if(nodeData.group === 'root') {
+                    nodeData.color = '#ff5722';
+                    nodeData.size = 50;
+                    nodeData.shape = 'star';
+                } else if(nodeData.group === 'folder') {
+                    nodeData.color = '#FFD700';
+                } else {
+                    nodeData.color = '#97C2FC';
+                    nodeData.shape = 'dot';
+                }
+                nodes.add(nodeData);
+            }
+        } catch(e) { console.error("Add error", e); }
+    }
+
+    function updateCounter() {
+        document.getElementById('nodeCountBadge').innerText = nodes.length + " Nós";
+    }
+
+    async function expandFolder(folderId) {
+        document.getElementById('loadingOverlay').style.display = 'block';
+
+        try {
+            const response = await fetch(`/graph/api/data/${folderId}`);
+            if (!response.ok) throw new Error('API error');
+            const result = await response.json();
+
+            if (result.nodes && result.nodes.length > 0) {
+                const parentNode = nodes.get(folderId);
+                const parentLevel = parentNode ? (parentNode.level || 0) : 0;
+
+                result.nodes.forEach(n => {
+                    n.level = parentLevel + 1;
+                    addNodeSafe(n);
+                });
+
+                result.edges.forEach(e => {
+                     var exists = edges.get({ filter: i => i.from === e.from && i.to === e.to });
+                     if (exists.length === 0) edges.add(e);
+                });
+
+                updateCounter();
+
+                if(folderId === 'root') {
+                    network.fit({ animation: true });
+                }
+            }
+        } catch (error) {
+            console.error("Erro:", error);
+            alert("Erro ao carregar dados.");
+        } finally {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+    }
+</script>
+{% endblock %}

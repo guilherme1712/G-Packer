@@ -3,12 +3,19 @@ from datetime import timedelta
 
 from .db_instance import db
 from app.utils.time_utils import get_sp_now, format_sp_time
+from app.enum.task_type import TaskTypeEnum
+from sqlalchemy import Enum as SAEnum
 
 
 class TaskModel(db.Model):
     __tablename__ = 'tasks'
 
     id = db.Column(db.String(50), primary_key=True)
+    type = db.Column(
+        SAEnum(TaskTypeEnum, name="task_type_enum"),
+        nullable=False,
+        default=TaskTypeEnum.DOWNLOAD,
+    )
 
     # Fase geral do processo (mapeando, baixando, compactando, concluido, erro, etc.)
     phase = db.Column(db.String(50))
@@ -87,6 +94,7 @@ class TaskModel(db.Model):
 
         return {
             "id": self.id,
+            "type": self.type,
             "phase": self.phase,
             "message": self.message,
             "files_found": self.files_found,

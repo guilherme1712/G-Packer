@@ -1,0 +1,404 @@
+{% extends "layouts/layout.html" %}
+
+{% block content %}
+<style>
+    /* --- Ajustes Compactos para Evitar Scroll --- */
+
+    .converter-container {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Card Principal: Vidro Escuro */
+    .glass-card {
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(148, 163, 184, 0.1);
+        border-radius: 16px;
+        backdrop-filter: blur(12px);
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        padding: 1.5rem 2rem; /* Padding reduzido para economizar altura */
+        flex: 1; /* Ocupa espaço disponível */
+    }
+
+    /* Área de Upload Compacta */
+    .upload-zone {
+        background: rgba(2, 6, 23, 0.4);
+        border: 2px dashed rgba(99, 102, 241, 0.3);
+        border-radius: 12px;
+        /* ALTURA REDUZIDA AQUI (de 400px para 280px) */
+        min-height: 280px;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        overflow: hidden;
+    }
+
+    .upload-zone:hover {
+        background: rgba(2, 6, 23, 0.6);
+        border-color: #6366f1;
+        box-shadow: 0 0 25px rgba(99, 102, 241, 0.15);
+        transform: translateY(-2px);
+    }
+
+    .upload-zone.active {
+        border-color: #10b981;
+        background: rgba(16, 185, 129, 0.05);
+    }
+
+    .upload-input {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        cursor: pointer;
+        z-index: 10;
+    }
+
+    /* Ícone Central Levemente Menor */
+    .zone-icon {
+        width: 60px; /* Reduzido de 80px */
+        height: 60px;
+        border-radius: 50%;
+        background: rgba(30, 41, 59, 0.8);
+        border: 1px solid rgba(148, 163, 184, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem; /* Reduzido */
+        color: #818cf8;
+        margin-bottom: 1rem;
+        transition: transform 0.3s ease;
+    }
+
+    .upload-zone:hover .zone-icon {
+        transform: scale(1.1) rotate(5deg);
+        color: #fff;
+        background: #4f46e5;
+    }
+
+    .zone-text h5 {
+        color: #f1f5f9;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+        font-size: 1.1rem;
+    }
+
+    .zone-text p {
+        color: #94a3b8;
+        font-size: 0.9rem;
+        margin-bottom: 0.5rem;
+    }
+
+    /* Tags Compactas */
+    .format-tags {
+        display: flex;
+        gap: 8px;
+        margin-top: 0.5rem;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .tag {
+        background: rgba(15, 23, 42, 0.5);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        color: #cbd5e1;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    /* Seta Divisória */
+    .divider-arrow {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #475569;
+        font-size: 1.5rem;
+        height: 100%;
+        opacity: 0.6;
+    }
+
+    @media (max-width: 991px) {
+        .divider-arrow { padding: 10px 0; transform: rotate(90deg); }
+    }
+
+    /* Inputs e Selects */
+    .custom-select {
+        height: 48px; /* Altura padrão confortável */
+        background-color: rgba(2, 6, 23, 0.5);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        color: #f1f5f9;
+        font-size: 1rem;
+        border-radius: 10px;
+        cursor: pointer;
+        width: 100%;
+        padding: 0 16px;
+    }
+
+    .custom-select option {
+        background-color: #0f172a;
+        color: #f1f5f9;
+    }
+
+    /* Botão Principal */
+    .btn-action {
+        background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+        border: none;
+        border-radius: 10px;
+        color: white;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        padding: 1rem;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(67, 56, 202, 0.3);
+        margin-top: auto; /* Empurra para o fundo */
+    }
+
+    .btn-action:hover:not(:disabled) {
+        transform: translateY(-2px);
+        filter: brightness(1.1);
+    }
+
+    .btn-action:disabled {
+        background: #334155;
+        color: #94a3b8;
+        cursor: not-allowed;
+    }
+
+    /* Painel Avançado Compacto */
+    .advanced-panel {
+        background: rgba(30, 41, 59, 0.4);
+        border: 1px solid rgba(148, 163, 184, 0.1);
+        border-radius: 10px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .form-label-dark {
+        color: #cbd5e1;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+</style>
+
+<div class="page-header mb-3">
+    <div class="d-flex align-items-center justify-content-between">
+        <div>
+            <h3 class="mb-0 text-white fw-bold">Conversor Universal</h3>
+        </div>
+    </div>
+</div>
+
+<div class="converter-container fade-in">
+    <div class="glass-card">
+        <form action="{{ url_for('tools.converter') }}" method="POST" enctype="multipart/form-data" id="convForm" style="height: 100%;">
+            <div class="row g-4 h-100">
+
+                <div class="col-lg-5">
+                    <label class="form-label-dark">1. Arquivo de Origem</label>
+
+                    <div class="upload-zone" id="drop-zone">
+                        <input type="file" id="file_convert" name="file_convert" class="upload-input" required onchange="handleFileSelect(this)">
+
+                        <div id="state-empty" class="text-center px-3">
+                            <div class="zone-icon">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                            </div>
+                            <div class="zone-text">
+                                <h5>Arraste ou Clique</h5>
+                                <p>Suporta PDF, Imagens, Vídeos...</p>
+                            </div>
+                            <div class="format-tags">
+                                <span class="tag">PDF</span>
+                                <span class="tag">DOCX</span>
+                                <span class="tag">MP4</span>
+                                <span class="tag">ZIP</span>
+                            </div>
+                        </div>
+
+                        <div id="state-selected" class="text-center px-3 d-none">
+                            <div class="zone-icon" style="background: rgba(16, 185, 129, 0.2); border-color: #10b981; color: #fff;">
+                                <i class="fas fa-check"></i>
+                            </div>
+                            <div class="zone-text">
+                                <h5 id="filename-display" class="text-break text-white">arquivo.ext</h5>
+                                <p class="text-success fw-bold small">Pronto para converter</p>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary mt-2" onclick="resetUpload()">
+                                <i class="fas fa-sync-alt me-1"></i> Alterar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-2">
+                    <div class="divider-arrow">
+                        <i class="fas fa-chevron-right"></i>
+                    </div>
+                </div>
+
+                <div class="col-lg-5 d-flex flex-column">
+                    <label class="form-label-dark">2. Configuração</label>
+
+                    <div class="d-flex flex-column h-100">
+                        <div class="mb-3">
+                            <label for="target_format" class="mb-1 d-block text-muted small">Formato de Saída:</label>
+                            <select class="custom-select" id="target_format" name="target_format" disabled onchange="toggleAdvanced()">
+                                <option value="">Aguardando arquivo...</option>
+                            </select>
+                        </div>
+
+                        <div id="advanced-img" class="advanced-panel d-none">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="fas fa-sliders-h text-primary me-2 small"></i>
+                                <span class="text-white small fw-bold">Ajustes</span>
+                            </div>
+                            <div class="row g-2 align-items-center">
+                                <div class="col-auto">
+                                    <div class="form-check form-switch ms-1">
+                                        <input class="form-check-input" type="checkbox" name="grayscale" id="checkGray">
+                                        <label class="form-check-label small" for="checkGray">P&B</label>
+                                    </div>
+                                </div>
+                                <div class="col ms-2">
+                                    <select name="resize_pct" class="custom-select" style="height: 36px; font-size: 0.85rem; padding: 0 10px;">
+                                        <option value="">Tam. Original</option>
+                                        <option value="75">75%</option>
+                                        <option value="50">50%</option>
+                                        <option value="25">25%</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-action w-100" id="btn-convert" disabled>
+                            <span class="normal-text"><i class="fas fa-bolt me-2"></i>CONVERTER</span>
+                            <span class="loading-text d-none">
+                                <i class="fas fa-circle-notch fa-spin me-2"></i> ...
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    /* MESMA LÓGICA JS (Mantida para garantir funcionalidade) */
+    const zone = document.getElementById('drop-zone');
+    const emptyState = document.getElementById('state-empty');
+    const selectedState = document.getElementById('state-selected');
+    const nameDisplay = document.getElementById('filename-display');
+    const select = document.getElementById('target_format');
+    const btn = document.getElementById('btn-convert');
+    const fileInput = document.getElementById('file_convert');
+
+    function resetUpload() {
+        fileInput.value = '';
+        zone.classList.remove('active');
+        emptyState.classList.remove('d-none');
+        selectedState.classList.add('d-none');
+        select.innerHTML = '<option value="">Aguardando arquivo...</option>';
+        select.disabled = true;
+        btn.disabled = true;
+        document.getElementById('advanced-img').classList.add('d-none');
+    }
+
+    function handleFileSelect(input) {
+        if (input.files && input.files[0]) {
+            const file = input.files[0];
+            emptyState.classList.add('d-none');
+            selectedState.classList.remove('d-none');
+            zone.classList.add('active');
+            nameDisplay.textContent = file.name;
+            detectFileType(file.name);
+        }
+    }
+
+    function detectFileType(filename) {
+        const ext = filename.split('.').pop().toLowerCase();
+        select.innerHTML = '';
+        select.disabled = false;
+        btn.disabled = false;
+        let opts = [];
+
+        if (ext === 'pdf') opts = [{v:'docx', t:'📄 Word (.docx)'}, {v:'txt', t:'📝 Texto Puro (.txt)'}, {v:'jpg', t:'🖼️ Extrair Imagens'}];
+        else if (['jpg','jpeg','png','webp','bmp'].includes(ext)) {
+            opts = [{v:'pdf', t:'📄 PDF'}, {v:'png', t:'🖼️ PNG'}, {v:'jpg', t:'🖼️ JPG'}, {v:'webp', t:'⚡ WebP'}, {v:'ico', t:'⭐ Ícone'}];
+        }
+        else if (['csv','xlsx','xls','json','xml','yaml','yml'].includes(ext)) {
+            opts = [{v:'csv', t:'📊 CSV'}, {v:'xlsx', t:'📊 Excel'}, {v:'json', t:'⚙️ JSON'}, {v:'yaml', t:'⚙️ YAML'}, {v:'html', t:'🌐 HTML'}, {v:'markdown', t:'📝 Markdown'}];
+        }
+        else if (['zip','7z','rar','tar','gz'].includes(ext)) {
+            opts = [{v:'zip', t:'📦 ZIP'}, {v:'7z', t:'📦 7-Zip'}, {v:'tar.gz', t:'🐧 TAR.GZ'}];
+        }
+        else if (['mp4','avi','mov','mkv'].includes(ext)) {
+            opts = [{v:'mp3', t:'🎵 Extrair Áudio'}, {v:'gif', t:'🎞️ GIF'}, {v:'mp4', t:'🎥 MP4'}];
+        }
+        else if (['wav','ogg'].includes(ext)) {
+            opts = [{v:'mp3', t:'🎵 Converter para MP3'}];
+        }
+        else if (ext === 'md') opts = [{v:'html', t:'🌐 Gerar HTML'}];
+        else {
+            opts = [{v:'', t:'❌ Formato não suportado'}];
+            select.disabled = true;
+            btn.disabled = true;
+        }
+
+        opts.forEach(o => {
+            if(o.v !== ext && o.v !== '') {
+                const op = document.createElement('option');
+                op.value = o.v;
+                op.textContent = o.t;
+                select.appendChild(op);
+            }
+        });
+
+        if (opts.length > 0 && opts[0].v !== '') select.selectedIndex = 0;
+        toggleAdvanced();
+    }
+
+    function toggleAdvanced() {
+        const file = fileInput.files[0];
+        if(!file) return;
+        const ext = file.name.split('.').pop().toLowerCase();
+        const isImg = ['jpg','jpeg','png','webp','bmp'].includes(ext);
+        const panel = document.getElementById('advanced-img');
+        if(isImg) {
+            panel.classList.remove('d-none');
+            setTimeout(() => panel.style.opacity = '1', 10);
+        } else {
+            panel.classList.add('d-none');
+        }
+    }
+
+    document.getElementById('convForm').onsubmit = function() {
+        const normalText = btn.querySelector('.normal-text');
+        const loadingText = btn.querySelector('.loading-text');
+        btn.disabled = true;
+        btn.style.opacity = '0.7';
+        normalText.classList.add('d-none');
+        loadingText.classList.remove('d-none');
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            normalText.classList.remove('d-none');
+            loadingText.classList.add('d-none');
+        }, 20000);
+    };
+</script>
+{% endblock %}

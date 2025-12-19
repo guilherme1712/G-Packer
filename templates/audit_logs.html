@@ -1,0 +1,471 @@
+{% extends "layouts/layout.html" %}
+
+{% block content %}
+<style>
+    /* Ajustes para harmonizar com o style.css existente */
+    .audit-page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+    }
+
+    /* Inputs adaptados ao tema escuro */
+    .input-dark {
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        color: #f1f5f9;
+        border-radius: 12px;
+        padding: 10px 16px;
+    }
+
+    .input-dark:focus {
+        background: rgba(15, 23, 42, 0.8);
+        border-color: #4338ca;
+        /* Roxo do tema */
+        color: #fff;
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(67, 56, 202, 0.3);
+    }
+
+    /* Tabela Dark Customizada */
+    .table-glass {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0 8px;
+        /* Espaço entre linhas */
+        color: #cbd5e1;
+    }
+
+    .table-glass thead th {
+        color: #94a3b8;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        padding: 0 16px 12px;
+        border: none;
+    }
+
+    .table-glass tbody tr {
+        background: rgba(30, 41, 59, 0.4);
+        /* Fundo sutil nas linhas */
+        transition: all 0.2s ease;
+    }
+
+    .table-glass tbody tr:hover {
+        background: rgba(30, 41, 59, 0.7);
+        transform: scale(1.005);
+    }
+
+    .table-glass td {
+        padding: 16px;
+        border: none;
+        vertical-align: middle;
+    }
+
+    .table-glass td:first-child {
+        border-radius: 12px 0 0 12px;
+    }
+
+    .table-glass td:last-child {
+        border-radius: 0 12px 12px 0;
+    }
+
+    /* Badges Neon */
+    .badge-glow {
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        border: 1px solid transparent;
+    }
+
+    .badge-download {
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+        border-color: rgba(16, 185, 129, 0.2);
+    }
+
+    .badge-delete {
+        background: rgba(239, 68, 68, 0.1);
+        color: #f87171;
+        border-color: rgba(239, 68, 68, 0.2);
+    }
+
+    .badge-create {
+        background: rgba(59, 130, 246, 0.1);
+        color: #60a5fa;
+        border-color: rgba(59, 130, 246, 0.2);
+    }
+
+    .badge-login {
+        background: rgba(168, 85, 247, 0.1);
+        color: #c084fc;
+        border-color: rgba(168, 85, 247, 0.2);
+    }
+
+    /* BARRA DE FILTROS ESTILIZADA */
+    .filter-bar {
+        background: linear-gradient(145deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 20px;
+        padding: 24px;
+        margin-bottom: 32px;
+        box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.2);
+        backdrop-filter: blur(12px);
+    }
+
+    .filter-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #94a3b8;
+        /* Slate-400 */
+        font-weight: 700;
+        margin-bottom: 8px;
+        display: block;
+        padding-left: 4px;
+    }
+
+    /* Input Group Customizado para Dark Mode */
+    .input-group-glass {
+        display: flex;
+        align-items: center;
+        /* Centraliza verticalmente */
+        border-radius: 12px;
+        overflow: hidden;
+        transition: all 0.2s ease;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        background: rgba(15, 23, 42, 0.6);
+        position: relative;
+    }
+
+    .input-group-glass:focus-within {
+        border-color: #6366f1;
+        /* Indigo-500 */
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        background: rgba(15, 23, 42, 0.9);
+    }
+
+    .input-group-glass .input-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding-left: 16px;
+        padding-right: 12px;
+        color: #64748b;
+        background: transparent;
+        font-size: 1rem;
+        height: 100%;
+        /* Garante altura total */
+    }
+
+    /* Estilo Geral dos Inputs */
+    .input-group-glass .form-control,
+    .input-group-glass .form-select {
+        background: transparent;
+        border: none;
+        color: #f8fafc;
+        padding: 12px 12px 12px 0;
+        font-size: 0.95rem;
+        box-shadow: none;
+        width: 100%;
+    }
+
+    .input-group-glass .form-control:focus,
+    .input-group-glass .form-select:focus {
+        outline: none;
+        box-shadow: none;
+    }
+
+    /* --- AJUSTE ESPECÍFICO DO DROPDOWN (SELECT) --- */
+    .input-group-glass select.form-select {
+        cursor: pointer;
+        /* Força o menu nativo do sistema a ser escuro */
+        color-scheme: dark;
+        /* Remove estilo padrão feio em alguns browsers */
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        /* Adiciona seta customizada se necessário, mas color-scheme geralmente resolve */
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 1rem center;
+        background-size: 16px 12px;
+        padding-right: 2.5rem;
+        /* Espaço para a seta */
+    }
+
+    /* Estilo das Opções (Quando aberto) */
+    .input-group-glass select.form-select option {
+        background-color: #1e293b;
+        /* Cor de fundo escura sólida (Slate-800) */
+        color: #f1f5f9;
+        /* Texto claro */
+        padding: 12px;
+        font-weight: 500;
+    }
+
+    /* Cor de hover nas opções (Suportado apenas em alguns browsers/sistemas) */
+    .input-group-glass select.form-select option:checked,
+    .input-group-glass select.form-select option:hover {
+        background-color: #4338ca !important;
+        color: white !important;
+    }
+
+    /* Remove ícone de calendário nativo */
+    input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+        filter: invert(1) opacity(0.5);
+        cursor: pointer;
+        margin-right: 12px;
+    }
+
+    /* Botão de Filtrar com Gradiente */
+    .btn-filter-glow {
+        background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        transition: all 0.3s ease;
+        height: 100%;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 12px rgba(67, 56, 202, 0.4);
+    }
+
+    .btn-filter-glow:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(67, 56, 202, 0.5);
+        color: white;
+    }
+</style>
+
+<div class="container-fluid p-0">
+
+    <div class="audit-page-header">
+        <div>
+            <h1 style="color: #f1f5f9; font-size: 1.75rem; font-weight: 700; margin: 0;">Auditoria</h1>
+            <p style="color: #94a3b8; margin: 4px 0 0;">Rastreabilidade completa de ações e downloads.</p>
+        </div>
+        <button class="btn btn-primary shadow-lg" onclick="loadLogs(false)" style="border-radius: 12px; padding: 10px 20px;">
+            <i class="fas fa-sync-alt me-2"></i> Atualizar
+        </button>
+    </div>
+
+    <div class="card mb-4" style="min-height: 80vh;">
+
+        <div class="filter-bar">
+            <div class="row g-4 align-items-end">
+
+                <div class="col-md-3">
+                    <label class="filter-label"><i class="far fa-clock me-1"></i> Período Inicial</label>
+                    <div class="input-group-glass">
+                        <div class="input-icon"><i class="far fa-calendar-alt"></i></div>
+                        <input type="datetime-local" id="filterStart" class="form-control" placeholder="Início">
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="filter-label"><i class="far fa-clock me-1"></i> Período Final</label>
+                    <div class="input-group-glass">
+                        <div class="input-icon"><i class="far fa-calendar-check"></i></div>
+                        <input type="datetime-local" id="filterEnd" class="form-control">
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="filter-label"><i class="fas fa-tag me-1"></i> Tipo de Evento</label>
+                    <div class="input-group-glass">
+                        <div class="input-icon"><i class="fas fa-filter"></i></div>
+                        <select id="filterAction" class="form-select">
+                            <option value="todos" selected>Todos os Eventos</option>
+                            <option disabled style="color: #475569;">──────────────────</option>
+                            <option value="DOWNLOAD">📥 Downloads / Backups</option>
+                            <option value="PROFILE_CREATE">➕ Criação de Perfil</option>
+                            <option value="PROFILE_DELETE">🗑️ Exclusão de Perfil</option>
+                            <option value="LOGIN">🔑 Login / Acesso</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <div style="height: 25px;"></div>
+                    <button class="btn-filter-glow" onclick="loadLogs(false)">
+                        <i class="fas fa-search me-2"></i> Aplicar Filtros
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table-glass">
+                <thead>
+                    <tr>
+                        <th>Data & Hora</th>
+                        <th>Usuário</th>
+                        <th>Tipo de Ação</th>
+                        <th>Alvo / Arquivo</th>
+                        <th>IP Origem</th>
+                        <th>Detalhes</th>
+                    </tr>
+                </thead>
+                <tbody id="logsTableBody">
+                    <tr>
+                        <td colspan="6" class="text-center py-5 text-muted">Carregando dados...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mt-3 text-end">
+            <span class="badge bg-dark text-muted border border-secondary rounded-pill px-3 py-2" id="logsCount">
+                0 registros encontrados
+            </span>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        // Inicialização de datas
+        const now = new Date();
+        const past = new Date();
+        past.setDate(now.getDate() - 7); // Padrão: 7 dias atrás
+
+        const formatForInput = (date) => {
+            const pad = (n) => n < 10 ? '0' + n : n;
+            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        };
+
+        const endElem = document.getElementById('filterEnd');
+        const startElem = document.getElementById('filterStart');
+
+        if (endElem && startElem) {
+            endElem.value = formatForInput(now);
+            startElem.value = formatForInput(past);
+        }
+
+        // Carregamento inicial
+        loadLogs(false);
+
+        // POLLING: Atualiza a cada 0.5s (500ms) sem piscar
+        setInterval(() => {
+            loadLogs(true);
+        }, 500);
+    });
+
+    // Função loadLogs aceita isBackground (default false)
+    // Se for background (polling), não mostra o spinner
+    async function loadLogs(isBackground = false) {
+        const start = document.getElementById('filterStart').value;
+        const end = document.getElementById('filterEnd').value;
+        const action = document.getElementById('filterAction').value;
+
+        const tbody = document.getElementById('logsTableBody');
+        const countBadge = document.getElementById('logsCount');
+
+        // Só mostra spinner se NÃO for atualização automática
+        if (!isBackground) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center py-5">
+                        <i class="fas fa-circle-notch fa-spin fa-2x text-primary mb-3"></i>
+                        <p class="text-muted">Processando auditoria...</p>
+                    </td>
+                </tr>`;
+        }
+
+        try {
+            const res = await fetch(`/api/audit/logs?start=${start}&end=${end}&action=${action}`);
+            const data = await res.json();
+
+            if (countBadge) countBadge.innerText = `${data.length} registros encontrados`;
+
+            if (data.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center py-5 opacity-50">
+                            <i class="fas fa-folder-open fa-3x mb-3"></i>
+                            <p>Nenhum log encontrado neste período.</p>
+                        </td>
+                    </tr>`;
+                return;
+            }
+
+            // Constrói o novo HTML
+            const newContent = data.map(log => {
+                const dateObj = new Date(log.created_at);
+                const dateStr = dateObj.toLocaleDateString('pt-BR');
+                const timeStr = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+                let icon = 'fa-info-circle';
+                if (log.action_type.includes('DOWNLOAD')) icon = 'fa-download';
+                if (log.action_type.includes('DELETE')) icon = 'fa-trash';
+                if (log.action_type.includes('CREATE')) icon = 'fa-plus-circle';
+
+                let detailsStr = log.details || '';
+                try {
+                    const j = JSON.parse(log.details);
+                    if (j.size) detailsStr = `<span class="text-info">Tam: ${j.size}</span>`;
+                    if (j.items_count) detailsStr += ` • ${j.items_count} itens`;
+                } catch (e) { }
+
+                return `
+                <tr>
+                    <td>
+                        <div class="d-flex flex-column">
+                            <span style="color: #f1f5f9; font-weight: 500;">${dateStr}</span>
+                            <span class="small" style="color: #64748b;">${timeStr}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <div style="width: 32px; height: 32px; background: rgba(255,255,255,0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 10px; color: #fff; font-size: 0.8rem;">
+                                ${log.user_email ? log.user_email[0].toUpperCase() : '?'}
+                            </div>
+                            <span style="color: #e2e8f0;">${log.user_email || 'Sistema'}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge-glow ${getBadgeClass(log.action_type)}">
+                            <i class="fas ${icon} me-1"></i> ${log.action_type}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="text-truncate" style="max-width: 200px; color: #cbd5e1;" title="${log.target}">
+                            ${log.target || '-'}
+                        </div>
+                    </td>
+                    <td><span style="font-family: monospace; color: #94a3b8;">${log.ip_address || '-'}</span></td>
+                    <td class="small" style="color: #94a3b8;">${detailsStr}</td>
+                </tr>
+            `}).join('');
+
+            // Atualiza o DOM
+            tbody.innerHTML = newContent;
+
+        } catch (e) {
+            console.error(e);
+            // Só mostra erro visual se for manual, para não poluir tela em polling
+            if (!isBackground) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4">Erro de conexão com o servidor.</td></tr>';
+            }
+        }
+    }
+
+    function getBadgeClass(action) {
+        if (!action) return '';
+        const act = action.toUpperCase();
+        if (act.includes('DOWNLOAD')) return 'badge-download';
+        if (act.includes('DELETE')) return 'badge-delete';
+        if (act.includes('CREATE') || act.includes('ADD')) return 'badge-create';
+        if (act.includes('LOGIN')) return 'badge-login';
+        return '';
+    }
+</script>
+{% endblock %}

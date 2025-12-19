@@ -1,0 +1,167 @@
+<div class="page">
+    <header class="page-header">
+        <div class="page-header-top">
+            <div>
+                <h1>📁 Escolha pastas e arquivos para baixar</h1>
+                <p class="subtitle">Selecione itens na árvore. Baixe agora ou gere em segundo plano.</p>
+            </div>
+
+            <div class="tree-toolbar">
+                <label class="checkbox-inline">
+                    <input type="checkbox" id="toggle-files"> Mostrar arquivos também
+                </label>
+
+                <button type="button" class="btn-ghost btn-xs" onclick="openProfileModal()">
+                    💾 Salvar como Modelo
+                </button>
+
+                <button type="button" class="btn-primary btn-xs" onclick="openDownloadModal()">
+                    Baixar itens selecionados
+                </button>
+
+                <button type="button" class="btn-danger btn-xs" onclick="deleteSelectedItems()">
+                    🗑 Excluir seleção
+                </button>
+
+                <button type="button" class="btn-secondary btn-xs" onclick="openSchedulerModal()">
+                    ⏱️ Agendar backup automático
+                </button>
+
+                <div class="notification-wrapper" style="margin-left: 8px;">
+                    <button class="notification-btn" onclick="toggleTaskPanel()" title="Gerenciador de Tarefas">
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2"
+                            fill="none" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path>
+                        </svg>
+                        <div id="task-badge" class="notification-badge hidden">0</div>
+                    </button>
+                    <div id="task-manager-panel" class="task-dropdown-panel">
+                        <div class="log-header"
+                            style="background: #f8f9fa; border-bottom: 1px solid #eee; padding: 10px 15px; border-radius: 8px 8px 0 0; display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-weight:600; font-size:14px; color:#333;">Tarefas de Segundo
+                                Plano</span>
+                            <button onclick="toggleTaskPanel()" class="btn-ghost btn-xs"
+                                style="padding: 2px 6px;">✕</button>
+                        </div>
+                        <div id="task-manager-list" class="task-manager-body">
+                            <div class="task-empty-state">Nenhuma tarefa ativa no momento.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="notification-wrapper">
+                    <button class="notification-btn" id="notification-btn" onclick="toggleLogPanel()"
+                        title="Logs de Atividade">
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2"
+                            fill="none" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                        </svg>
+                        <div id="notification-badge" class="notification-badge hidden">0</div>
+                    </button>
+                    <div id="log-panel" class="log-panel hidden">
+                        <div class="log-header">
+                            <span>Atividade Recente</span>
+                            <button onclick="toggleLogPanel()" class="btn-ghost btn-xs"
+                                style="padding: 2px 6px;">✕</button>
+                        </div>
+                        <div class="log-content" id="log-content">
+                            <ul class="log-list" id="log-list">
+                                <li class="log-empty">Nenhuma atividade recente.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="selection-strip">
+            <span class="selected-label">Itens selecionados:</span>
+            <span id="selected-folder-label" class="selected-name">nenhum</span>
+            <span id="selection-counter" class="selection-counter">Nenhum item selecionado.</span>
+        </div>
+    </header>
+
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div class="page-flash">
+        <div class="alert">
+            {% for msg in messages %} <p>{{ msg }}</p> {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <aside class="side-menu">
+        <div class="favorites-box">
+            <div class="favorites-header"><span>⭐ Favoritos</span><small>(clique na estrela)</small></div>
+            <div id="favorites-list" class="favorites-list">Carregando...</div>
+        </div>
+        <div class="profiles-box">
+            <div class="favorites-header"><span>⚙️ Modelos de backup</span><small>Salve configurações.</small></div>
+            <div id="profiles-list" class="favorites-list">Nenhum perfil salvo.</div>
+        </div>
+    </aside>
+
+    <main class="main-column">
+        <div class="card main-card">
+            <div class="breadcrumb-box">
+                <span class="breadcrumb-label">Caminho:</span><span id="breadcrumb-path" class="breadcrumb-path">Meu
+                    Drive</span>
+            </div>
+            <div class="tree-wrapper">
+                <ul id="tree-root" class="tree-root"></ul>
+            </div>
+        </div>
+    </main>
+
+    <aside class="details-column">
+        <section class="preview-panel" id="preview-panel" data-current-id="">
+            <h2 class="preview-title" id="preview-main-title">Informações</h2>
+            <p id="preview-empty" class="preview-empty">Clique em um arquivo ou pasta.</p>
+            <div id="preview-wrapper" class="hidden">
+                <div class="panel-tabs">
+                    <button id="tab-btn-details" class="tab-btn active" onclick="switchTab('details')">Detalhes</button>
+                    <button id="tab-btn-activity" class="tab-btn" onclick="switchTab('activity')">Atividade</button>
+                </div>
+                <div id="tab-details" class="tab-content active">
+                    <div id="details-content-inner" class="tab-scrollable-area">
+                        <div class="preview-meta">
+                            <div><span class="label">Tipo:</span> <span id="preview-type"></span></div>
+                            <div><span class="label">Tamanho:</span> <span id="preview-size"></span></div>
+                            <div><span class="label">Modificado em:</span> <span id="preview-modified"></span></div>
+                        </div>
+                        <div id="preview-thumbnail-wrapper" class="preview-thumbnail-wrapper hidden">
+                            <img id="preview-thumbnail" alt="Miniatura" referrerpolicy="no-referrer">
+                        </div>
+                        <a id="preview-open-link" href="#" target="_blank" class="btn-link disabled"
+                            rel="noopener noreferrer">Abrir no Drive</a>
+                    </div>
+                    <div id="details-folder-message" class="preview-empty-state hidden">Detalhes simplificados para
+                        pastas.</div>
+                </div>
+                <div id="tab-activity" class="tab-content">
+                    <div id="activity-loading" class="preview-empty-state hidden">Carregando...</div>
+                    <ul id="activity-list" class="activity-list tab-scrollable-area"></ul>
+                </div>
+            </div>
+        </section>
+    </aside>
+</div>
+
+<div id="progress-container" class="progress-container progress-floating hidden">
+    <div class="progress-header">
+        <span id="progress-phase">Processando...</span>
+        <span id="progress-percent">0%</span>
+    </div>
+    <div class="progress-bar-bg">
+        <div id="progress-bar" class="progress-bar-fill"></div>
+    </div>
+    <p id="progress-text" class="progress-text"></p>
+    <div class="progress-controls" style="display:flex; gap:5px; justify-content:center; margin-top:8px;">
+        <button id="btn-pause-fg" type="button" class="btn-ghost btn-xs" onclick="togglePauseForeground()">⏸
+            Pausar</button>
+        <button type="button" class="btn-danger btn-xs" onclick="cancelTask()">⏹ Cancelar</button>
+    </div>
+</div>
+

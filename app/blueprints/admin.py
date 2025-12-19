@@ -27,17 +27,10 @@ from flask import (
     send_file,
 )
 
-from app.services.auth import get_credentials
+from app.services.auth_service import get_credentials
 from app.services.storage import StorageService
-from app.models import (
-    db,
-    TaskModel,
-    BackupProfileModel,
-    BackupFileModel,
-    ScheduledTaskModel,
-    ScheduledRunModel,
-    GoogleAuthModel,
-)
+from app.services.audit import AuditService
+from app.models import db, BackupFileModel, ScheduledTaskModel, ScheduledRunModel, TaskModel, GoogleAuthModel, UploadHistoryModel, BackupProfileModel
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
@@ -151,7 +144,7 @@ def _run_auto_migrations():
 def view_db():
     creds = get_credentials()
     if not creds:
-        return "Acesso negado. Faça login primeiro.", 403
+        return redirect(url_for('auth.login'))
 
     _run_auto_migrations()
 
@@ -409,6 +402,11 @@ def _build_archive_tree(archive_path: str):
 def list_backups():
     """
     Tela que lista todos os backups salvos em storage/backups.
+
+    Agora:
+    - Agrupa por SÉRIE (series_key/display_series)
+    - Para cada série, manda todas as versões (snapshots) para o template
+    - A última versão (mais recente) é marcada como "latest"
     """
     creds = get_credentials()
     if not creds:
@@ -416,17 +414,28 @@ def list_backups():
 
     _sync_backups_from_disk()
 
-    # OTIMIZAÇÃO: defer('structure_cache') faz com que o SQLAlchemy NÃO traga
-    # o JSON gigante nesta consulta, apenas quando for explicitamente acessado.
+    # Não trazemos o JSON gigante da estrutura nesta tela
     backups = BackupFileModel.query.options(
         defer(BackupFileModel.structure_cache)
     ).order_by(
-        BackupFileModel.created_at.desc()
+        BackupFileModel.series_key.asc().nullslast(),
+        BackupFileModel.version_index.desc().nullslast(),
+        BackupFileModel.created_at.desc(),
     ).all()
 
-    files = []
+    # Agrupa por série lógica
+    series_map = {}
     for b in backups:
-        files.append({
+        series_key = _logical_series_key(b)
+
+        if series_key not in series_map:
+            series_map[series_key] = {
+                "series_key": series_key,
+                "latest": None,
+                "versions": [],
+            }
+
+        version_info = {
             "id": b.id,
             "name": b.filename,
             "path": b.path,
@@ -435,10 +444,40 @@ def list_backups():
             "items_count": b.items_count or 0,
             "origin_task_id": b.origin_task_id,
             "encrypted": getattr(b, "encrypted", False),
-        })
+            "version_index": b.version_index or 1,
+            "is_full": bool(getattr(b, "is_full", True)),
+        }
 
-    return render_template("admin_backups.html", files=files)
+        series_map[series_key]["versions"].append(version_info)
 
+        # O primeiro da lista (por causa da ordenação) é o mais recente
+        if series_map[series_key]["latest"] is None:
+            series_map[series_key]["latest"] = version_info
+
+    # Ordena as séries por nome para ficar estável/organizado
+    series_list = sorted(series_map.values(), key=lambda s: s["series_key"])
+
+    # ⚠️ IMPORTANTE: agora passamos series_list e não mais files
+    return render_template("admin_backups.html", series_list=series_list)
+
+   # Helper local para derivar uma "chave lógica" de série para agrupamento
+def _logical_series_key(b: BackupFileModel) -> str:
+    # 1) Se já temos series_key "nova", usamos ela
+    if b.series_key and not str(b.series_key).startswith("task:task-"):
+        return b.series_key
+
+    # 2) Para backups antigos (ou sem série), agrupamos pelo NOME base do arquivo
+    fname = b.filename or ""
+    lower = fname.lower()
+
+    if lower.endswith(".tar.gz"):
+        base = fname[:-7]
+    elif "." in fname:
+        base = fname.rsplit(".", 1)[0]
+    else:
+        base = fname
+
+    return f"name:{base}"
 
 @admin_bp.route("/admin/backups/<int:backup_id>/download")
 def download_backup_file(backup_id):
@@ -454,6 +493,12 @@ def download_backup_file(backup_id):
     if not backup.path or not os.path.exists(backup.path):
         flash("Arquivo de backup não encontrado no disco.", "error")
         return redirect(url_for("admin.list_backups"))
+
+    AuditService.log(
+        "BACKUP_DOWNLOAD",
+        backup.filename,
+        details=f"Size: {backup.size_mb} MB"
+    )
 
     return send_file(
         backup.path,
@@ -506,6 +551,7 @@ def api_backup_tree(backup_id):
         return jsonify({"error": "unauthorized"}), 403
 
     backup = BackupFileModel.query.get_or_404(backup_id)
+    filename = backup.filename
 
     if not backup.path or not os.path.exists(backup.path):
         return jsonify({"ok": False, "error": "Arquivo de backup não encontrado."}), 404
@@ -530,6 +576,8 @@ def api_backup_tree(backup_id):
         # SALVA O CACHE NO BANCO
         backup.structure_cache = tree
         db.session.commit()
+
+        AuditService.log("BACKUP_DELETE", filename)
 
         return jsonify({
             "ok": True,
@@ -594,6 +642,13 @@ def api_backup_download_partial(backup_id):
     buf.seek(0)
     base_name, _ = os.path.splitext(backup.filename)
     download_name = f"{base_name}__parcial.zip"
+
+    paths = request.get_json(silent=True).get("paths", [])
+    AuditService.log(
+        "BACKUP_DOWNLOAD_PARTIAL",
+        backup.filename,
+        details=f"Itens baixados: {len(paths)}"
+    )
 
     return send_file(
         buf,
@@ -812,6 +867,12 @@ def api_backup_restore_drive(backup_id):
                 )
                 uploaded.append({"path": rel_path, "drive_id": created["id"]})
 
+    AuditService.log(
+        "RESTORE_DRIVE",
+        backup.filename,
+        details=f"Arquivos restaurados: {len(paths)}"
+    )
+
     return jsonify(
         {
             "ok": True,
@@ -824,46 +885,29 @@ def api_backup_restore_drive(backup_id):
 def dashboard():
     """
     Tela inicial do produto (Home / Dashboard).
-    Mostra:
-      - Últimos backups
-      - Próximos agendamentos
-      - Status atual das tarefas
-      - Resumo de credencial Google
+    Mostra métricas unificadas de Backups, Tarefas e Uploads.
     """
     creds = get_credentials()
     if not creds:
         flash("Faça login no Google primeiro.")
         return redirect(url_for("auth.index"))
 
-    # --- Métricas principais ---
+    # --- Métricas de Backup e Sistema (Existentes) ---
     total_backups = BackupFileModel.query.count()
     total_tasks = TaskModel.query.count()
     total_schedules = ScheduledTaskModel.query.count()
     active_schedules = ScheduledTaskModel.query.filter_by(active=True).count()
 
-    # Soma de tamanho total dos backups (MB)
+    # Tamanho total dos backups (MB)
     total_size_mb = (
         db.session.query(func.coalesce(func.sum(BackupFileModel.size_mb), 0.0))
         .scalar()
         or 0.0
     )
 
-    # Último backup salvo
-    last_backup = (
-        BackupFileModel.query
-        .order_by(BackupFileModel.created_at.desc())
-        .first()
-    )
+    last_backup = BackupFileModel.query.order_by(BackupFileModel.created_at.desc()).first()
+    latest_backups = BackupFileModel.query.order_by(BackupFileModel.created_at.desc()).limit(5).all()
 
-    # Últimos 5 backups para a lista "Últimos backups"
-    latest_backups = (
-        BackupFileModel.query
-        .order_by(BackupFileModel.created_at.desc())
-        .limit(5)
-        .all()
-    )
-
-    # Próximos agendamentos (somente ativos)
     next_schedule = (
         ScheduledTaskModel.query
         .filter(ScheduledTaskModel.active.is_(True))
@@ -880,15 +924,8 @@ def dashboard():
         .all()
     )
 
-    # Tarefas mais recentes (para o card "Status atual das tarefas")
-    latest_tasks = (
-        TaskModel.query
-        .order_by(TaskModel.updated_at.desc())
-        .limit(6)
-        .all()
-    )
+    latest_tasks = TaskModel.query.order_by(TaskModel.updated_at.desc()).limit(6).all()
 
-    # Sucesso x Erro para o mini-gráfico
     tasks_success = TaskModel.query.filter_by(phase="concluido").count()
     tasks_error = TaskModel.query.filter_by(phase="erro").count()
     total_finished = tasks_success + tasks_error
@@ -899,17 +936,30 @@ def dashboard():
         success_percent = int((tasks_success / total_finished) * 100)
         error_percent = 100 - success_percent
 
-    # Status da credencial Google (email, último refresh)
-    from app.models import GoogleAuthModel  # já é importado no topo em sua versão atual
-    google_auth = (
-        GoogleAuthModel.query
-        .filter_by(active=True)
-        .order_by(GoogleAuthModel.updated_at.desc())
-        .first()
+    google_auth = GoogleAuthModel.query.filter_by(active=True).order_by(GoogleAuthModel.updated_at.desc()).first()
+
+    # --- NOVAS MÉTRICAS DE UPLOAD ---
+    total_uploads = UploadHistoryModel.query.count()
+    
+    # Tamanho total enviado (convertendo bytes para MB)
+    total_upload_bytes = db.session.query(func.coalesce(func.sum(UploadHistoryModel.size_bytes), 0)).scalar() or 0
+    total_upload_mb = total_upload_bytes / (1024 * 1024)
+
+    # Últimos 5 uploads
+    latest_uploads = (
+        UploadHistoryModel.query
+        .order_by(UploadHistoryModel.created_at.desc())
+        .limit(5)
+        .all()
     )
+
+    # Status de uploads
+    uploads_success = UploadHistoryModel.query.filter_by(status='SUCCESS').count()
+    uploads_error = UploadHistoryModel.query.filter_by(status='ERROR').count()
 
     return render_template(
         "dashboard.html",
+        # Backups e Geral
         total_backups=total_backups,
         total_size_mb=round(total_size_mb, 2),
         total_tasks=total_tasks,
@@ -925,6 +975,12 @@ def dashboard():
         success_percent=success_percent,
         error_percent=error_percent,
         google_auth=google_auth,
+        # Uploads (Novos)
+        total_uploads=total_uploads,
+        total_upload_mb=round(total_upload_mb, 2),
+        latest_uploads=latest_uploads,
+        uploads_success=uploads_success,
+        uploads_error=uploads_error
     )
 
 # ---------------------------------------------------------------------------
@@ -1069,6 +1125,12 @@ def api_backup_extract_local(backup_id):
         args=(app, task_id, backup_id, target_path, selected_paths)
     )
     t.start()
+
+    AuditService.log(
+        "EXTRACT_LOCAL",
+        backup.filename,
+        details=f"Destino: {target_path}"
+    )
 
     # 4. Retorna imediatamente
     return jsonify({

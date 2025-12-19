@@ -1,16 +1,13 @@
-# services/auth_service.py
+# app/services/auth_service.py
 import json
 
 from flask import session, url_for, has_request_context
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
 from app.models import db, GoogleAuthModel
 
 from config import CLIENT_SECRETS_FILE, SCOPES
-
-# # Pasta/arquivo onde o token será salvo para uso pelos jobs agendados
-# AUTH_DIR = os.path.join(os.getcwd(), "storage", "auth")
-# TOKEN_PATH = os.path.join(AUTH_DIR, "token.json")
 
 
 def credentials_to_dict(c: Credentials) -> dict:
@@ -27,28 +24,40 @@ def credentials_to_dict(c: Credentials) -> dict:
 
 def save_credentials(creds: Credentials) -> None:
     """
-    Agora:
-    - Apenas persiste no banco (GoogleAuthModel) e guarda só o ID do registro na sessão.
+    Busca informações completas do usuário na API e persiste no banco.
     """
     data = credentials_to_dict(creds)
 
-    # tenta extrair o e-mail se o id_token estiver presente
-    email = None
-    id_token = getattr(creds, "id_token", None)
-    if isinstance(id_token, dict):
-        email = id_token.get("email")
+    user_data = {}
 
-    auth = _save_credentials_to_db(data, email=email)
+    try:
+        # Usa as credenciais para buscar o perfil do usuário na API oauth2/v2
+        service = build('oauth2', 'v2', credentials=creds)
+        user_info = service.userinfo().get().execute()
 
-    # na sessão guardamos só o ID da linha, NÃO o token
+        # Extrai os dados disponíveis graças aos escopos 'email' e 'profile'
+        user_data['email'] = user_info.get('email')
+        user_data['name'] = user_info.get('name')  # Nome completo
+        user_data['picture'] = user_info.get('picture')  # URL da foto
+
+    except Exception as e:
+        print(f"Erro ao buscar informações do perfil Google: {e}")
+
+    # Salva no banco passando os dados recuperados
+    auth = _save_credentials_to_db(data, user_data=user_data)
+
+    # na sessão guardamos só o ID da linha
     if has_request_context():
         session["google_auth_id"] = auth.id
 
-def _save_credentials_to_db(data: dict, email: str | None = None) -> GoogleAuthModel:
+
+def _save_credentials_to_db(data: dict, user_data: dict = None) -> GoogleAuthModel:
     """
-    Salva/atualiza um registro global de credenciais Google.
-    Aqui eu assumo 1 só conta Google para o app inteiro.
+    Salva/atualiza um registro global de credenciais Google com nome e foto.
     """
+    if user_data is None:
+        user_data = {}
+
     # tenta pegar o registro ativo mais recente
     auth = (GoogleAuthModel.query
             .filter_by(active=True)
@@ -59,29 +68,33 @@ def _save_credentials_to_db(data: dict, email: str | None = None) -> GoogleAuthM
         auth = GoogleAuthModel()
         db.session.add(auth)
 
-    if email:
-        auth.email = email
+    # Atualiza campos se vierem da API
+    if user_data.get('email'):
+        auth.email = user_data['email']
+
+    if user_data.get('name'):
+        auth.name = user_data['name']
+
+    if user_data.get('picture'):
+        auth.picture = user_data['picture']
 
     auth.token_json = json.dumps(data)
     auth.active = True
     db.session.commit()
     return auth
 
+
 def _load_credentials_from_db() -> Credentials | None:
     """
-    Tenta:
-    1) Usar o ID salvo na sessão (se tiver);
-    2) Senão, pega o registro ativo mais recente (login “global”).
+    Carrega credenciais do banco (lógica mantida).
     """
     auth = None
 
-    # 1) Se tiver request, tenta pelo ID da sessão
     if has_request_context():
         auth_id = session.get("google_auth_id")
         if auth_id:
             auth = GoogleAuthModel.query.get(auth_id)
 
-    # 2) Fallback: pega qualquer ativo mais recente
     if not auth:
         auth = (GoogleAuthModel.query
                 .filter_by(active=True)
@@ -92,23 +105,16 @@ def _load_credentials_from_db() -> Credentials | None:
         return None
 
     data = json.loads(auth.token_json)
-    # usa from_authorized_user_info porque temos um dict serializável
     return Credentials.from_authorized_user_info(data, data.get("scopes"))
 
 
 def get_credentials() -> Credentials | None:
-    """
-    Versão nova:
-    - Primeiro tenta buscar no banco;
-    - Se não houver nada, tenta migrar do token.json legado;
-    - Não lê mais da sessão (além do ID).
-    """
     creds = _load_credentials_from_db()
     if creds:
         return creds
 
+
 def build_flow(state: str | None = None) -> Flow:
-    """Cria o Flow de OAuth com o redirect correto."""
     return Flow.from_client_secrets_file(
         CLIENT_SECRETS_FILE,
         scopes=SCOPES,

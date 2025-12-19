@@ -1,0 +1,963 @@
+{% extends "layouts/layout.html" %}
+
+{% block title %}Central de Upload{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* =========================================
+       LAYOUT GERAL
+       ========================================= */
+    h2 {
+        color: white;
+        margin-bottom: 0;
+    }
+
+    .page-content-wrapper {
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 100px);
+        /* Ajuste conforme seu header/navbar */
+        overflow: hidden;
+        padding: 0 24px 24px 24px;
+        position: relative;
+    }
+
+    .upload-grid {
+        display: grid;
+        grid-template-columns: 1fr 400px;
+        grid-template-rows: auto 1fr;
+        gap: 20px;
+        height: 100%;
+        min-height: 0;
+        padding-top: 20px;
+    }
+
+    @media (max-width: 992px) {
+        .page-content-wrapper {
+            height: auto;
+            overflow: auto;
+        }
+
+        .upload-grid {
+            grid-template-columns: 1fr;
+            grid-template-rows: auto auto 600px;
+            height: auto;
+        }
+    }
+
+    /* =========================================
+       WIDGET FLUTUANTE DE PROGRESSO (NOVO)
+       ========================================= */
+    /* Container geral do widget */
+    .status-widget {
+        position: absolute;
+        right: 1.5rem;
+        bottom: 1.5rem;
+        width: 320px;
+        background: rgba(17, 24, 39, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        padding: 1rem 1.25rem;
+        color: #fff;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(14px);
+        z-index: 20;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        animation: slideUp 0.4s ease;
+    }
+
+    /* Header */
+    .status-widget-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
+    .status-widget-header small {
+        opacity: 0.7;
+    }
+
+    /* Barra de progresso */
+    .status-progress {
+        height: 10px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .status-progress-bar {
+        width: 0%;
+        height: 100%;
+        background: linear-gradient(90deg, #ec4899, #a855f7);
+        transition: width 0.4s ease;
+    }
+
+    /* Infos numéricas */
+    .status-info {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.8rem;
+        opacity: 0.8;
+    }
+
+    /* Botão minimizar */
+    .status-close {
+        background: none;
+        border: none;
+        color: #aaa;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+
+    .status-close:hover {
+        color: #fff;
+    }
+
+    /* Animação */
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+
+    .widget-header {
+        background: rgba(30, 41, 59, 0.9);
+        padding: 12px 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .widget-body {
+        padding: 20px;
+    }
+
+    @keyframes slideUp {
+        from {
+            transform: translateY(100%);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    /* =========================================
+       NOVO WIDGET DE PROGRESSO (Moderno)
+       ========================================= */
+    .upload-widget-container {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        width: 380px;
+        background: #1e293b;
+        /* Slate 800 */
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+        color: white;
+        z-index: 1050;
+        font-family: 'Inter', system-ui, sans-serif;
+        overflow: hidden;
+
+        /* Animação de entrada */
+        transform: translateY(120%);
+        transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .upload-widget-container.active {
+        transform: translateY(0);
+    }
+
+    /* Header do Widget */
+    .uw-header {
+        padding: 16px;
+        background: rgba(15, 23, 42, 0.6);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .uw-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .uw-minimize-btn {
+        background: transparent;
+        border: none;
+        color: #94a3b8;
+        cursor: pointer;
+        transition: color 0.2s;
+    }
+
+    .uw-minimize-btn:hover {
+        color: white;
+    }
+
+    /* Corpo do Widget */
+    .uw-body {
+        padding: 20px 16px;
+    }
+
+    /* Barra de Progresso */
+    .uw-progress-track {
+        height: 8px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        margin: 12px 0 20px 0;
+        overflow: hidden;
+    }
+
+    .uw-progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+        width: 0%;
+        transition: width 0.3s ease;
+        border-radius: 4px;
+        position: relative;
+    }
+
+    .uw-progress-fill.active::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        right: 0;
+        background: linear-gradient(45deg, rgba(255, 255, 255, .15) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, .15) 50%, rgba(255, 255, 255, .15) 75%, transparent 75%, transparent);
+        background-size: 1rem 1rem;
+        animation: uw-stripes 1s linear infinite;
+    }
+
+    @keyframes uw-stripes {
+        from {
+            background-position: 1rem 0;
+        }
+
+        to {
+            background-position: 0 0;
+        }
+    }
+
+    /* Grid de Estatísticas */
+    .uw-stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 12px;
+    }
+
+    .uw-stat-box {
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 8px;
+        padding: 10px;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .uw-stat-value {
+        font-size: 1.1rem;
+        font-weight: 700;
+        line-height: 1.2;
+        margin-bottom: 2px;
+    }
+
+    .uw-stat-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #94a3b8;
+    }
+
+    /* Cores de Status */
+    .text-success-bright {
+        color: #4ade80;
+    }
+
+    .text-error-bright {
+        color: #f87171;
+    }
+
+    .text-total {
+        color: #e2e8f0;
+    }
+
+    /* Info extra (velocidade) */
+    .uw-info-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.8rem;
+        color: #cbd5e1;
+        margin-bottom: 5px;
+    }
+
+    /* =========================================
+       RESTO DA UI (GLASS PANELS)
+       ========================================= */
+    .glass-panel {
+        background: rgba(30, 41, 59, 0.7);
+        border: 1px solid rgba(148, 163, 184, 0.1);
+        border-radius: 16px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        position: relative;
+        backdrop-filter: blur(12px);
+    }
+
+    .panel-header {
+        padding: 16px 20px;
+        background: rgba(15, 23, 42, 0.4);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .panel-title {
+        color: #f1f5f9;
+        font-weight: 600;
+        font-size: 1rem;
+        margin: 0;
+    }
+
+    /* SWITCH CUSTOMIZADO */
+    .structure-toggle {
+        background: rgba(0, 0, 0, 0.3);
+        padding: 12px;
+        border-radius: 8px;
+        margin: 16px 16px 0 16px;
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        display: flex;
+        align-items: center;
+    }
+
+    /* DROPZONE */
+    .left-column {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        height: 100%;
+        min-height: 0;
+    }
+
+    .dropzone-wrapper {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    .dropzone-area {
+        flex: 1;
+        margin: 16px;
+        border: 2px dashed rgba(99, 102, 241, 0.3);
+        border-radius: 12px;
+        background: rgba(99, 102, 241, 0.02);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        min-height: 150px;
+    }
+
+    .dropzone-area.drag-over {
+        border-color: #818cf8;
+        background: rgba(99, 102, 241, 0.1);
+    }
+
+    .drop-icon {
+        width: 64px;
+        height: 64px;
+        background: rgba(99, 102, 241, 0.2);
+        color: #818cf8;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.8rem;
+        margin-bottom: 16px;
+    }
+
+    /* LISTA DE FILA */
+    .file-queue-container {
+        height: 50%;
+        display: none;
+        flex-direction: column;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+        background: rgba(15, 23, 42, 0.3);
+    }
+
+    .file-queue-container.active {
+        display: flex;
+    }
+
+    .queue-scroll {
+        flex: 1;
+        overflow-y: auto;
+        padding: 10px;
+    }
+
+    .queue-scroll::-webkit-scrollbar {
+        width: 5px;
+    }
+
+    .queue-scroll::-webkit-scrollbar-thumb {
+        background: #475569;
+        border-radius: 4px;
+    }
+
+    .file-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 12px;
+        background: rgba(255, 255, 255, 0.03);
+        margin-bottom: 6px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        color: #cbd5e1;
+    }
+
+    /* COLUNA DIREITA */
+    .right-column {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+    }
+
+    .tree-wrapper {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+        min-height: 0;
+    }
+
+    .action-footer {
+        padding: 20px;
+        background: rgba(15, 23, 42, 0.5);
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .target-box {
+        background: rgba(15, 23, 42, 0.8);
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: #e2e8f0;
+    }
+
+    .btn-hero {
+        width: 100%;
+        padding: 14px;
+        border: none;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #6366f1, #4f46e5);
+        color: white;
+        font-weight: 600;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        transition: all 0.2s;
+    }
+
+    .btn-hero:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+    }
+
+    .btn-hero:disabled {
+        background: #334155;
+        color: #64748b;
+        cursor: not-allowed;
+        box-shadow: none;
+        transform: none;
+    }
+
+    /* TREE CSS */
+    .tree-root,
+    .tree-children {
+        list-style: none;
+        padding-left: 0;
+        margin: 0;
+    }
+
+    .tree-children {
+        padding-left: 0;
+        margin-left: 18px;
+        border-left: 1px solid rgba(255, 255, 255, 0.1);
+        display: none;
+    }
+
+    .tree-row {
+        padding: 6px 8px;
+        border-radius: 4px;
+        cursor: pointer;
+        color: #94a3b8;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .tree-row:hover {
+        color: #fff;
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .tree-row.selected {
+        background: rgba(99, 102, 241, 0.2);
+        color: #fff;
+        font-weight: 600;
+    }
+
+    .tree-toggle {
+        width: 20px;
+        text-align: center;
+        color: #64748b;
+        font-weight: bold;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-content-wrapper">
+
+    <div class="d-flex justify-content-between align-items-end mb-1 px-1">
+        <div>
+            <h2 class="h4 fw-bold mb-0 text-white">Central de Upload</h2>
+            <small class="text-secondary">Gerencie transferências para o Google Drive</small>
+        </div>
+    </div>
+
+    <div class="upload-grid">
+
+        <div class="glass-panel left-column">
+            <div class="panel-header">
+                <h3 class="panel-title"><i class="fas fa-hdd text-primary me-2"></i> Origem dos Arquivos</h3>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary"
+                        onclick="document.getElementById('fileInput').click()">+ Arquivo</button>
+                    <button class="btn btn-sm btn-outline-secondary"
+                        onclick="document.getElementById('folderInput').click()">+ Pasta</button>
+                </div>
+            </div>
+
+            <div class="form-check form-switch structure-toggle">
+                <input class="form-check-input" type="checkbox" id="chkPreserveStructure" checked
+                    style="cursor: pointer;">
+                <label class="form-check-label text-white ps-2" for="chkPreserveStructure" style="cursor: pointer;">
+                    <strong>Manter estrutura de pastas</strong>
+                    <div class="text-secondary small" style="opacity: 0.7;">Recria a árvore de diretórios original no
+                        Drive.</div>
+                </label>
+            </div>
+
+            <div class="dropzone-wrapper">
+                <div id="dropZone" class="dropzone-area">
+                    <div class="drop-icon"><i class="fas fa-cloud-upload-alt"></i></div>
+                    <h5 class="text-white mb-1">Arraste arquivos aqui</h5>
+                    <p class="text-secondary small mb-0">ou use os botões acima</p>
+
+                    <input type="file" id="fileInput" multiple style="display: none;">
+                    <input type="file" id="folderInput" webkitdirectory directory multiple style="display: none;">
+                </div>
+
+                <div id="fileSection" class="file-queue-container">
+                    <div
+                        class="px-3 py-2 border-bottom border-secondary d-flex justify-content-between align-items-center bg-black bg-opacity-25">
+                        <small class="text-white fw-bold">FILA DE ENVIO (<span id="summaryCount">0</span>)</small>
+                        <button class="btn btn-xs text-danger hover-white" onclick="clearAllFiles()"><i
+                                class="fas fa-trash me-1"></i> Limpar</button>
+                    </div>
+                    <div id="fileList" class="queue-scroll"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel right-column">
+            <div class="panel-header">
+                <h3 class="panel-title"><i class="fab fa-google-drive text-warning me-2"></i> Destino</h3>
+            </div>
+
+            <div id="treeWrapper" class="tree-wrapper">
+                <ul id="tree-root" class="tree-root"></ul>
+            </div>
+
+            <input type="hidden" id="targetFolderId" value="root">
+
+            <div class="action-footer">
+                <div class="target-box">
+                    <i class="fas fa-folder-open fa-lg text-success"></i>
+                    <div style="overflow: hidden;">
+                        <span class="d-block text-secondary" style="font-size: 0.7rem; font-weight: 700;">SALVANDO
+                            EM:</span>
+                        <strong class="text-white text-truncate d-block" id="selectedFolderNameDisplay">Meu Drive
+                            (Raiz)</strong>
+                    </div>
+                </div>
+                <button id="btnUpload" class="btn-hero" disabled>
+                    <i class="fas fa-paper-plane me-2"></i> INICIAR UPLOAD
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="batchProgressWidget" class="upload-widget-container">
+        <div class="uw-header">
+            <div class="uw-title">
+                <i class="fas fa-cloud-upload-alt text-primary" id="uwIcon"></i>
+                <span id="uwStatusTitle">Aguardando...</span>
+            </div>
+            <button class="uw-minimize-btn" onclick="toggleWidget()">
+                <i class="fas fa-chevron-down"></i>
+            </button>
+        </div>
+
+        <div class="uw-body">
+            <div class="uw-info-row">
+                <span id="uwStatusText">Preparando arquivos...</span>
+                <span id="uwPercentText" class="fw-bold">0%</span>
+            </div>
+
+            <div class="uw-progress-track">
+                <div id="uwProgressBar" class="uw-progress-fill"></div>
+            </div>
+
+            <div class="uw-stats-grid">
+                <div class="uw-stat-box">
+                    <span class="uw-stat-value text-total" id="uwCountTotal">0</span>
+                    <span class="uw-stat-label">Total</span>
+                </div>
+                <div class="uw-stat-box">
+                    <span class="uw-stat-value text-success-bright" id="uwCountSuccess">0</span>
+                    <span class="uw-stat-label">Sucesso</span>
+                </div>
+                <div class="uw-stat-box">
+                    <span class="uw-stat-value text-error-bright" id="uwCountError">0</span>
+                    <span class="uw-stat-label">Falhas</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    let uploadQueue = [];
+    let currentBatchIds = [];
+    let currentBatchTaskId = null;
+    let monitorInterval = null;
+
+    // --- INIT ---
+    document.addEventListener("DOMContentLoaded", () => {
+        initTree();
+
+        // Re-binding inputs
+        const fi = document.getElementById('fileInput');
+        const foi = document.getElementById('folderInput');
+        if (fi) fi.addEventListener('change', e => addFiles(Array.from(e.target.files)));
+        if (foi) foi.addEventListener('change', e => addFiles(Array.from(e.target.files), true));
+
+        // Drag & Drop
+        const dz = document.getElementById('dropZone');
+        ['dragenter', 'dragover'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add('drag-over'); }));
+        ['dragleave', 'drop'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.remove('drag-over'); }));
+
+        dz.addEventListener('drop', async e => {
+            e.preventDefault(); dz.classList.remove('drag-over');
+            const items = e.dataTransfer.items;
+            if (!items) return;
+            dz.style.opacity = '0.5';
+            const promises = [];
+            for (let i = 0; i < items.length; i++) {
+                const entry = items[i].webkitGetAsEntry();
+                if (entry) promises.push(traverse(entry));
+            }
+            await Promise.all(promises);
+            dz.style.opacity = '1';
+            updateUI();
+        });
+    });
+
+    // --- FILE HANDLING ---
+    async function traverse(entry, path = '') {
+        if (entry.isFile) return new Promise(r => entry.file(f => { addFile(f, path + f.name); r(); }));
+        if (entry.isDirectory) {
+            const reader = entry.createReader();
+            return new Promise(r => {
+                const read = () => reader.readEntries(async entries => {
+                    if (!entries.length) r();
+                    else { await Promise.all(entries.map(e => traverse(e, path + entry.name + '/'))); read(); }
+                });
+                read();
+            });
+        }
+    }
+
+    function addFile(file, path) {
+        if (!uploadQueue.some(i => i.path === path)) uploadQueue.push({ file: file, path: path });
+    }
+
+    function addFiles(files, isDir = false) {
+        files.forEach(f => {
+            const path = (isDir && f.webkitRelativePath) ? f.webkitRelativePath : f.name;
+            if (!uploadQueue.some(i => i.path === path)) uploadQueue.push({ file: f, path: path });
+        });
+        updateUI();
+    }
+
+    function clearAllFiles() { uploadQueue = []; updateUI(); }
+
+    function updateUI() {
+        const hasFiles = uploadQueue.length > 0;
+        const fileSection = document.getElementById('fileSection');
+        const dz = document.getElementById('dropZone');
+
+        fileSection.classList.toggle('active', hasFiles);
+        dz.style.flex = hasFiles ? '0 0 auto' : '1';
+        dz.style.height = hasFiles ? '160px' : 'auto';
+
+        document.getElementById('summaryCount').innerText = uploadQueue.length;
+        document.getElementById('btnUpload').disabled = !hasFiles;
+
+        const listHtml = uploadQueue.slice(0, 100).map((i, idx) => `
+            <div class="file-row">
+                <i class="fas ${i.path.includes('/') ? 'fa-folder text-warning' : 'fa-file text-info'}"></i>
+                <div class="text-truncate flex-grow-1">${i.path}</div>
+                <span class="text-muted ms-2">${formatSize(i.file.size)}</span>
+                <i class="fas fa-times text-danger ms-2" style="cursor:pointer" onclick="removeFromQueue(${idx})"></i>
+            </div>
+        `).join('');
+        document.getElementById('fileList').innerHTML = listHtml + (uploadQueue.length > 100 ? `<div class="text-center small text-muted p-2">+ ${uploadQueue.length - 100} arq...</div>` : '');
+    }
+
+    function removeFromQueue(idx) { uploadQueue.splice(idx, 1); updateUI(); }
+    function formatSize(b) { if (b === 0) return '0 B'; const i = Math.floor(Math.log(b) / Math.log(1024)); return (b / Math.pow(1024, i)).toFixed(2) + ' ' + ['B', 'KB', 'MB', 'GB'][i]; }
+
+    // --- UPLOAD LOGIC (BATCH OTIMIZADO) ---
+    document.getElementById('btnUpload').onclick = async () => {
+        const btn = document.getElementById('btnUpload');
+        if (uploadQueue.length === 0) return;
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> CRIANDO LOTE...';
+
+        const totalFiles = uploadQueue.length;
+        const totalBytes = uploadQueue.reduce((acc, item) => acc + item.file.size, 0);
+
+        try {
+            // 1. CRIA A TASK PAI (LOTE)
+            const createRes = await fetch('/api/upload/create-batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    total_files: totalFiles,
+                    total_bytes: totalBytes
+                })
+            });
+            const createData = await createRes.json();
+            if (!createData.ok) throw new Error("Erro ao criar lote");
+
+            currentBatchIds = [];
+            currentBatchTaskId = createData.task_id;
+
+            // Inicia monitor visual
+            resetWidgetUI(totalFiles);
+            startBatchMonitor(currentBatchTaskId);
+
+            // --- CONFIGURAÇÃO DO ENVIO EM LOTE ---
+            const targetFolderId = document.getElementById('targetFolderId').value;
+            const preserveStructure = document.getElementById('chkPreserveStructure').checked;
+
+            // CONFIGURAÇÃO DE VELOCIDADE
+            const CONCURRENCY_LIMIT = 6;  // Quantas requisições simultâneas
+            const UPLOAD_BATCH_SIZE = 4;  // Quantos arquivos por requisição (FormData)
+
+            const queueToProcess = [...uploadQueue];
+            let processedCount = 0;
+
+            // Função que envia um GRUPO de arquivos
+            const processBatch = async (batchItems) => {
+                const fd = new FormData();
+
+                // Dados comuns
+                fd.append('target_root_id', targetFolderId);
+                fd.append('preserve_structure', preserveStructure);
+                fd.append('task_id', currentBatchTaskId);
+
+                // IMPORTANTE: Adiciona arquivos com a chave 'files' (PLURAL)
+                batchItems.forEach(item => {
+                    fd.append('files', item.file);
+                    fd.append('relative_paths', item.path);
+                });
+
+                try {
+                    await fetch('/api/upload/enqueue', { method: 'POST', body: fd });
+                } catch (e) {
+                    console.error("Falha ao enviar batch", e);
+                } finally {
+                    processedCount += batchItems.length;
+                    btn.innerHTML = `ENVIANDO (${processedCount}/${totalFiles})`;
+                }
+            };
+
+            btn.innerHTML = '<i class="fas fa-upload"></i> ENVIANDO...';
+
+            // Worker Loop
+            const worker = async () => {
+                while (queueToProcess.length > 0) {
+                    // Retira 4 itens da fila
+                    const batch = queueToProcess.splice(0, UPLOAD_BATCH_SIZE);
+                    if (batch.length > 0) {
+                        await processBatch(batch);
+                    }
+                }
+            };
+
+            // Inicia Threads do Front
+            const workers = [];
+            for (let i = 0; i < CONCURRENCY_LIMIT; i++) workers.push(worker());
+            await Promise.all(workers);
+
+            clearAllFiles();
+            btn.innerHTML = '<i class="fas fa-clock"></i> PROCESSANDO NO SERVIDOR...';
+
+        } catch (err) {
+            alert("Erro ao iniciar upload: " + err.message);
+            btn.disabled = false;
+            btn.innerHTML = 'INICIAR UPLOAD';
+        }
+    };
+
+    // --- MONITORAMENTO ---
+    function startBatchMonitor(taskId) {
+        if (monitorInterval) clearInterval(monitorInterval);
+        const widget = document.getElementById('batchProgressWidget');
+        widget.classList.add('active');
+
+        monitorInterval = setInterval(async () => {
+            try {
+                const res = await fetch('/api/upload/batch-status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_ids: [taskId] })
+                });
+                const stats = await res.json();
+                updateWidgetUI(stats);
+
+                if (stats.total_files > 0 && (stats.success + stats.error >= stats.total_files)) {
+                    finalizeUploadUI();
+                }
+            } catch (e) { console.error(e); }
+        }, 1500);
+    }
+
+    function resetWidgetUI(total) {
+        document.getElementById('uwStatusTitle').innerText = "Iniciando Upload...";
+        document.getElementById('uwStatusText').innerText = "Enfileirando arquivos...";
+        document.getElementById('uwProgressBar').style.width = '0%';
+        document.getElementById('uwProgressBar').classList.add('active');
+        document.getElementById('uwCountTotal').innerText = total;
+        document.getElementById('uwCountSuccess').innerText = 0;
+        document.getElementById('uwCountError').innerText = 0;
+    }
+
+    function updateWidgetUI(stats) {
+        const percent = stats.percent || 0;
+        document.getElementById('uwProgressBar').style.width = percent + '%';
+        document.getElementById('uwPercentText').innerText = Math.round(percent) + '%';
+        document.getElementById('uwCountTotal').innerText = stats.total_files;
+        document.getElementById('uwCountSuccess').innerText = stats.success;
+        document.getElementById('uwCountError').innerText = stats.error;
+        const speed = stats.speed_mb_s ? `(${stats.speed_mb_s} MB/s)` : '';
+        document.getElementById('uwStatusText').innerText = `Processando ${stats.processed}/${stats.total_files} ${speed}`;
+    }
+
+    function finalizeUploadUI() {
+        clearInterval(monitorInterval);
+        document.getElementById('uwStatusTitle').innerText = "Upload Concluído";
+        document.getElementById('uwStatusText').innerText = "Todos os arquivos processados.";
+        document.getElementById('uwProgressBar').classList.remove('active');
+        document.getElementById('uwProgressBar').style.backgroundColor = '#4ade80';
+        document.getElementById('uwIcon').className = "fas fa-check-circle text-success-bright";
+        const btn = document.getElementById('btnUpload');
+        btn.disabled = false;
+        btn.innerHTML = 'INICIAR UPLOAD';
+    }
+
+    function toggleWidget() {
+        document.getElementById('batchProgressWidget').classList.toggle('active');
+    }
+
+    // --- TREE ---
+    function initTree() {
+        const ul = document.getElementById('tree-root');
+        ul.innerHTML = '';
+        const rootLi = createFolderNode({ id: 'root', name: 'Meu Drive' });
+        ul.appendChild(rootLi);
+        toggleNode(rootLi, 'root', rootLi.querySelector('.tree-toggle'));
+    }
+
+    function createFolderNode(folder) {
+        const li = document.createElement('li'); li.className = 'tree-node collapsed'; li.dataset.id = folder.id;
+        const row = document.createElement('div'); row.className = 'tree-row';
+        row.onclick = (e) => { if (!e.target.classList.contains('tree-toggle')) selectFolder(folder.id, folder.name, row); };
+        const toggle = document.createElement('span'); toggle.className = 'tree-toggle'; toggle.innerText = '▸';
+        toggle.onclick = (e) => { e.stopPropagation(); toggleNode(li, folder.id, toggle); };
+        row.append(toggle, Object.assign(document.createElement('i'), { className: 'fas fa-folder text-warning' }), document.createTextNode(folder.name));
+        li.append(row, Object.assign(document.createElement('ul'), { className: 'tree-children' }));
+        return li;
+    }
+
+    async function toggleNode(li, id, toggle) {
+        const ul = li.querySelector('.tree-children');
+        if (li.classList.contains('collapsed')) {
+            li.classList.remove('collapsed'); ul.style.display = 'block'; toggle.innerText = '▾';
+            if (!li.dataset.loaded) {
+                try {
+                    const res = await fetch(`/api/drive/tree-nodes?parent_id=${encodeURIComponent(id)}`);
+                    const data = await res.json();
+                    if (data.ok) {
+                        ul.innerHTML = '';
+                        data.items.forEach(i => { if (i.type === 'folder') ul.appendChild(createFolderNode(i)); });
+                        li.dataset.loaded = 'true';
+                    }
+                } catch { }
+            }
+        } else { li.classList.add('collapsed'); ul.style.display = 'none'; toggle.innerText = '▸'; }
+    }
+
+    function selectFolder(id, name, row) {
+        document.querySelectorAll('.tree-row.selected').forEach(e => e.classList.remove('selected'));
+        row.classList.add('selected');
+        document.getElementById('targetFolderId').value = id;
+        document.getElementById('selectedFolderNameDisplay').innerText = name;
+    }
+</script>
+{% endblock %}

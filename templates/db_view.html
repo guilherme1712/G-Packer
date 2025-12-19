@@ -1,5 +1,5 @@
 {# templates/db_view.html #}
-{% extends "layout.html" %}
+{% extends "layouts/layout.html" %}
 
 {% block title %}Visualizador do Banco de Dados · G-Packer{% endblock %}
 
@@ -234,7 +234,7 @@
                     <td>{{ t.updated_at.strftime('%d/%m %H:%M:%S') if t.updated_at else '-' }}</td>
                     <td style="width:350px;">
                         {% if t.history %}
-                        <pre>{{ t.history | join('\n') }}</pre>
+                        <pre>{{ t.history[-100:] | join('\n') }}</pre>
                         {% else %}
                         <span style="color:#666">-</span>
                         {% endif %}
@@ -448,9 +448,11 @@
 
             let historyHtml = '<span style="color:#666">-</span>';
             if (Array.isArray(t.history) && t.history.length > 0) {
-                historyHtml = `<pre>${t.history.join('\n')}</pre>`;
+                historyHtml = `<pre>${t.history.slice(-100).join('\n')}</pre>`;
+
             } else if (typeof t.history === 'string' && t.history.trim() !== '') {
-                historyHtml = `<pre>${t.history}</pre>`;
+                let lines = t.history.split('\n');
+                historyHtml = `<pre>${lines.slice(-100).join('\n')}</pre>`;
             }
 
             const errorsStyle = t.errors_count > 0
